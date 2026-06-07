@@ -1,0 +1,4 @@
+interface:
+  display_name: "HulunGuard"
+  short_description: "Maintain evidence, checkpoints, risk scans, and final gates for long-running agent work."
+  default_prompt: "Use HulunGuard to track objective, evidence, checkpoints, risk score, and final verification for this long-running task."

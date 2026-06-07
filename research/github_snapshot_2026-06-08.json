@@ -1,0 +1,119 @@
+[
+  {
+    "repo": "langchain-ai/langgraph",
+    "stars": 34088,
+    "forks": 5737,
+    "license": "MIT",
+    "updated_at": "2026-06-07T16:01:03Z",
+    "description": "Build resilient agents.",
+    "html_url": "https://github.com/langchain-ai/langgraph"
+  },
+  {
+    "repo": "OpenHands/OpenHands",
+    "stars": 76108,
+    "forks": 9663,
+    "license": "NOASSERTION",
+    "updated_at": "2026-06-07T16:11:32Z",
+    "description": "OpenHands: AI-Driven Development",
+    "html_url": "https://github.com/OpenHands/OpenHands"
+  },
+  {
+    "repo": "letta-ai/letta",
+    "stars": 23191,
+    "forks": 2470,
+    "license": "Apache-2.0",
+    "updated_at": "2026-06-07T15:57:22Z",
+    "description": "Letta is the platform for building stateful agents: AI with advanced memory that can learn and self-improve over time.",
+    "html_url": "https://github.com/letta-ai/letta"
+  },
+  {
+    "repo": "mem0ai/mem0",
+    "stars": 57954,
+    "forks": 6634,
+    "license": "Apache-2.0",
+    "updated_at": "2026-06-07T16:11:43Z",
+    "description": "Universal memory layer for AI Agents",
+    "html_url": "https://github.com/mem0ai/mem0"
+  },
+  {
+    "repo": "getzep/graphiti",
+    "stars": 27135,
+    "forks": 2713,
+    "license": "Apache-2.0",
+    "updated_at": "2026-06-07T15:57:42Z",
+    "description": "Build Real-Time Knowledge Graphs for AI Agents",
+    "html_url": "https://github.com/getzep/graphiti"
+  },
+  {
+    "repo": "topoteretes/cognee",
+    "stars": 17713,
+    "forks": 1875,
+    "license": "Apache-2.0",
+    "updated_at": "2026-06-07T15:23:37Z",
+    "description": "Memory platform for AI Agents in 6 lines of code",
+    "html_url": "https://github.com/topoteretes/cognee"
+  },
+  {
+    "repo": "crewAIInc/crewAI",
+    "stars": 52978,
+    "forks": 7407,
+    "license": "MIT",
+    "updated_at": "2026-06-07T15:51:32Z",
+    "description": "Framework for orchestrating role-playing, autonomous AI agents.",
+    "html_url": "https://github.com/crewAIInc/crewAI"
+  },
+  {
+    "repo": "microsoft/autogen",
+    "stars": 58748,
+    "forks": 8870,
+    "license": "CC-BY-4.0",
+    "updated_at": "2026-06-07T15:46:48Z",
+    "description": "A programming framework for agentic AI",
+    "html_url": "https://github.com/microsoft/autogen"
+  },
+  {
+    "repo": "SWE-agent/SWE-agent",
+    "stars": 19448,
+    "forks": 2119,
+    "license": "MIT",
+    "updated_at": "2026-06-07T14:35:54Z",
+    "description": "SWE-agent takes a GitHub issue and tries to automatically fix it.",
+    "html_url": "https://github.com/SWE-agent/SWE-agent"
+  },
+  {
+    "repo": "temporalio/temporal",
+    "stars": 20805,
+    "forks": 1638,
+    "license": "MIT",
+    "updated_at": "2026-06-07T16:07:04Z",
+    "description": "Temporal service",
+    "html_url": "https://github.com/temporalio/temporal"
+  },
+  {
+    "repo": "guardrails-ai/guardrails",
+    "stars": 6975,
+    "forks": 619,
+    "license": "Apache-2.0",
+    "updated_at": "2026-06-07T15:31:29Z",
+    "description": "Adding guardrails to large language models.",
+    "html_url": "https://github.com/guardrails-ai/guardrails"
+  },
+  {
+    "repo": "langfuse/langfuse",
+    "stars": 28624,
+    "forks": 2966,
+    "license": "NOASSERTION",
+    "updated_at": "2026-06-07T16:00:34Z",
+    "description": "Open source LLM engineering platform: LLM Observability, metrics, evals, prompt management, playground, datasets.",
+    "html_url": "https://github.com/langfuse/langfuse"
+  },
+  {
+    "repo": "Arize-ai/phoenix",
+    "stars": 10009,
+    "forks": 911,
+    "license": "NOASSERTION",
+    "updated_at": "2026-06-07T14:09:12Z",
+    "description": "AI Observability & Evaluation",
+    "html_url": "https://github.com/Arize-ai/phoenix"
+  }
+]
