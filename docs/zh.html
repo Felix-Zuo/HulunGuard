@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HulunGuard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1f2421;
+      --muted: #5f6d65;
+      --paper: #fbfaf6;
+      --line: #d9ded7;
+      --spruce: #245d48;
+      --steel: #e9eef2;
+      --charcoal: #151816;
+      font-family: Inter, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--paper); color: var(--ink); }
+    a { color: inherit; text-decoration: none; }
+    .topbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 18px clamp(18px, 4vw, 54px);
+      color: #f8faf7;
+      background: linear-gradient(180deg, rgba(12, 16, 13, .82), rgba(12, 16, 13, .08));
+    }
+    .brand { font-size: 18px; font-weight: 760; letter-spacing: 0; }
+    .nav { display: flex; align-items: center; gap: 18px; font-size: 14px; }
+    .nav a { border-bottom: 1px solid transparent; padding-bottom: 3px; }
+    .nav a:hover { border-color: currentColor; }
+    .hero {
+      min-height: 92vh;
+      display: flex;
+      align-items: end;
+      color: #fbfaf6;
+      padding: 120px clamp(20px, 6vw, 86px) 74px;
+      background:
+        linear-gradient(90deg, rgba(10, 15, 12, .92), rgba(10, 15, 12, .62) 38%, rgba(10, 15, 12, .08) 75%),
+        url("./assets/hulunguard-runtime.png") center / cover no-repeat;
+    }
+    .hero-inner { max-width: 780px; }
+    .eyebrow {
+      color: #a9d8bf;
+      font-size: 14px;
+      font-weight: 760;
+      letter-spacing: .12em;
+      margin-bottom: 18px;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(46px, 8vw, 104px);
+      line-height: .96;
+      letter-spacing: 0;
+      text-wrap: balance;
+    }
+    .lead {
+      max-width: 650px;
+      margin: 28px 0 0;
+      font-size: clamp(19px, 2vw, 25px);
+      line-height: 1.45;
+      color: #e7efe8;
+    }
+    .actions { margin-top: 34px; display: flex; flex-wrap: wrap; gap: 12px; }
+    .button {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 18px;
+      border-radius: 8px;
+      font-weight: 720;
+      border: 1px solid rgba(255, 255, 255, .36);
+      background: rgba(255, 255, 255, .12);
+      backdrop-filter: blur(8px);
+    }
+    .button.primary {
+      background: #e9f6ed;
+      color: #153725;
+      border-color: #e9f6ed;
+    }
+    .band { padding: 76px clamp(20px, 6vw, 86px); }
+    .band.dark { background: var(--charcoal); color: #edf3ee; }
+    .band.steel { background: var(--steel); }
+    .section-head { max-width: 760px; margin-bottom: 32px; }
+    h2 {
+      margin: 0;
+      font-size: clamp(32px, 4vw, 56px);
+      line-height: 1.05;
+      letter-spacing: 0;
+      text-wrap: balance;
+    }
+    .section-head p {
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 19px;
+      line-height: 1.65;
+      max-width: 720px;
+    }
+    .dark .section-head p { color: #b9c7bd; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .tile {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 24px;
+      min-height: 190px;
+    }
+    .dark .tile { background: #202621; border-color: #344238; }
+    .tile b { display: block; font-size: 20px; margin-bottom: 12px; }
+    .tile p { margin: 0; color: var(--muted); line-height: 1.65; }
+    .dark .tile p { color: #b9c7bd; }
+    .metric-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-top: 1px solid #344238;
+      border-left: 1px solid #344238;
+    }
+    .metric {
+      min-height: 140px;
+      padding: 22px;
+      border-right: 1px solid #344238;
+      border-bottom: 1px solid #344238;
+    }
+    .metric span {
+      display: block;
+      color: #a9d8bf;
+      font-size: 38px;
+      font-weight: 820;
+      margin-bottom: 8px;
+    }
+    .metric p { margin: 0; color: #cad7ce; line-height: 1.5; }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .step {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+      padding: 18px;
+      min-height: 118px;
+    }
+    .step strong { display: block; color: var(--spruce); margin-bottom: 10px; }
+    .step span { color: var(--muted); line-height: 1.5; }
+    footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 28px clamp(20px, 6vw, 86px);
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 14px;
+    }
+    @media (max-width: 900px) {
+      .hero { min-height: 88vh; background-position: 58% center; }
+      .grid, .metric-row, .flow { grid-template-columns: 1fr; }
+      .topbar { position: absolute; }
+      .nav { gap: 12px; }
+      .nav a:not(.lang) { display: none; }
+      footer { display: block; }
+      footer a { display: inline-block; margin-top: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./zh.html">HulunGuard</a>
+    <nav class="nav" aria-label="主导航">
+      <a href="#signals">信号</a>
+      <a href="#runtime">运行时</a>
+      <a href="https://github.com/Felix-Zuo/HulunGuard">GitHub</a>
+      <a class="lang" href="./index.html">English</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-inner">
+        <div class="eyebrow">长任务运行时守卫</div>
+        <h1>在自信之前，先抓住漂移。</h1>
+        <p class="lead">HulunGuard 盯住工作轨迹：声明、证据、工具、失败、检查点，以及最终交付前的门禁。</p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/Felix-Zuo/HulunGuard">打开仓库</a>
+          <a class="button" href="#runtime">查看运行时</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="signals">
+      <div class="section-head">
+        <h2>真实状态在轨迹里。</h2>
+        <p>漂亮的回答不等于任务完成。HulunGuard 把执行状态放到聊天之外，持续检查每个完成声明是否仍然站得住。</p>
+      </div>
+      <div class="grid">
+        <article class="tile">
+          <b>声明要有凭据</b>
+          <p>完成、修复、验证这类声明，会和测试、文件、提交、追踪引用、用户确认放在一起看。</p>
+        </article>
+        <article class="tile">
+          <b>失败不会消失</b>
+          <p>工具失败、检查失败、重复尝试、跳过恢复，都会留在账本里，直到被处理。</p>
+        </article>
+        <article class="tile">
+          <b>对话也有状态</b>
+          <p>实时会话会记录用户质疑、待返回工具、总结空转和最终声明，不再只看项目结果。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="band dark" id="runtime">
+      <div class="section-head">
+        <h2>最终回答之前的仪表盘。</h2>
+        <p>绿灯继续，黄灯校准，红灯先恢复。没有证据的完成声明，不该直接离开现场。</p>
+      </div>
+      <div class="metric-row">
+        <div class="metric"><span>0</span><p>工具调用已有对应结果</p></div>
+        <div class="metric"><span>2</span><p>项目账本在补齐证据后的风险</p></div>
+        <div class="metric"><span>14</span><p>用户质疑后的实时会话观察值</p></div>
+        <div class="metric"><span>66</span><p>默认最终门禁阈值</p></div>
+      </div>
+    </section>
+
+    <section class="band steel">
+      <div class="section-head">
+        <h2>为协作接口而生。</h2>
+        <p>核心保持本地、轻量、可迁移。外部系统只要喂入事件，就能复用同一套风险计算。</p>
+      </div>
+      <div class="flow">
+        <div class="step"><strong>CLI</strong><span>观察、导入、扫描、验证、体检</span></div>
+        <div class="step"><strong>轨迹文件</strong><span>JSON、JSONL、OpenHands、SWE-agent</span></div>
+        <div class="step"><strong>对话运行时</strong><span>启动、事件、扫描、状态、关闭</span></div>
+        <div class="step"><strong>桌面仪表</strong><span>小窗和项目面板</span></div>
+        <div class="step"><strong>最终门禁</strong><span>先有证据，再说完成</span></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>HulunGuard</span>
+    <a href="./index.html">English</a>
+  </footer>
+</body>
+</html>

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0 - 2026-06-08
+
+- Added a polished GitHub Pages showcase at `docs/index.html`.
+- Added a Chinese showcase page at `docs/zh.html`.
+- Added a product runtime visual asset for the showcase hero.
+
 ## 0.4.0 - 2026-06-08
 
 - Added `hulun conversation start/event/scan/status/close` for live conversation runtime monitoring.
