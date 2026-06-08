@@ -9,6 +9,8 @@ Run these before every version push:
 ```powershell
 python -m pytest -q
 python .\hulun.py validate
+python .\hulun.py benchmark --events 10000
+python .\hulun.py doctor --run-validation
 ```
 
 ## Version Steps
@@ -17,8 +19,10 @@ python .\hulun.py validate
 2. Update `src/hulun_guard/__init__.py`.
 3. Update docs for new commands, parameters, or product meaning.
 4. Run tests and validation.
-5. Commit with a versioned message.
-6. Push to `origin/main`.
+5. Run the benchmark and doctor checks.
+6. Commit with a versioned message.
+7. Tag the version.
+8. Push to `origin/main` with tags.
 
 ## Current Policy
 

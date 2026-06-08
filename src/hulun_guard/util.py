@@ -44,6 +44,15 @@ def next_id(items: list[dict[str, Any]], prefix: str) -> str:
     return f"{prefix}{max_seen + 1}"
 
 
+def next_counter_id(state: dict[str, Any], collection: str, prefix: str) -> str:
+    counters = state.setdefault("counters", {})
+    key = f"{collection}:{prefix}"
+    if key not in counters:
+        counters[key] = int(next_id(state.setdefault(collection, []), prefix)[len(prefix) :]) - 1
+    counters[key] = int(counters[key]) + 1
+    return f"{prefix}{counters[key]}"
+
+
 def sort_ids(values: set[str]) -> list[str]:
     def key(value: str) -> tuple[str, int, str]:
         prefix = value[:1]

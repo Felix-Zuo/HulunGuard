@@ -9,10 +9,11 @@ import sys
 import threading
 import time
 import webbrowser
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
-from .adapters import load_observations
+from .adapters import iter_observations
 from .constants import DASHBOARD_FILE, RISK_REPORT_FILE, VALID_EVENT_PHASES, VALID_STATUSES
 from .monitor import (
     board_path,
@@ -40,8 +41,20 @@ from .storage import (
     verify_path,
     write_json,
 )
-from .util import hash_file, next_id, normalize_list, sort_ids, status_counts, utc_now
+from .util import hash_file, next_counter_id, next_id, normalize_list, sort_ids, status_counts, utc_now
 from .validation import build_validation_markdown, run_validation_suite, validation_json
+
+
+def package_version() -> str:
+    try:
+        from . import __version__
+
+        return __version__
+    except ImportError:
+        try:
+            return version("hulun-guard")
+        except PackageNotFoundError:
+            return "unknown"
 
 
 def require_status(status: str) -> str:
@@ -70,7 +83,7 @@ def append_event(
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     event = {
-        "id": next_id(state.setdefault("events", []), "EV"),
+        "id": next_counter_id(state, "events", "EV"),
         "type": event_type,
         "summary": summary.strip(),
         "result": result,
@@ -257,9 +270,11 @@ def cmd_observe(args: argparse.Namespace) -> int:
 def cmd_ingest(args: argparse.Namespace) -> int:
     root = project_root(args.root)
     state = load_state(root)
-    observations = load_observations(args.file, args.format)
-    imported: list[dict[str, Any]] = []
-    for observation in observations:
+    imported_count = 0
+    first_id = None
+    last_id = None
+    sample_events: list[dict[str, Any]] = []
+    for observation in iter_observations(args.file, args.format):
         event = append_event(
             state,
             observation.get("type") or "observation",
@@ -280,10 +295,20 @@ def cmd_ingest(args: argparse.Namespace) -> int:
                 "model": observation.get("model"),
             },
         )
-        imported.append(event)
+        imported_count += 1
+        first_id = first_id or event["id"]
+        last_id = event["id"]
+        if args.include_events:
+            sample_events.append(event)
     save_state(root, state)
 
-    payload: dict[str, Any] = {"imported": len(imported), "events": imported}
+    payload: dict[str, Any] = {
+        "imported": imported_count,
+        "first_event_id": first_id,
+        "last_event_id": last_id,
+    }
+    if args.include_events:
+        payload["events"] = sample_events
     if args.scan:
         _state, risk, report_path = run_scan(args, final_attempt=args.final_attempt)
         payload["risk"] = risk
@@ -292,7 +317,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
-        print(f"Imported {len(imported)} observations from {args.file}")
+        print(f"Imported {imported_count} observations from {args.file}")
         if args.scan and payload.get("risk"):
             risk = payload["risk"]
             print(f"HulunIndex: {risk['slop_index']} / 100 ({risk['band']})")
@@ -319,6 +344,167 @@ def cmd_validate(args: argparse.Namespace) -> int:
         print(f"HulunGuard validation: {result['passes']} / {result['total']} scenarios matched expected bands.")
         print(f"Report: {md_path}")
     return 0 if result["passes"] == result["total"] else 2
+
+
+def cmd_quickstart(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    objective = args.objective or "Complete a long-running task with proof-backed final claims"
+    criterion = args.criterion or "Final answer has evidence"
+    conversation = args.conversation or "agent-conversation"
+    group = args.group or root.name or "default"
+    commands = [
+        f'python .\\hulun.py --root "{root}" init --objective "{objective}" --criterion "{criterion}"',
+        f'python .\\hulun.py --root "{root}" open --conversation "{conversation}" --group "{group}" --widget',
+        f'python .\\hulun.py --root "{root}" observe --type tool_result --phase verify --summary "pytest passed" --result pass --scan',
+        f'python .\\hulun.py --root "{root}" record-evidence --kind test --summary "pytest passed" --command "python -m pytest -q"',
+        f'python .\\hulun.py --root "{root}" scan',
+        f'python .\\hulun.py --root "{root}" verify',
+        f'python .\\hulun.py --root "{root}" dashboard',
+        f'python .\\hulun.py --root "{root}" doctor',
+    ]
+    payload = {
+        "version": package_version(),
+        "root": str(root),
+        "objective": objective,
+        "criterion": criterion,
+        "commands": commands,
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"HulunGuard {payload['version']} quickstart")
+        for command in commands:
+            print(command)
+    return 0
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    checks: list[dict[str, Any]] = []
+
+    def add_check(name: str, status: str, detail: str) -> None:
+        checks.append({"name": name, "status": status, "detail": detail})
+
+    add_check("version", "ok", package_version())
+    add_check("root", "ok" if root.exists() else "error", str(root))
+    state_file = hulun_dir(root) / "state.json"
+    add_check("state", "ok" if state_file.exists() else "warn", str(state_file) if state_file.exists() else "No state yet. Run hulun init.")
+
+    payload: dict[str, Any] = {"schema": "hulun.doctor.v1", "root": str(root), "checks": checks}
+    if state_file.exists():
+        try:
+            state = load_state(root)
+            scan = scan_state(state)
+            payload["status"] = {
+                "criteria": status_counts(criteria(state)),
+                "steps": status_counts(state.get("steps", [])),
+                "evidence": len(state.get("evidence", [])),
+                "events": len(state.get("events", [])),
+                "checkpoints": len(state.get("checkpoints", [])),
+                "slop_index": scan["slop_index"],
+                "band": scan["band"],
+                "required_action": scan["required_action"],
+            }
+            if scan["band"] == "red":
+                add_check("slop_index", "error", f"{scan['slop_index']} red; recover before final.")
+            elif scan["band"] == "yellow":
+                add_check("slop_index", "warn", f"{scan['slop_index']} yellow; checkpoint or add evidence.")
+            else:
+                add_check("slop_index", "ok", f"{scan['slop_index']} green.")
+            if not state.get("checkpoints"):
+                add_check("checkpoint", "warn", "No checkpoint recorded.")
+            if not state.get("evidence"):
+                add_check("evidence", "warn", "No evidence recorded.")
+        except Exception as exc:
+            add_check("state_parse", "error", str(exc))
+
+    if args.run_validation:
+        validation = run_validation_suite()
+        payload["validation"] = validation
+        status = "ok" if validation["passes"] == validation["total"] else "error"
+        add_check("validation", status, f"{validation['passes']} / {validation['total']} scenarios.")
+
+    has_error = any(check["status"] == "error" for check in checks)
+    has_warn = any(check["status"] == "warn" for check in checks)
+    payload["result"] = "error" if has_error else "warn" if has_warn else "ok"
+
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"HulunGuard doctor: {payload['result']}")
+        for check in checks:
+            print(f"[{check['status']}] {check['name']}: {check['detail']}")
+    return 2 if has_error and args.fail_on_error else 0
+
+
+def build_benchmark_state(event_count: int) -> dict[str, Any]:
+    state = initial_state(
+        "Benchmark HulunGuard scan performance",
+        ["Benchmark has generated observations"],
+        [],
+        [],
+        66,
+    )
+    state["evidence"].append({"id": "E1", "kind": "test", "summary": "benchmark synthetic evidence", "created_at": utc_now()})
+    criteria(state)[0]["status"] = "done"
+    criteria(state)[0]["evidence"] = ["E1"]
+    state["checkpoints"].append({"id": "K1", "summary": "benchmark checkpoint", "created_at": utc_now()})
+    event_types = ["command", "tool_result", "summary", "llm_call"]
+    phases = ["explore", "implement", "summarize", "verify"]
+    events = state.setdefault("events", [])
+    for idx in range(1, event_count + 1):
+        event_type = event_types[idx % len(event_types)]
+        result = "fail" if idx % 97 == 0 else "pass"
+        event = {
+            "id": f"EV{idx}",
+            "type": event_type,
+            "summary": f"benchmark event {idx}",
+            "result": result,
+            "phase": phases[idx % len(phases)],
+            "created_at": utc_now(),
+            "refs": [],
+            "evidence": ["E1"] if idx % 41 == 0 else [],
+        }
+        if result == "fail":
+            event["action_key"] = "benchmark-retry"
+        if event_type == "llm_call":
+            event["prompt_tokens"] = 800
+            event["completion_tokens"] = 200
+            event["latency_ms"] = 500
+        events.append(event)
+    state["counters"] = {"events:EV": event_count}
+    return state
+
+
+def cmd_benchmark(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    state = build_benchmark_state(args.events)
+    started = time.perf_counter()
+    risk = scan_state(state)
+    elapsed_ms = (time.perf_counter() - started) * 1000.0
+    events_per_second = args.events / max(elapsed_ms / 1000.0, 0.000001)
+    result = {
+        "schema": "hulun.benchmark.v1",
+        "generated_at": utc_now(),
+        "version": package_version(),
+        "events": args.events,
+        "scan_ms": round(elapsed_ms, 3),
+        "events_per_second": round(events_per_second, 1),
+        "score": risk["score"],
+        "band": risk["band"],
+        "passed": args.max_ms is None or elapsed_ms <= args.max_ms,
+        "max_ms": args.max_ms,
+    }
+    output_dir = hulun_dir(root)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    report_path = output_dir / "benchmark_report.json"
+    report_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(f"HulunGuard benchmark: {args.events} events scanned in {elapsed_ms:.2f} ms ({events_per_second:.0f} events/s)")
+        print(f"Report: {report_path}")
+    return 0 if result["passed"] else 2
 
 
 def cmd_add_risk(args: argparse.Namespace) -> int:
@@ -745,6 +931,26 @@ def build_parser() -> argparse.ArgumentParser:
     event.add_argument("--resolved", action="store_true")
     event.set_defaults(func=cmd_event)
 
+    quickstart = sub.add_parser("quickstart", parents=[root_parent])
+    quickstart.add_argument("--objective")
+    quickstart.add_argument("--criterion")
+    quickstart.add_argument("--conversation")
+    quickstart.add_argument("--group")
+    quickstart.add_argument("--json", action="store_true")
+    quickstart.set_defaults(func=cmd_quickstart)
+
+    doctor = sub.add_parser("doctor", parents=[root_parent])
+    doctor.add_argument("--run-validation", action="store_true")
+    doctor.add_argument("--fail-on-error", action="store_true")
+    doctor.add_argument("--json", action="store_true")
+    doctor.set_defaults(func=cmd_doctor)
+
+    benchmark = sub.add_parser("benchmark", parents=[root_parent])
+    benchmark.add_argument("--events", type=int, default=10000)
+    benchmark.add_argument("--max-ms", type=float)
+    benchmark.add_argument("--json", action="store_true")
+    benchmark.set_defaults(func=cmd_benchmark)
+
     observe = sub.add_parser("observe", parents=[root_parent])
     observe.add_argument("--type", required=True, help="Runtime event type, such as tool_result, llm_call, final_attempt, or summary.")
     observe.add_argument("--summary", required=True)
@@ -778,6 +984,7 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--checkpoint-stale-minutes", type=int, default=45)
     ingest.add_argument("--final-attempt", action="store_true")
     ingest.add_argument("--fail-on-threshold", action="store_true")
+    ingest.add_argument("--include-events", action="store_true")
     ingest.add_argument("--json", action="store_true")
     ingest.set_defaults(func=cmd_ingest)
 

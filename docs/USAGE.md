@@ -1,5 +1,14 @@
 # HulunGuard Usage
 
+## Start Fast
+
+```powershell
+python .\hulun.py quickstart
+python .\hulun.py doctor
+```
+
+`quickstart` prints a project-specific copy-paste path. `doctor` checks version, state, evidence, checkpoint, and current HulunIndex.
+
 ## Open A Desktop HulunGauge
 
 ```powershell
@@ -68,6 +77,17 @@ python -m pytest -q
 ```
 
 `validate` writes `.hulun/validation_report.md` and `.hulun/validation_report.json`.
+
+## Benchmark Scan Performance
+
+Use `benchmark` before releases or after scoring changes:
+
+```powershell
+python .\hulun.py benchmark --events 10000
+python .\hulun.py benchmark --events 50000 --max-ms 1000
+```
+
+`benchmark` writes `.hulun/benchmark_report.json` and returns exit code `2` if `--max-ms` is exceeded.
 
 ## Open The Project Board
 

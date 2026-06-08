@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from collections.abc import Iterator
 from typing import Any
 
 from .constants import VALID_EVENT_PHASES
@@ -21,9 +22,6 @@ FAIL_MARKERS = [
     "timeout",
     "permission denied",
     "not found",
-    "失败",
-    "错误",
-    "异常",
 ]
 
 
@@ -73,13 +71,13 @@ def _result_from_text(text: str, default: str = "pass") -> str:
 
 def _phase_from_text(text: str, fallback: str | None = None) -> str | None:
     lowered = text.lower()
-    if any(word in lowered for word in ["pytest", "test", "verify", "validation", "lint", "检查", "测试", "验证"]):
+    if any(word in lowered for word in ["pytest", "test", "verify", "validation", "lint"]):
         return "verify"
-    if any(word in lowered for word in ["patch", "edit", "write", "modify", "apply", "实现", "修改", "写入"]):
+    if any(word in lowered for word in ["patch", "edit", "write", "modify", "apply"]):
         return "implement"
-    if any(word in lowered for word in ["search", "read", "inspect", "open", "grep", "rg", "查看", "搜索", "读取"]):
+    if any(word in lowered for word in ["search", "read", "inspect", "open", "grep", "rg"]):
         return "explore"
-    if any(word in lowered for word in ["summary", "final", "conclusion", "总结", "最终"]):
+    if any(word in lowered for word in ["summary", "final", "conclusion"]):
         return "summarize"
     return fallback
 
@@ -112,6 +110,20 @@ def _read_items(path: Path) -> list[dict[str, Any]]:
                 return [item for item in value if isinstance(item, dict)]
         return [payload]
     return []
+
+
+def _iter_items(path: Path) -> Iterator[dict[str, Any]]:
+    if path.suffix.lower() in {".jsonl", ".ndjson"}:
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                value = json.loads(line)
+                if isinstance(value, dict):
+                    yield value
+        return
+
+    yield from _read_items(path)
 
 
 def _normalize_phase(value: Any, text: str) -> str | None:
@@ -223,10 +235,13 @@ def normalize_swe_agent(item: dict[str, Any]) -> Observation:
 
 
 def load_observations(path: str | Path, source_format: str = "auto") -> list[Observation]:
+    return list(iter_observations(path, source_format))
+
+
+def iter_observations(path: str | Path, source_format: str = "auto") -> Iterator[Observation]:
     trace_path = Path(path)
     if not trace_path.exists():
         raise SystemExit(f"Trace file does not exist: {trace_path}")
-    items = _read_items(trace_path)
     fmt = source_format.lower()
     if fmt == "auto":
         lowered = trace_path.name.lower()
@@ -245,4 +260,5 @@ def load_observations(path: str | Path, source_format: str = "auto") -> list[Obs
     if fmt not in normalizers:
         raise SystemExit(f"Unsupported trace format: {source_format}")
     normalizer = normalizers[fmt]
-    return [normalizer(item) for item in items]
+    for item in _iter_items(trace_path):
+        yield normalizer(item)

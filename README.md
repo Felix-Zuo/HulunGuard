@@ -15,8 +15,15 @@ HulunGuard is a proof-first reliability guard and desktop risk meter for long-ru
 - Realtime HulunIndex observations: record phase, claims, failures, tokens, cost, latency, and retry fingerprints.
 - Trace ingestion: import generic JSON/JSONL, OpenHands-like events, and SWE-agent-like trajectories.
 - Built-in validation suite: run synthetic healthy/slop-risk scenarios before release.
+- Product operations: `quickstart`, `doctor`, and `benchmark` commands for onboarding, diagnostics, and scan performance checks.
 
 ## Quick Start
+
+Print a copy-paste startup path:
+
+```powershell
+python .\hulun.py quickstart
+```
 
 Open a desktop bar:
 
@@ -50,7 +57,9 @@ python .\hulun.py ingest --file .\run.traj --format swe-agent --scan
 Run the release validation suite:
 
 ```powershell
+python .\hulun.py doctor --run-validation
 python .\hulun.py validate
+python .\hulun.py benchmark --events 10000
 python -m pytest -q
 ```
 
@@ -135,6 +144,7 @@ The hook should show `hulunguard` as eligible, loadable, enabled, and attached t
 ```powershell
 python -m unittest discover -s tests
 python .\hulun.py validate
+python .\hulun.py benchmark --events 10000
 python .\hulun.py --help
 python .\hulun.py open --help
 python .\hulun.py board --help

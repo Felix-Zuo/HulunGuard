@@ -323,6 +323,61 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertEqual(payload["total"], 4)
             self.assertTrue((Path(tmp) / ".hulun" / "validation_report.md").exists())
 
+    def test_usability_commands_doctor_quickstart_and_benchmark(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.run_cli("--root", tmp, "quickstart", "--json")
+            self.assertEqual(code, 0)
+            quickstart = json.loads(out)
+            self.assertIn("commands", quickstart)
+            self.assertTrue(any(" init " in command for command in quickstart["commands"]))
+
+            code, out = self.run_cli("--root", tmp, "doctor", "--json")
+            self.assertEqual(code, 0)
+            doctor = json.loads(out)
+            self.assertEqual(doctor["result"], "warn")
+
+            code, out = self.run_cli("--root", tmp, "benchmark", "--events", "200", "--json")
+            self.assertEqual(code, 0)
+            benchmark = json.loads(out)
+            self.assertEqual(benchmark["events"], 200)
+            self.assertGreater(benchmark["events_per_second"], 0)
+            self.assertTrue((Path(tmp) / ".hulun" / "benchmark_report.json").exists())
+
+    def test_ingest_streams_jsonl_without_echoing_all_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "trace.jsonl"
+            trace.write_text(
+                "\n".join(
+                    json.dumps({"type": "summary", "phase": "summarize", "summary": f"summary {idx}"})
+                    for idx in range(25)
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "init",
+                    "--objective",
+                    "import a long trace",
+                    "--criterion",
+                    "trace imports",
+                )[0],
+                0,
+            )
+
+            code, out = self.run_cli("--root", tmp, "ingest", "--file", str(trace), "--json")
+            self.assertEqual(code, 0)
+            payload = json.loads(out)
+            self.assertEqual(payload["imported"], 25)
+            self.assertNotIn("events", payload)
+            code, out = self.run_cli("--root", tmp, "status", "--json")
+            self.assertEqual(code, 0)
+            status = json.loads(out)
+            self.assertEqual(status["events"], 26)
+
 
 if __name__ == "__main__":
     unittest.main()
