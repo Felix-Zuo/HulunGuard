@@ -47,6 +47,8 @@ def load_monitor(monitor_id: str) -> dict[str, Any]:
 
 def sync_monitor_from_root(monitor_id: str) -> dict[str, Any]:
     data = load_monitor(monitor_id)
+    if data.get("risk_source") == "conversation":
+        return data
     root = Path(data.get("root", "."))
     if not (hulun_dir(root) / "state.json").exists():
         return data
@@ -87,6 +89,8 @@ def create_monitor(
     root: str,
     score: int,
     reasons: list[str] | None = None,
+    risk_source: str = "project",
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
     now = utc_now()
     score = clamp_score(score)
@@ -101,6 +105,8 @@ def create_monitor(
         "score": score,
         "band": band_for(score),
         "status": "active",
+        "risk_source": risk_source,
+        "conversation_id": conversation_id,
         "reasons": reasons or ["Monitor created."],
         "events": [
             {

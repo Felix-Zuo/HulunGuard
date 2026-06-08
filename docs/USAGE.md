@@ -50,6 +50,33 @@ Important fields:
 
 With `--scan`, HulunGuard recalculates `slop_index` immediately and writes `.hulun/risk.json`.
 
+## Monitor A Live Conversation
+
+Project state monitoring uses `.hulun/state.json`. Conversation runtime monitoring uses separate per-conversation files under `HULUN_HOME/conversations`.
+
+```powershell
+python .\hulun.py conversation start --name "Codex live task" --group "HulunGuard" --monitor --widget
+python .\hulun.py conversation event --id C1 --type user_message --summary "User asks for a feature"
+python .\hulun.py conversation event --id C1 --type assistant_plan --phase plan --summary "Plan the implementation"
+python .\hulun.py conversation event --id C1 --type tool_call --phase verify --summary "Run pytest" --action-key pytest
+python .\hulun.py conversation event --id C1 --type tool_result --phase verify --summary "pytest passed" --action-key pytest
+python .\hulun.py conversation event --id C1 --type user_challenge --summary "User says monitoring is not actually live"
+python .\hulun.py conversation event --id C1 --type final_attempt --phase final --claim "done" --summary "Ready to final"
+python .\hulun.py conversation scan --id C1
+```
+
+Conversation risk components:
+
+- `claim_overhang`: final or completion claims without nearby evidence.
+- `unresolved_failures`: failed commands/tools not resolved.
+- `pending_tools`: tool calls without matching tool results.
+- `stagnation`: summaries/plans without execution evidence.
+- `user_challenge`: user correction or objection requiring calibration.
+- `context_decay`: long conversation without checkpoint.
+- `cost_pressure`: high token/cost without nearby execution evidence.
+
+This is the layer to use when you want HulunGuard to judge the agent's live state inside a chat.
+
 ## Import External Agent Traces
 
 Use `ingest` to convert trace files into HulunGuard observations:

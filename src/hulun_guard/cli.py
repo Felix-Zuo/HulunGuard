@@ -15,6 +15,14 @@ from typing import Any
 
 from .adapters import iter_observations
 from .constants import DASHBOARD_FILE, RISK_REPORT_FILE, VALID_EVENT_PHASES, VALID_STATUSES
+from .conversation import (
+    close_conversation,
+    load_conversation,
+    record_conversation_event,
+    save_conversation,
+    scan_conversation,
+    start_conversation,
+)
 from .monitor import (
     board_path,
     close_monitor,
@@ -507,6 +515,107 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
     return 0 if result["passed"] else 2
 
 
+def cmd_conversation_start(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    data = start_conversation(
+        name=args.name,
+        group=args.group,
+        root=str(root),
+        objective=args.objective,
+        monitor=args.monitor or args.widget,
+        widget=args.widget,
+    )
+    if args.json:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        risk = data.get("last_scan", {})
+        print(f"Started conversation {data['id']}: {data['name']}")
+        print(f"HulunIndex: {risk.get('slop_index', 0)} / 100 ({risk.get('band', 'green')})")
+        if data.get("monitor_id"):
+            print(f"Monitor: {data['monitor_id']}")
+    return 0
+
+
+def cmd_conversation_event(args: argparse.Namespace) -> int:
+    _data, event, risk = record_conversation_event(
+        args.id,
+        args.type,
+        args.summary,
+        result=args.result,
+        phase=require_phase(args.phase),
+        claims=normalize_list(args.claim),
+        evidence=normalize_list(args.evidence),
+        refs=normalize_list(args.ref),
+        resolved=args.resolved,
+        action_key=args.action_key,
+        prompt_tokens=args.prompt_tokens,
+        completion_tokens=args.completion_tokens,
+        cost=args.cost,
+        latency_ms=args.latency_ms,
+        model=args.model,
+    )
+    payload = {"event": event, "risk": risk}
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"Conversation {args.id} event {event['id']}: {args.type}")
+        print(f"HulunIndex: {risk['slop_index']} / 100 ({risk['band']})")
+        print(f"Required action: {risk['required_action']}")
+    return 2 if risk["band"] == "red" and args.fail_on_red else 0
+
+
+def cmd_conversation_scan(args: argparse.Namespace) -> int:
+    data = load_conversation(args.id)
+    risk = scan_conversation(data, checkpoint_stale_minutes=args.checkpoint_stale_minutes)
+    data["last_scan"] = risk
+    save_conversation(data)
+    if data.get("monitor_id"):
+        update_monitor(
+            data["monitor_id"],
+            score=int(risk["score"]),
+            summary="Conversation scan refreshed.",
+            reason=risk["reasons"][0] if risk.get("reasons") else None,
+        )
+    if args.json:
+        print(json.dumps({"conversation": data, "risk": risk}, ensure_ascii=False, indent=2))
+    else:
+        print(f"Conversation {args.id}: {risk['slop_index']} / 100 ({risk['band']})")
+        for reason in risk.get("reasons", []):
+            print(f"- {reason}")
+    return 2 if risk["band"] == "red" and args.fail_on_red else 0
+
+
+def cmd_conversation_status(args: argparse.Namespace) -> int:
+    data = load_conversation(args.id)
+    payload = {
+        "id": data["id"],
+        "name": data.get("name"),
+        "group": data.get("group"),
+        "status": data.get("status"),
+        "events": len(data.get("events", [])),
+        "monitor_id": data.get("monitor_id"),
+        "last_scan": data.get("last_scan"),
+        "latest_events": data.get("events", [])[-args.tail :],
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        scan = payload.get("last_scan") or {}
+        print(f"Conversation {payload['id']}: {payload['name']}")
+        print(f"Events: {payload['events']}")
+        print(f"HulunIndex: {scan.get('slop_index', 0)} / 100 ({scan.get('band', 'unknown')})")
+    return 0
+
+
+def cmd_conversation_close(args: argparse.Namespace) -> int:
+    data = close_conversation(args.id)
+    if args.json:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        print(f"Closed conversation {args.id}")
+    return 0
+
+
 def cmd_add_risk(args: argparse.Namespace) -> int:
     root = project_root(args.root)
     state = load_state(root)
@@ -950,6 +1059,56 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--max-ms", type=float)
     benchmark.add_argument("--json", action="store_true")
     benchmark.set_defaults(func=cmd_benchmark)
+
+    conversation = sub.add_parser("conversation")
+    conversation_sub = conversation.add_subparsers(dest="conversation_command", required=True)
+
+    conversation_start = conversation_sub.add_parser("start", parents=[root_parent])
+    conversation_start.add_argument("--name", required=True)
+    conversation_start.add_argument("--group", default="default")
+    conversation_start.add_argument("--objective")
+    conversation_start.add_argument("--monitor", action="store_true")
+    conversation_start.add_argument("--widget", action="store_true")
+    conversation_start.add_argument("--json", action="store_true")
+    conversation_start.set_defaults(func=cmd_conversation_start)
+
+    conversation_event = conversation_sub.add_parser("event")
+    conversation_event.add_argument("--id", required=True)
+    conversation_event.add_argument("--type", required=True)
+    conversation_event.add_argument("--summary", required=True)
+    conversation_event.add_argument("--result", choices=["pass", "fail", "unknown"], default="pass")
+    conversation_event.add_argument("--phase", choices=sorted(VALID_EVENT_PHASES))
+    conversation_event.add_argument("--claim", action="append", default=[])
+    conversation_event.add_argument("--evidence", action="append", default=[])
+    conversation_event.add_argument("--ref", action="append", default=[])
+    conversation_event.add_argument("--resolved", action="store_true")
+    conversation_event.add_argument("--action-key")
+    conversation_event.add_argument("--prompt-tokens", type=int)
+    conversation_event.add_argument("--completion-tokens", type=int)
+    conversation_event.add_argument("--cost", type=float)
+    conversation_event.add_argument("--latency-ms", type=int)
+    conversation_event.add_argument("--model")
+    conversation_event.add_argument("--fail-on-red", action="store_true")
+    conversation_event.add_argument("--json", action="store_true")
+    conversation_event.set_defaults(func=cmd_conversation_event)
+
+    conversation_scan = conversation_sub.add_parser("scan")
+    conversation_scan.add_argument("--id", required=True)
+    conversation_scan.add_argument("--checkpoint-stale-minutes", type=int, default=45)
+    conversation_scan.add_argument("--fail-on-red", action="store_true")
+    conversation_scan.add_argument("--json", action="store_true")
+    conversation_scan.set_defaults(func=cmd_conversation_scan)
+
+    conversation_status = conversation_sub.add_parser("status")
+    conversation_status.add_argument("--id", required=True)
+    conversation_status.add_argument("--tail", type=int, default=5)
+    conversation_status.add_argument("--json", action="store_true")
+    conversation_status.set_defaults(func=cmd_conversation_status)
+
+    conversation_close = conversation_sub.add_parser("close")
+    conversation_close.add_argument("--id", required=True)
+    conversation_close.add_argument("--json", action="store_true")
+    conversation_close.set_defaults(func=cmd_conversation_close)
 
     observe = sub.add_parser("observe", parents=[root_parent])
     observe.add_argument("--type", required=True, help="Runtime event type, such as tool_result, llm_call, final_attempt, or summary.")

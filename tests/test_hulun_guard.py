@@ -378,6 +378,86 @@ class HulunGuardCliTest(unittest.TestCase):
             status = json.loads(out)
             self.assertEqual(status["events"], 26)
 
+    def test_conversation_runtime_tracks_user_challenge_and_pending_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            old_home = os.environ.get("HULUN_HOME")
+            os.environ["HULUN_HOME"] = home
+            try:
+                code, out = self.run_cli(
+                    "--root",
+                    tmp,
+                    "conversation",
+                    "start",
+                    "--name",
+                    "codex-live-test",
+                    "--group",
+                    "tests",
+                    "--monitor",
+                    "--json",
+                )
+                self.assertEqual(code, 0)
+                conversation = json.loads(out)
+                self.assertTrue(conversation["id"].startswith("C"))
+                self.assertTrue(conversation["monitor_id"].startswith("M"))
+
+                code, out = self.run_cli(
+                    "conversation",
+                    "event",
+                    "--id",
+                    conversation["id"],
+                    "--type",
+                    "user_challenge",
+                    "--summary",
+                    "User says the monitor is not actually watching the conversation.",
+                    "--json",
+                )
+                self.assertEqual(code, 0)
+                risk = json.loads(out)["risk"]
+                self.assertGreater(risk["components"]["user_challenge"], 0)
+
+                code, out = self.run_cli(
+                    "conversation",
+                    "event",
+                    "--id",
+                    conversation["id"],
+                    "--type",
+                    "tool_call",
+                    "--summary",
+                    "Run pytest.",
+                    "--phase",
+                    "verify",
+                    "--action-key",
+                    "pytest",
+                    "--json",
+                )
+                self.assertEqual(code, 0)
+                risk = json.loads(out)["risk"]
+                self.assertGreater(risk["components"]["pending_tools"], 0)
+
+                code, out = self.run_cli(
+                    "conversation",
+                    "event",
+                    "--id",
+                    conversation["id"],
+                    "--type",
+                    "tool_result",
+                    "--summary",
+                    "pytest passed.",
+                    "--phase",
+                    "verify",
+                    "--action-key",
+                    "pytest",
+                    "--json",
+                )
+                self.assertEqual(code, 0)
+                risk = json.loads(out)["risk"]
+                self.assertEqual(risk["components"]["pending_tools"], 0)
+            finally:
+                if old_home is None:
+                    os.environ.pop("HULUN_HOME", None)
+                else:
+                    os.environ["HULUN_HOME"] = old_home
+
 
 if __name__ == "__main__":
     unittest.main()

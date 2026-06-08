@@ -16,6 +16,7 @@ HulunGuard is a proof-first reliability guard and desktop risk meter for long-ru
 - Trace ingestion: import generic JSON/JSONL, OpenHands-like events, and SWE-agent-like trajectories.
 - Built-in validation suite: run synthetic healthy/slop-risk scenarios before release.
 - Product operations: `quickstart`, `doctor`, and `benchmark` commands for onboarding, diagnostics, and scan performance checks.
+- Conversation runtime monitoring: per-conversation events, user challenges, pending tool calls, unresolved failures, unsupported final claims, and monitor sync.
 
 ## Quick Start
 
@@ -45,6 +46,18 @@ python .\hulun.py observe --type final_attempt --phase final --summary "Everythi
 python .\hulun.py observe --type tool_result --phase verify --result fail --summary "pytest failed" --action-key "pytest" --scan
 python .\hulun.py observe --type llm_call --phase summarize --summary "Long summary without evidence" --prompt-tokens 9000 --completion-tokens 5000 --cost 6.5 --latency-ms 70000 --scan
 ```
+
+Start a true conversation runtime monitor:
+
+```powershell
+python .\hulun.py conversation start --name "Codex live task" --group "HulunGuard" --monitor --widget
+python .\hulun.py conversation event --id C1 --type user_challenge --summary "User challenged whether monitoring is actually live"
+python .\hulun.py conversation event --id C1 --type tool_call --phase verify --summary "Run pytest" --action-key pytest
+python .\hulun.py conversation event --id C1 --type tool_result --phase verify --summary "pytest passed" --action-key pytest
+python .\hulun.py conversation scan --id C1
+```
+
+Conversation monitoring is not magic chat-log access. It becomes live when the agent or adapter records runtime events as they happen.
 
 Import an external trace:
 

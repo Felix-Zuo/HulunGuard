@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 - 2026-06-08
+
+- Added `hulun conversation start/event/scan/status/close` for live conversation runtime monitoring.
+- Added per-conversation state under `HULUN_HOME/conversations`.
+- Added conversation-specific risk components: user challenge, pending tools, unresolved failures, unsupported claims, stagnation, context decay, and cost pressure.
+- Added monitor sync for conversation runtime monitors so desktop widgets track conversation risk instead of project ledger risk.
+- Added tests for user challenge, pending tool calls, and resolved tool results.
+
 ## 0.3.0 - 2026-06-08
 
 - Added `quickstart` for copy-paste onboarding.

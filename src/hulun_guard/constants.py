@@ -8,6 +8,7 @@ RISK_REPORT_FILE = "risk_report.md"
 DASHBOARD_FILE = "dashboard.html"
 BOARD_FILE = "board.html"
 MONITORS_DIR = "monitors"
+CONVERSATIONS_DIR = "conversations"
 
 VALID_STATUSES = {"pending", "in_progress", "done", "blocked", "dropped"}
 VALID_EVENT_PHASES = {
