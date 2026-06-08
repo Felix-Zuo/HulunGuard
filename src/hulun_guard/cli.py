@@ -12,7 +12,8 @@ import webbrowser
 from pathlib import Path
 from typing import Any
 
-from .constants import DASHBOARD_FILE, RISK_REPORT_FILE, VALID_STATUSES
+from .adapters import load_observations
+from .constants import DASHBOARD_FILE, RISK_REPORT_FILE, VALID_EVENT_PHASES, VALID_STATUSES
 from .monitor import (
     board_path,
     close_monitor,
@@ -40,12 +41,21 @@ from .storage import (
     write_json,
 )
 from .util import hash_file, next_id, normalize_list, sort_ids, status_counts, utc_now
+from .validation import build_validation_markdown, run_validation_suite, validation_json
 
 
 def require_status(status: str) -> str:
     if status not in VALID_STATUSES:
         raise SystemExit(f"Invalid status '{status}'. Expected one of: {', '.join(sorted(VALID_STATUSES))}")
     return status
+
+
+def require_phase(phase: str | None) -> str | None:
+    if phase is None:
+        return None
+    if phase not in VALID_EVENT_PHASES:
+        raise SystemExit(f"Invalid phase '{phase}'. Expected one of: {', '.join(sorted(VALID_EVENT_PHASES))}")
+    return phase
 
 
 def append_event(
@@ -57,6 +67,7 @@ def append_event(
     refs: list[str] | None = None,
     resolved: bool | None = None,
     evidence: list[str] | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     event = {
         "id": next_id(state.setdefault("events", []), "EV"),
@@ -69,6 +80,9 @@ def append_event(
     }
     if resolved is not None:
         event["resolved"] = resolved
+    for key, value in (extra or {}).items():
+        if value not in (None, "", []):
+            event[key] = value
     state["events"].append(event)
     return event
 
@@ -197,6 +211,116 @@ def cmd_event(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_observe(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    state = load_state(root)
+    extra = {
+        "phase": require_phase(args.phase),
+        "claims": normalize_list(args.claim),
+        "source_platform": args.source_platform,
+        "action_key": args.action_key,
+        "prompt_tokens": args.prompt_tokens,
+        "completion_tokens": args.completion_tokens,
+        "cost": args.cost,
+        "latency_ms": args.latency_ms,
+        "model": args.model,
+    }
+    event = append_event(
+        state,
+        args.type,
+        args.summary,
+        result=args.result,
+        refs=normalize_list(args.ref),
+        resolved=args.resolved,
+        evidence=normalize_list(args.evidence),
+        extra=extra,
+    )
+    save_state(root, state)
+
+    if args.scan:
+        _state, risk, report_path = run_scan(args, final_attempt=args.final_attempt)
+        if args.json:
+            print(json.dumps({"event": event, "risk": risk, "report": str(report_path)}, ensure_ascii=False, indent=2))
+        else:
+            print(f"Observed {event['id']}: {args.type}")
+            print(f"HulunIndex: {risk['slop_index']} / 100 ({risk['band']})")
+            print(f"Required action: {risk['required_action']}")
+        return 2 if risk["blocked"] and args.fail_on_threshold else 0
+
+    if args.json:
+        print(json.dumps(event, ensure_ascii=False, indent=2))
+    else:
+        print(f"Observed {event['id']}: {args.type}")
+    return 0
+
+
+def cmd_ingest(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    state = load_state(root)
+    observations = load_observations(args.file, args.format)
+    imported: list[dict[str, Any]] = []
+    for observation in observations:
+        event = append_event(
+            state,
+            observation.get("type") or "observation",
+            observation.get("summary") or "Imported observation.",
+            result=observation.get("result") or "unknown",
+            refs=observation.get("refs") or [],
+            resolved=observation.get("resolved"),
+            evidence=observation.get("evidence") or [],
+            extra={
+                "phase": require_phase(observation.get("phase")),
+                "claims": observation.get("claims") or [],
+                "source_platform": args.source_platform or observation.get("source_platform"),
+                "action_key": observation.get("action_key"),
+                "prompt_tokens": observation.get("prompt_tokens"),
+                "completion_tokens": observation.get("completion_tokens"),
+                "cost": observation.get("cost"),
+                "latency_ms": observation.get("latency_ms"),
+                "model": observation.get("model"),
+            },
+        )
+        imported.append(event)
+    save_state(root, state)
+
+    payload: dict[str, Any] = {"imported": len(imported), "events": imported}
+    if args.scan:
+        _state, risk, report_path = run_scan(args, final_attempt=args.final_attempt)
+        payload["risk"] = risk
+        payload["report"] = str(report_path)
+
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"Imported {len(imported)} observations from {args.file}")
+        if args.scan and payload.get("risk"):
+            risk = payload["risk"]
+            print(f"HulunIndex: {risk['slop_index']} / 100 ({risk['band']})")
+            print(f"Required action: {risk['required_action']}")
+    if args.scan and payload.get("risk"):
+        risk = payload["risk"]
+        return 2 if risk["blocked"] and args.fail_on_threshold else 0
+    return 0
+
+
+def cmd_validate(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    result = run_validation_suite()
+    output_dir = hulun_dir(root)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    json_path = output_dir / "validation_report.json"
+    md_path = output_dir / "validation_report.md"
+    json_path.write_text(validation_json(result), encoding="utf-8")
+    md_path.write_text(build_validation_markdown(result), encoding="utf-8")
+
+    if args.json:
+        print(validation_json(result), end="")
+    else:
+        print(f"HulunGuard validation: {result['passes']} / {result['total']} scenarios matched expected bands.")
+        print(f"Report: {md_path}")
+    return 0 if result["passes"] == result["total"] else 2
+
+
 def cmd_add_risk(args: argparse.Namespace) -> int:
     root = project_root(args.root)
     state = load_state(root)
@@ -294,11 +418,14 @@ def run_scan(args: argparse.Namespace, *, final_attempt: bool = False) -> tuple[
 
 def build_risk_report(risk: dict[str, Any]) -> str:
     lines = ["# HulunGuard Risk Report", "", f"Score: {risk['score']} ({risk['band']})", ""]
+    lines.append(f"Slop index: {risk.get('slop_index', risk['score'])}")
     lines.append(f"Threshold: {risk['threshold']}")
     lines.append(f"Required action: {risk['required_action']}")
     lines.extend(["", "## Components"])
     for key, value in risk.get("components", {}).items():
-        lines.append(f"- {key}: {value}")
+        weight = risk.get("weights", {}).get(key)
+        suffix = f" / {weight}" if weight is not None else ""
+        lines.append(f"- {key}: {value}{suffix}")
     lines.extend(["", "## Reasons"])
     lines.extend([f"- {reason}" for reason in risk.get("reasons", [])])
     return "\n".join(lines) + "\n"
@@ -617,6 +744,46 @@ def build_parser() -> argparse.ArgumentParser:
     event.add_argument("--evidence", action="append", default=[])
     event.add_argument("--resolved", action="store_true")
     event.set_defaults(func=cmd_event)
+
+    observe = sub.add_parser("observe", parents=[root_parent])
+    observe.add_argument("--type", required=True, help="Runtime event type, such as tool_result, llm_call, final_attempt, or summary.")
+    observe.add_argument("--summary", required=True)
+    observe.add_argument("--result", choices=["pass", "fail", "unknown"], default="pass")
+    observe.add_argument("--phase", choices=sorted(VALID_EVENT_PHASES))
+    observe.add_argument("--claim", action="append", default=[], help="Completion or verification claim made by the agent.")
+    observe.add_argument("--evidence", action="append", default=[], help="Evidence ids that support this observation.")
+    observe.add_argument("--ref", action="append", default=[], help="Path, URL, trace id, or command reference.")
+    observe.add_argument("--resolved", action="store_true")
+    observe.add_argument("--source-platform", help="Adapter source, e.g. manual, langgraph, swe-agent, openhands, langfuse, phoenix.")
+    observe.add_argument("--action-key", help="Stable action fingerprint for retry-loop detection.")
+    observe.add_argument("--prompt-tokens", type=int)
+    observe.add_argument("--completion-tokens", type=int)
+    observe.add_argument("--cost", type=float)
+    observe.add_argument("--latency-ms", type=int)
+    observe.add_argument("--model")
+    observe.add_argument("--scan", action="store_true", help="Scan immediately after recording the observation.")
+    observe.add_argument("--threshold", type=int)
+    observe.add_argument("--checkpoint-stale-minutes", type=int, default=45)
+    observe.add_argument("--final-attempt", action="store_true")
+    observe.add_argument("--fail-on-threshold", action="store_true")
+    observe.add_argument("--json", action="store_true")
+    observe.set_defaults(func=cmd_observe)
+
+    ingest = sub.add_parser("ingest", parents=[root_parent])
+    ingest.add_argument("--file", required=True, help="JSON or JSONL trace file to import.")
+    ingest.add_argument("--format", choices=["auto", "generic", "openhands", "swe-agent"], default="auto")
+    ingest.add_argument("--source-platform", help="Override source platform on imported events.")
+    ingest.add_argument("--scan", action="store_true", help="Scan immediately after import.")
+    ingest.add_argument("--threshold", type=int)
+    ingest.add_argument("--checkpoint-stale-minutes", type=int, default=45)
+    ingest.add_argument("--final-attempt", action="store_true")
+    ingest.add_argument("--fail-on-threshold", action="store_true")
+    ingest.add_argument("--json", action="store_true")
+    ingest.set_defaults(func=cmd_ingest)
+
+    validate = sub.add_parser("validate", parents=[root_parent])
+    validate.add_argument("--json", action="store_true")
+    validate.set_defaults(func=cmd_validate)
 
     risk = sub.add_parser("add-risk", parents=[root_parent])
     risk.add_argument("--text", required=True)

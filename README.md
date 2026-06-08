@@ -12,6 +12,9 @@ HulunGuard is a proof-first reliability guard and desktop risk meter for long-ru
 - Local state ledger: `.hulun/state.json`, `.hulun/resume.md`, `.hulun/risk.json`, `.hulun/verification_report.md`.
 - Universal startup prompt: `#HULUN_ON` for any agent that can run shell commands.
 - OpenClaw hook: injects HulunGuard guidance into OpenClaw agent bootstrap.
+- Realtime HulunIndex observations: record phase, claims, failures, tokens, cost, latency, and retry fingerprints.
+- Trace ingestion: import generic JSON/JSONL, OpenHands-like events, and SWE-agent-like trajectories.
+- Built-in validation suite: run synthetic healthy/slop-risk scenarios before release.
 
 ## Quick Start
 
@@ -26,6 +29,29 @@ Update a monitor:
 ```powershell
 python .\hulun.py update --id M1 --score 72 --summary "Tool failed and no evidence yet" --reason "unresolved failure"
 python .\hulun.py update --id M1 --delta -30 --summary "Tests passed and evidence was recorded"
+```
+
+Record a realtime agent observation and immediately rescan the slop index:
+
+```powershell
+python .\hulun.py observe --type final_attempt --phase final --summary "Everything is completed and verified" --claim "completed and verified" --scan
+python .\hulun.py observe --type tool_result --phase verify --result fail --summary "pytest failed" --action-key "pytest" --scan
+python .\hulun.py observe --type llm_call --phase summarize --summary "Long summary without evidence" --prompt-tokens 9000 --completion-tokens 5000 --cost 6.5 --latency-ms 70000 --scan
+```
+
+Import an external trace:
+
+```powershell
+python .\hulun.py ingest --file .\trace.jsonl --format generic --scan
+python .\hulun.py ingest --file .\openhands-events.json --format openhands --scan
+python .\hulun.py ingest --file .\run.traj --format swe-agent --scan
+```
+
+Run the release validation suite:
+
+```powershell
+python .\hulun.py validate
+python -m pytest -q
 ```
 
 Open the project board:
@@ -70,11 +96,16 @@ python .\hulun.py serve --open
 Signals:
 
 - Evidence gap.
+- Claim overhang.
 - Unfinished criteria.
 - Stagnation.
 - Unhandled failures.
 - Context decay.
 - Intent drift.
+- Phase disorder.
+- Retry loop.
+- Polish without progress.
+- Cost pressure.
 - Uncertainty without verification.
 
 ## OpenClaw
@@ -103,6 +134,7 @@ The hook should show `hulunguard` as eligible, loadable, enabled, and attached t
 
 ```powershell
 python -m unittest discover -s tests
+python .\hulun.py validate
 python .\hulun.py --help
 python .\hulun.py open --help
 python .\hulun.py board --help

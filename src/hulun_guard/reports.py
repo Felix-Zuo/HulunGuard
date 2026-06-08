@@ -11,6 +11,10 @@ def evidence_label(item: dict[str, Any]) -> str:
     return ", ".join(evidence) if evidence else "no evidence"
 
 
+def humanize_key(value: str) -> str:
+    return value.replace("_", " ").title()
+
+
 def build_resume_markdown(state: dict[str, Any]) -> str:
     criteria = state.get("criteria") or state.get("success_criteria") or []
     active_steps = [
@@ -86,6 +90,7 @@ def build_verify_markdown(result: dict[str, Any]) -> str:
         risk = result["risk"]
         lines.extend(["", "## HulunGauge"])
         lines.append(f"- Score: {risk.get('score')} ({risk.get('band')})")
+        lines.append(f"- Slop index: {risk.get('slop_index', risk.get('score'))}")
         lines.append(f"- Required action: {risk.get('required_action')}")
     return "\n".join(lines) + "\n"
 
@@ -96,6 +101,11 @@ def build_dashboard_html(state: dict[str, Any], risk: dict[str, Any]) -> str:
     band = str(risk.get("band", "green"))
     color = {"green": "#1f9d55", "yellow": "#c68612", "red": "#c2410c"}.get(band, "#525252")
     reason_items = "\n".join(f"<li>{escape(reason)}</li>" for reason in risk.get("reasons", [])) or "<li>No risk reasons.</li>"
+    component_items = "\n".join(
+        f"<li>{escape(humanize_key(name))}: {value}"
+        f" / {risk.get('weights', {}).get(name, '')}</li>"
+        for name, value in risk.get("components", {}).items()
+    )
     criterion_rows = "\n".join(
         "<tr>"
         f"<td>{escape(item.get('id', ''))}</td>"
@@ -189,16 +199,8 @@ def build_dashboard_html(state: dict[str, Any], risk: dict[str, Any]) -> str:
         <p><code>{escape(str(risk.get("required_action", "continue")))}</code></p>
       </section>
       <section class="panel">
-        <h2>Weights</h2>
-        <ul>
-          <li>Evidence gap: {risk.get("components", {}).get("evidence_gap", 0)}</li>
-          <li>Unfinished criteria: {risk.get("components", {}).get("unfinished_criteria", 0)}</li>
-          <li>Stagnation: {risk.get("components", {}).get("stagnation", 0)}</li>
-          <li>Unhandled failures: {risk.get("components", {}).get("unhandled_failures", 0)}</li>
-          <li>Context decay: {risk.get("components", {}).get("context_decay", 0)}</li>
-          <li>Intent drift: {risk.get("components", {}).get("intent_drift", 0)}</li>
-          <li>Uncertainty: {risk.get("components", {}).get("uncertainty", 0)}</li>
-        </ul>
+        <h2>HulunIndex Components</h2>
+        <ul>{component_items}</ul>
       </section>
     </div>
     <h2>Success Criteria</h2>

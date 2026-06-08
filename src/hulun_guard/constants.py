@@ -10,14 +10,28 @@ BOARD_FILE = "board.html"
 MONITORS_DIR = "monitors"
 
 VALID_STATUSES = {"pending", "in_progress", "done", "blocked", "dropped"}
+VALID_EVENT_PHASES = {
+    "explore",
+    "plan",
+    "implement",
+    "verify",
+    "recover",
+    "summarize",
+    "final",
+    "orchestrate",
+}
 USEFUL_EVENT_TYPES = {
     "artifact",
     "approval",
+    "checkpoint",
     "command",
+    "criterion",
     "evidence",
     "file_change",
     "source",
+    "step",
     "test",
     "tool_result",
+    "verification",
 }
-FAILURE_EVENT_TYPES = {"command", "test", "tool_result", "source"}
+FAILURE_EVENT_TYPES = {"agent_error", "command", "conversation_error", "llm_call", "test", "tool_result", "source"}

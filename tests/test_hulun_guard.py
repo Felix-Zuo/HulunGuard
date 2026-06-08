@@ -162,6 +162,167 @@ class HulunGuardCliTest(unittest.TestCase):
                 else:
                     os.environ["HULUN_HOME"] = old_home
 
+    def test_observe_surfaces_slop_index_components(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "init",
+                    "--objective",
+                    "ship a proof-backed agent monitor",
+                    "--criterion",
+                    "final answer is blocked when evidence is missing",
+                )[0],
+                0,
+            )
+
+            code, out = self.run_cli(
+                "--root",
+                tmp,
+                "observe",
+                "--type",
+                "final_attempt",
+                "--summary",
+                "Everything is completed and verified.",
+                "--phase",
+                "final",
+                "--claim",
+                "completed and verified",
+                "--prompt-tokens",
+                "9000",
+                "--completion-tokens",
+                "5000",
+                "--cost",
+                "6.5",
+                "--latency-ms",
+                "70000",
+                "--source-platform",
+                "manual",
+                "--scan",
+                "--json",
+            )
+            self.assertEqual(code, 0)
+            payload = json.loads(out)
+            risk = payload["risk"]
+            components = risk["components"]
+            self.assertEqual(risk["slop_index"], risk["score"])
+            self.assertGreater(components["claim_overhang"], 0)
+            self.assertGreater(components["phase_disorder"], 0)
+            self.assertGreater(components["cost_pressure"], 0)
+            self.assertIn("Completion or verification claims outpace evidence coverage", "\n".join(risk["reasons"]))
+
+    def test_observe_accepts_evidence_backed_final_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "init",
+                    "--objective",
+                    "ship a proof-backed monitor",
+                    "--criterion",
+                    "final claim has evidence",
+                )[0],
+                0,
+            )
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "record-evidence",
+                    "--kind",
+                    "test",
+                    "--summary",
+                    "pytest passed",
+                    "--command",
+                    "python -m pytest -q",
+                )[0],
+                0,
+            )
+            self.assertEqual(self.run_cli("--root", tmp, "set-criterion", "--id", "C1", "--status", "done", "--evidence", "E1")[0], 0)
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "observe",
+                    "--type",
+                    "final_attempt",
+                    "--phase",
+                    "final",
+                    "--summary",
+                    "Completed and verified with evidence E1",
+                    "--claim",
+                    "completed and verified",
+                    "--evidence",
+                    "E1",
+                    "--scan",
+                    "--json",
+                )[0],
+                0,
+            )
+
+            code, out = self.run_cli("--root", tmp, "scan", "--json")
+            self.assertEqual(code, 0)
+            risk = json.loads(out)
+            self.assertEqual(risk["components"]["claim_overhang"], 0)
+            self.assertLess(risk["score"], 36)
+
+    def test_ingest_imports_generic_trace_and_scans(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "trace.json"
+            trace.write_text(
+                json.dumps(
+                    {
+                        "events": [
+                            {
+                                "type": "tool_result",
+                                "phase": "verify",
+                                "summary": "pytest failed",
+                                "result": "fail",
+                                "action_key": "pytest",
+                            },
+                            {
+                                "type": "final_attempt",
+                                "phase": "final",
+                                "summary": "Everything is complete and verified",
+                                "claim": "complete and verified",
+                            },
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "init",
+                    "--objective",
+                    "fix tests before final",
+                    "--criterion",
+                    "pytest passes",
+                )[0],
+                0,
+            )
+
+            code, out = self.run_cli("--root", tmp, "ingest", "--file", str(trace), "--scan", "--json")
+            self.assertEqual(code, 0)
+            payload = json.loads(out)
+            self.assertEqual(payload["imported"], 2)
+            self.assertGreater(payload["risk"]["components"]["claim_overhang"], 0)
+            self.assertGreater(payload["risk"]["components"]["unhandled_failures"], 0)
+
+    def test_validate_runs_builtin_scenarios(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.run_cli("--root", tmp, "validate", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["passes"], payload["total"])
+            self.assertEqual(payload["total"], 4)
+            self.assertTrue((Path(tmp) / ".hulun" / "validation_report.md").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
