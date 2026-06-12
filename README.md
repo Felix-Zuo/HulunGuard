@@ -4,6 +4,10 @@ HulunGuard is a proof-first reliability guard and desktop risk meter for long-ru
 
 它不是“AI 文风检测器”。它监控的是智能体是否正在失去可验证的任务执行能力：目标漂移、证据不足、上下文断裂、空转总结、工具失败后继续下结论。
 
+Public examples are synthetic. Do not publish private conversation logs,
+credentials, customer files, or production records into the repository when
+using HulunGuard on real work.
+
 ## What Works Now
 
 - Desktop HulunGauge: small always-on-top progress bar, click-drag to move, double-click to close.

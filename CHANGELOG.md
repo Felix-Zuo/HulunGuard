@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1 - 2026-06-13
+
+- Verified the unittest suite after moving the local repository under the showcase project directory.
+- Kept the public README focused on proof-first agent reliability rather than private workflow details.
+
 ## 0.5.0 - 2026-06-08
 
 - Added a polished GitHub Pages showcase at `docs/index.html`.
