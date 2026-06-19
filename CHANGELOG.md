@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1 - 2026-06-19
+
+- Fixed OpenSSF Scorecard workflow permissions so publishing results does not use global write permissions.
+- Updated GitHub Actions workflows to Node 24-compatible action majors.
+
 ## 0.6.0 - 2026-06-19
 
 - Added professional maturity, security, and release governance assets.
