@@ -67,4 +67,4 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 ## Current Target
 
-The current target is M2. The privacy-safe redaction baseline, adapter SDK, and MCP stdio server are implemented. The remaining M2 gates are OpenTelemetry/OpenInference alignment, labeled real-agent trajectories, calibration report, and release provenance.
+The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, and OpenTelemetry/OpenInference import/export baseline are implemented. The remaining M2 gates are labeled real-agent trajectories, calibration report, and release provenance.

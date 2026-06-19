@@ -63,6 +63,13 @@ Sources:
 - Expose project init/observe/scan and conversation start/event/scan over MCP.
 - Cover SDK and MCP behavior with tests, including live conversation pending-tool risk.
 
+## Fourth Remediation Slice
+
+- Add OpenTelemetry GenAI span ingestion for OTLP-style JSON and JSONL.
+- Add OpenInference span ingestion for LLM and tool spans.
+- Add OTLP-style export for HulunGuard event ledgers.
+- Preserve privacy defaults by withholding prompt, output, and tool argument payloads unless sensitive mode is explicitly enabled.
+
 ## Product Position
 
 HulunGuard is currently moving from developer preview toward a reliable developer product. It should not be marketed as production-ready until M2 gates are met with real trajectory data, adapter coverage, telemetry interoperability, and release provenance.

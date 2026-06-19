@@ -403,6 +403,205 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertEqual(event["refs"], ["https://trace.example/session"])
             self.assertEqual(event["privacy"]["mode"], "redacted-default")
 
+    def test_ingest_opentelemetry_genai_spans_without_payload_leakage(self) -> None:
+        def attr(key: str, value: object) -> dict[str, object]:
+            if isinstance(value, int):
+                encoded = {"intValue": str(value)}
+            else:
+                encoded = {"stringValue": str(value)}
+            return {"key": key, "value": encoded}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "otel-trace.json"
+            secret_payload = "user prompt includes sk-testsecret012345678901234567890 and alice@example.com"
+            trace.write_text(
+                json.dumps(
+                    {
+                        "resourceSpans": [
+                            {
+                                "scopeSpans": [
+                                    {
+                                        "spans": [
+                                            {
+                                                "traceId": "abc123",
+                                                "spanId": "span001",
+                                                "name": "openai.chat",
+                                                "startTimeUnixNano": "1000000000",
+                                                "endTimeUnixNano": "1750000000",
+                                                "attributes": [
+                                                    attr("gen_ai.operation.name", "chat"),
+                                                    attr("gen_ai.request.model", "gpt-4o"),
+                                                    attr("gen_ai.usage.input_tokens", 1200),
+                                                    attr("gen_ai.usage.output_tokens", 240),
+                                                    attr("gen_ai.input.messages", secret_payload),
+                                                    attr("gen_ai.output.messages", "assistant output includes alice@example.com"),
+                                                ],
+                                                "status": {"code": "STATUS_CODE_OK"},
+                                            },
+                                            {
+                                                "traceId": "abc123",
+                                                "spanId": "span002",
+                                                "name": "tool:get_weather",
+                                                "attributes": [
+                                                    attr("gen_ai.tool.call.id", "call_123"),
+                                                    attr("gen_ai.tool.name", "get_weather"),
+                                                    attr("gen_ai.tool.call.arguments", "token=secret123"),
+                                                ],
+                                                "status": {"code": "STATUS_CODE_ERROR", "message": "tool failed"},
+                                            },
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "init",
+                    "--objective",
+                    "import otel safely",
+                    "--criterion",
+                    "otel spans map to observations",
+                )[0],
+                0,
+            )
+
+            code, out = self.run_cli("--root", tmp, "ingest", "--file", str(trace), "--format", "opentelemetry", "--include-events", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            events = payload["events"]
+            joined = json.dumps(events, ensure_ascii=False)
+            self.assertEqual(payload["imported"], 2)
+            self.assertEqual(events[0]["type"], "llm_call")
+            self.assertEqual(events[0]["source_platform"], "opentelemetry")
+            self.assertEqual(events[0]["prompt_tokens"], 1200)
+            self.assertEqual(events[0]["completion_tokens"], 240)
+            self.assertEqual(events[0]["latency_ms"], 750)
+            self.assertEqual(events[0]["refs"], ["otel:trace:abc123", "otel:span:span001"])
+            self.assertEqual(events[1]["type"], "tool_result")
+            self.assertEqual(events[1]["result"], "fail")
+            self.assertEqual(events[1]["phase"], "recover")
+            self.assertIn("OpenTelemetry GenAI span", events[0]["summary"])
+            self.assertNotIn(secret_payload, joined)
+            self.assertNotIn("sk-testsecret", joined)
+            self.assertNotIn("alice@example.com", joined)
+            self.assertNotIn("secret123", joined)
+
+    def test_ingest_openinference_spans_without_payload_leakage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "openinference-trace.json"
+            trace.write_text(
+                json.dumps(
+                    [
+                        {
+                            "trace_id": "trace001",
+                            "span_id": "spanllm",
+                            "name": "chat completion",
+                            "attributes": {
+                                "openinference.span.kind": "LLM",
+                                "llm.model_name": "gpt-4o-mini",
+                                "llm.token_count.prompt": 300,
+                                "llm.token_count.completion": 90,
+                                "input.value": "input contains bob@example.com",
+                                "output.value": "output contains sk-testsecret012345678901234567890",
+                            },
+                        },
+                        {
+                            "trace_id": "trace001",
+                            "span_id": "spantool",
+                            "name": "tool call",
+                            "attributes": {
+                                "openinference.span.kind": "TOOL",
+                                "tool.name": "pytest",
+                                "tool.parameters": "password=hunter2",
+                            },
+                        },
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "init",
+                    "--objective",
+                    "import openinference safely",
+                    "--criterion",
+                    "openinference spans map to observations",
+                )[0],
+                0,
+            )
+
+            code, out = self.run_cli("--root", tmp, "ingest", "--file", str(trace), "--format", "openinference", "--include-events", "--json")
+            self.assertEqual(code, 0, out)
+            events = json.loads(out)["events"]
+            joined = json.dumps(events, ensure_ascii=False)
+            self.assertEqual(events[0]["type"], "llm_call")
+            self.assertEqual(events[0]["source_platform"], "openinference")
+            self.assertEqual(events[0]["prompt_tokens"], 300)
+            self.assertEqual(events[0]["completion_tokens"], 90)
+            self.assertEqual(events[1]["type"], "tool_result")
+            self.assertEqual(events[1]["phase"], "orchestrate")
+            self.assertNotIn("bob@example.com", joined)
+            self.assertNotIn("sk-testsecret", joined)
+            self.assertNotIn("hunter2", joined)
+
+    def test_export_opentelemetry_writes_redacted_spans(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "hulun-otel.json"
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "init",
+                    "--objective",
+                    "export hulun events",
+                    "--criterion",
+                    "otel export exists",
+                )[0],
+                0,
+            )
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "observe",
+                    "--type",
+                    "llm_call",
+                    "--phase",
+                    "orchestrate",
+                    "--summary",
+                    "model call used sk-testsecret012345678901234567890 for alice@example.com",
+                    "--prompt-tokens",
+                    "55",
+                    "--completion-tokens",
+                    "13",
+                    "--model",
+                    "gpt-4o",
+                )[0],
+                0,
+            )
+            code, out = self.run_cli("--root", tmp, "export-otel", "--output", str(output), "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            exported = json.loads(output.read_text(encoding="utf-8"))
+            joined = json.dumps(exported, ensure_ascii=False)
+            self.assertEqual(payload["spans"], 2)
+            self.assertIn("resourceSpans", exported)
+            self.assertIn("hulun.event.summary", joined)
+            self.assertIn("[redacted:openai-key]", joined)
+            self.assertIn("[redacted:email]", joined)
+            self.assertNotIn("sk-testsecret", joined)
+            self.assertNotIn("alice@example.com", joined)
+
     def test_ingest_include_sensitive_preserves_trace_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

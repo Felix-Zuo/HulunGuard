@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0 - 2026-06-20
+
+- Added OpenTelemetry GenAI trace ingestion through `ingest --format opentelemetry`.
+- Added OpenInference trace ingestion through `ingest --format openinference`.
+- Added `export-otel` to write HulunGuard events as OTLP-style JSON spans.
+- Added integration tests for OTel/OpenInference span mapping and default private payload withholding.
+- Updated usage and maturity docs for standard telemetry interoperability.
+
 ## 0.8.0 - 2026-06-19
 
 - Added `HulunGuardClient` as the stable Python adapter SDK for project and conversation runtime monitoring.

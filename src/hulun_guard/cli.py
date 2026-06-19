@@ -14,7 +14,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
-from .adapters import iter_observations
+from .adapters import export_opentelemetry, iter_observations
 from .constants import DASHBOARD_FILE, RISK_REPORT_FILE, VALID_EVENT_PHASES, VALID_STATUSES
 from .conversation import (
     close_conversation,
@@ -361,6 +361,21 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     if args.scan and payload.get("risk"):
         risk = payload["risk"]
         return 2 if risk["blocked"] and args.fail_on_threshold else 0
+    return 0
+
+
+def cmd_export_otel(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    state = load_state(root)
+    payload = export_opentelemetry(state, version=package_version())
+    output = Path(args.output)
+    output = output if output.is_absolute() else root / output
+    write_json(output, payload)
+    result = {"schema": "hulun.export.opentelemetry.v1", "output": str(output), "spans": len(state.get("events", []))}
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(f"Exported {result['spans']} OpenTelemetry spans: {output}")
     return 0
 
 
@@ -1191,7 +1206,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ingest = sub.add_parser("ingest", parents=[root_parent])
     ingest.add_argument("--file", required=True, help="JSON or JSONL trace file to import.")
-    ingest.add_argument("--format", choices=["auto", "generic", "openhands", "swe-agent"], default="auto")
+    ingest.add_argument("--format", choices=["auto", "generic", "opentelemetry", "openinference", "openhands", "swe-agent"], default="auto")
     ingest.add_argument("--source-platform", help="Override source platform on imported events.")
     ingest.add_argument("--scan", action="store_true", help="Scan immediately after import.")
     ingest.add_argument("--threshold", type=int)
@@ -1202,6 +1217,11 @@ def build_parser() -> argparse.ArgumentParser:
     add_privacy_controls(ingest)
     ingest.add_argument("--json", action="store_true")
     ingest.set_defaults(func=cmd_ingest)
+
+    export_otel = sub.add_parser("export-otel", parents=[root_parent])
+    export_otel.add_argument("--output", required=True, help="Write OpenTelemetry OTLP JSON to this file.")
+    export_otel.add_argument("--json", action="store_true")
+    export_otel.set_defaults(func=cmd_export_otel)
 
     validate = sub.add_parser("validate", parents=[root_parent])
     validate.add_argument("--json", action="store_true")

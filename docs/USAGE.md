@@ -85,6 +85,8 @@ Use `ingest` to convert trace files into HulunGuard observations:
 
 ```powershell
 python .\hulun.py ingest --file .\trace.jsonl --format generic --scan
+python .\hulun.py ingest --file .\otel-trace.json --format opentelemetry --scan
+python .\hulun.py ingest --file .\openinference-trace.json --format openinference --scan
 python .\hulun.py ingest --file .\openhands-events.json --format openhands --scan
 python .\hulun.py ingest --file .\run.traj --format swe-agent --scan
 ```
@@ -92,9 +94,17 @@ python .\hulun.py ingest --file .\run.traj --format swe-agent --scan
 Supported formats:
 
 - `generic`: JSON or JSONL with fields like `type`, `summary`, `result`, `phase`, `claim`, `evidence`, `action_key`, `prompt_tokens`, `completion_tokens`, `cost`, and `latency_ms`.
+- `opentelemetry`: OTLP-style JSON/JSONL spans with GenAI `gen_ai.*` attributes.
+- `openinference`: OpenInference-style spans with `openinference.span.kind` and LLM/tool attributes.
 - `openhands`: maps action/observation/error/condensation-like events into command, tool_result, agent_error, and summary observations.
 - `swe-agent`: maps action/observation trajectory steps into command/tool_result observations with retry-loop fingerprints.
 - `auto`: guesses from the filename.
+
+Export HulunGuard events as OTLP-style JSON spans:
+
+```powershell
+python .\hulun.py export-otel --output .\hulun-otel.json
+```
 
 ## Privacy And Retention
 
