@@ -1,0 +1,34 @@
+name: Maturity task
+description: Track product maturity, security, adapter, or release-readiness work.
+title: "[Maturity]: "
+labels: ["maturity"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - scoring
+        - adapter
+        - security
+        - release
+        - documentation
+        - validation data
+        - user experience
+    validations:
+      required: true
+  - type: textarea
+    id: target
+    attributes:
+      label: Target outcome
+      description: Observable result needed before the task is done.
+    validations:
+      required: true
+  - type: textarea
+    id: gate
+    attributes:
+      label: Acceptance gate
+      description: Test, benchmark, issue, workflow, or artifact that proves completion.
+    validations:
+      required: true
+

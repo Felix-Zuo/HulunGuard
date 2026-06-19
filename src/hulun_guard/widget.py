@@ -7,7 +7,6 @@ from pathlib import Path
 
 from .monitor import close_monitor, load_monitor, monitor_path, sync_monitor_from_root
 
-
 COLORS = {
     "green": "#1f9d55",
     "yellow": "#c68612",
@@ -58,8 +57,8 @@ class HulunWidget:
     def close(self, _event: tk.Event | None = None) -> None:
         try:
             close_monitor(self.monitor_id)
-        except Exception:
-            pass
+        except Exception as exc:  # pragma: no cover - best-effort UI shutdown path
+            print(f"Could not close monitor {self.monitor_id}: {exc}", file=sys.stderr)
         self.root.destroy()
 
     def render(self) -> None:

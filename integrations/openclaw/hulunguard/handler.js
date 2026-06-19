@@ -7,13 +7,13 @@ const REMINDER_CONTENT = `
 For long-running, artifact-producing, research-heavy, or compaction-prone work, use HulunGuard.
 
 Project CLI:
-\`python D:\\0A OpenClaw\\projects\\展示项目\\skill开发\\HulunGuard\\hulun.py\`
+\`python -m hulun_guard\` or \`hulun\` after installing HulunGuard.
 
 Minimum protocol:
-- Start monitor: \`python ...\\hulun.py open --conversation "<short name>" --group "<project>" --widget\`
-- Track evidence: \`python ...\\hulun.py record-evidence --root "<project-root>" --kind test --summary "<proof>" --command "<command>"\`
-- Check risk: \`python ...\\hulun.py scan --root "<project-root>"\`
-- Final gate: \`python ...\\hulun.py verify --root "<project-root>"\`
+- Start monitor: \`python -m hulun_guard open --conversation "<short name>" --group "<project>" --widget\`
+- Track evidence: \`python -m hulun_guard record-evidence --root "<project-root>" --kind test --summary "<proof>" --command "<command>"\`
+- Check risk: \`python -m hulun_guard scan --root "<project-root>"\`
+- Final gate: \`python -m hulun_guard verify --root "<project-root>"\`
 
 If HulunGauge is red or verify fails, do not claim completion. Recover state, add evidence, or tell the user what is missing.
 `.trim();

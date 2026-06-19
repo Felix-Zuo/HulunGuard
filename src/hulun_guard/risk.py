@@ -7,7 +7,6 @@ from .constants import FAILURE_EVENT_TYPES, USEFUL_EVENT_TYPES
 from .storage import criteria
 from .util import age_minutes, clamp_score, overlap_ratio, tokens, utc_now
 
-
 UNCERTAINTY_MARKERS = [
     "maybe",
     "probably",

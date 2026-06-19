@@ -1,0 +1,51 @@
+# Releasing
+
+HulunGuard uses semantic versioning while it is pre-1.0:
+
+- Patch: documentation, packaging metadata, or non-behavioral fixes.
+- Minor: scoring behavior, adapter behavior, CLI commands, workflow changes, or user-visible features.
+- Major: reserved for 1.0 compatibility guarantees.
+
+## Release Gate
+
+Run locally:
+
+```powershell
+python -m pip install -e ".[dev]"
+python -m ruff check .
+python -m bandit -q -r src
+python -m compileall -q src tests
+python -m pytest -q
+python -m hulun_guard validate
+python -m hulun_guard benchmark --events 10000 --max-ms 1000
+python -m build
+```
+
+GitHub must pass:
+
+- CI matrix.
+- CodeQL and Bandit.
+- OpenSSF Scorecard.
+- Dependabot has no unresolved critical updates.
+
+## Version Checklist
+
+1. Update `pyproject.toml`.
+2. Update `src/hulun_guard/__init__.py`.
+3. Update `CHANGELOG.md`.
+4. Commit with a clear release-oriented message.
+5. Tag the commit, for example `v0.6.0`.
+6. Push `main` and tags.
+7. Confirm GitHub Actions pass.
+8. Create or update GitHub issues for unfinished maturity work.
+
+## Artifact Policy
+
+Do not release generated private state:
+
+- `.hulun/`
+- private trace files
+- credentials
+- local screenshots with private data
+- customer or production logs
+

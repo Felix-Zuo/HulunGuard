@@ -119,7 +119,7 @@ def _unsupported_final_claim() -> dict[str, Any]:
         cost=6.5,
         latency_ms=70000,
     )
-    return _scan_scenario("unsupported_final_claim", "yellow", state)
+    return _scan_scenario("unsupported_final_claim", "red", state)
 
 
 def _failure_loop_then_final() -> dict[str, Any]:
@@ -170,7 +170,7 @@ def run_validation_suite() -> dict[str, Any]:
     for scenario in scenarios:
         expected = scenario["expected"]
         band = scenario["band"]
-        if expected == band or (expected == "yellow" and band in {"yellow", "red"}):
+        if expected == band:
             passes += 1
     return {
         "schema": "hulun.validation.v1",

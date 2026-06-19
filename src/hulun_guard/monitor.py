@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
+
+# Widget launch uses a fixed Python module invocation without shell=True.
+import subprocess  # nosec B404
 import sys
 from pathlib import Path
 from typing import Any
 
 from .constants import BOARD_FILE, MONITORS_DIR
-from .risk import band_for
-from .risk import scan_state
+from .risk import band_for, scan_state
 from .storage import hulun_dir, load_state
 from .util import clamp_score, next_id, utc_now
 
@@ -181,7 +182,8 @@ def launch_widget(monitor_id: str, *, x: int | None = None, y: int | None = None
     kwargs["env"] = env
     if os.name == "nt":
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-    return subprocess.Popen(args, cwd=str(Path(__file__).resolve().parents[2]), **kwargs)
+    # Args are fixed to the current Python executable and module path; monitor_id is passed as data, not shell text.
+    return subprocess.Popen(args, cwd=str(Path(__file__).resolve().parents[2]), **kwargs)  # nosec
 
 
 def group_summary(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:

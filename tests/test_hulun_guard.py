@@ -9,7 +9,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
@@ -321,6 +320,8 @@ class HulunGuardCliTest(unittest.TestCase):
             payload = json.loads(out)
             self.assertEqual(payload["passes"], payload["total"])
             self.assertEqual(payload["total"], 4)
+            for scenario in payload["scenarios"]:
+                self.assertEqual(scenario["expected"], scenario["band"], scenario["scenario"])
             self.assertTrue((Path(tmp) / ".hulun" / "validation_report.md").exists())
 
     def test_usability_commands_doctor_quickstart_and_benchmark(self) -> None:
@@ -452,6 +453,134 @@ class HulunGuardCliTest(unittest.TestCase):
                 self.assertEqual(code, 0)
                 risk = json.loads(out)["risk"]
                 self.assertEqual(risk["components"]["pending_tools"], 0)
+            finally:
+                if old_home is None:
+                    os.environ.pop("HULUN_HOME", None)
+                else:
+                    os.environ["HULUN_HOME"] = old_home
+
+    def test_conversation_final_gate_calibrates_when_tools_are_pending(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            old_home = os.environ.get("HULUN_HOME")
+            os.environ["HULUN_HOME"] = home
+            try:
+                code, out = self.run_cli(
+                    "--root",
+                    tmp,
+                    "conversation",
+                    "start",
+                    "--name",
+                    "pending-final-test",
+                    "--group",
+                    "tests",
+                    "--json",
+                )
+                self.assertEqual(code, 0)
+                conversation = json.loads(out)
+
+                self.assertEqual(
+                    self.run_cli(
+                        "conversation",
+                        "event",
+                        "--id",
+                        conversation["id"],
+                        "--type",
+                        "tool_call",
+                        "--summary",
+                        "Run pytest.",
+                        "--phase",
+                        "verify",
+                        "--action-key",
+                        "pytest",
+                    )[0],
+                    0,
+                )
+                code, out = self.run_cli(
+                    "conversation",
+                    "event",
+                    "--id",
+                    conversation["id"],
+                    "--type",
+                    "final_attempt",
+                    "--summary",
+                    "Done and verified.",
+                    "--phase",
+                    "final",
+                    "--claim",
+                    "done and verified",
+                    "--json",
+                )
+                self.assertEqual(code, 0)
+                risk = json.loads(out)["risk"]
+                self.assertEqual(risk["band"], "yellow")
+                self.assertEqual(risk["required_action"], "calibrate")
+                self.assertGreater(risk["components"]["final_gate"], 0)
+            finally:
+                if old_home is None:
+                    os.environ.pop("HULUN_HOME", None)
+                else:
+                    os.environ["HULUN_HOME"] = old_home
+
+    def test_conversation_final_gate_blocks_after_unresolved_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            old_home = os.environ.get("HULUN_HOME")
+            os.environ["HULUN_HOME"] = home
+            try:
+                code, out = self.run_cli(
+                    "--root",
+                    tmp,
+                    "conversation",
+                    "start",
+                    "--name",
+                    "failure-final-test",
+                    "--group",
+                    "tests",
+                    "--json",
+                )
+                self.assertEqual(code, 0)
+                conversation = json.loads(out)
+                for _idx in range(3):
+                    self.assertEqual(
+                        self.run_cli(
+                            "conversation",
+                            "event",
+                            "--id",
+                            conversation["id"],
+                            "--type",
+                            "tool_result",
+                            "--summary",
+                            "pytest failed.",
+                            "--phase",
+                            "verify",
+                            "--result",
+                            "fail",
+                            "--action-key",
+                            "pytest",
+                        )[0],
+                        0,
+                    )
+
+                code, out = self.run_cli(
+                    "conversation",
+                    "event",
+                    "--id",
+                    conversation["id"],
+                    "--type",
+                    "final_attempt",
+                    "--summary",
+                    "Tests are fixed and verified.",
+                    "--phase",
+                    "final",
+                    "--claim",
+                    "fixed and verified",
+                    "--json",
+                )
+                self.assertEqual(code, 0)
+                risk = json.loads(out)["risk"]
+                self.assertEqual(risk["band"], "red")
+                self.assertEqual(risk["required_action"], "block_final")
+                self.assertGreater(risk["components"]["unresolved_failures"], 0)
+                self.assertGreater(risk["components"]["final_gate"], 0)
             finally:
                 if old_home is None:
                     os.environ.pop("HULUN_HOME", None)

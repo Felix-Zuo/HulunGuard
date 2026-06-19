@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 - 2026-06-19
+
+- Added professional maturity, security, and release governance assets.
+- Added GitHub CI, CodeQL/Bandit security scanning, Scorecard, Dependabot, and issue templates.
+- Strengthened conversation final-gate scoring for unsupported final claims, pending tools, and unresolved failures.
+- Changed validation to require exact expected risk bands instead of counting yellow scenarios as passed when red.
+- Changed OpenClaw hook guidance to use portable installed commands instead of machine-specific absolute paths.
+- Expanded package metadata, project URLs, dev dependencies, and Ruff configuration.
+
 ## 0.5.1 - 2026-06-13
 
 - Verified the unittest suite after moving the local repository under the showcase project directory.

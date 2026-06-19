@@ -4,16 +4,49 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hulun-guard"
-version = "0.5.1"
+version = "0.6.0"
 description = "Proof-first reliability guard for long-running AI agents."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "HulunGuard" }]
 dependencies = []
+keywords = ["ai-agents", "observability", "reliability", "llm", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+]
+
+[project.optional-dependencies]
+dev = [
+    "bandit>=1.7.10",
+    "build>=1.2.2",
+    "pytest>=8.0",
+    "ruff>=0.8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Felix-Zuo/HulunGuard"
+Repository = "https://github.com/Felix-Zuo/HulunGuard"
+Documentation = "https://felix-zuo.github.io/HulunGuard/"
+Issues = "https://github.com/Felix-Zuo/HulunGuard/issues"
 
 [project.scripts]
 hulun = "hulun_guard.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82", "I"]

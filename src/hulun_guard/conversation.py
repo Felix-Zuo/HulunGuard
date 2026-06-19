@@ -9,7 +9,6 @@ from .monitor import create_monitor, hulun_home, launch_widget, update_monitor
 from .risk import band_for
 from .util import age_minutes, clamp_score, next_counter_id, next_id, utc_now
 
-
 CONVERSATION_USEFUL_TYPES = USEFUL_EVENT_TYPES | {
     "assistant_checkpoint",
     "checkpoint",
@@ -163,32 +162,28 @@ def _is_claim(event: dict[str, Any]) -> bool:
     return bool(event.get("claims")) or event.get("type") in CLAIM_TYPES or event.get("phase") == "final"
 
 
-def _score_claim_overhang(data: dict[str, Any]) -> tuple[float, list[str]]:
-    recent = _recent(data, 12)
-    claim_events = [event for event in recent if _is_claim(event)]
-    if not claim_events:
-        return 0.0, []
-    recent_evidence = any(_has_evidence(event) and event.get("result", "pass") != "fail" for event in recent)
-    unsupported = [event for event in claim_events if not _has_evidence(event) and not recent_evidence]
-    score = 24.0 * _ratio(len(unsupported), len(claim_events))
-    if unsupported:
-        return score, [f"Conversation claims lack nearby evidence: {', '.join(event['id'] for event in unsupported[-4:])}."]
-    return 0.0, []
+def _has_recent_evidence(data: dict[str, Any]) -> bool:
+    return any(_has_evidence(event) and event.get("result", "pass") != "fail" for event in _recent(data, 12))
 
 
-def _score_unresolved_failures(data: dict[str, Any]) -> tuple[float, list[str]]:
-    failures = [
+def _claim_events(data: dict[str, Any]) -> list[dict[str, Any]]:
+    return [event for event in _recent(data, 12) if _is_claim(event)]
+
+
+def _unsupported_claim_events(data: dict[str, Any]) -> list[dict[str, Any]]:
+    recent_evidence = _has_recent_evidence(data)
+    return [event for event in _claim_events(data) if not _has_evidence(event) and not recent_evidence]
+
+
+def _unresolved_failure_events(data: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
         event
         for event in data.get("events", [])
         if event.get("type") in CONVERSATION_FAILURE_TYPES and event.get("result") == "fail" and not event.get("resolved")
     ]
-    score = min(20.0, 5.0 * len(failures))
-    if failures:
-        return score, [f"Conversation has unresolved failed events: {', '.join(event['id'] for event in failures[-4:])}."]
-    return 0.0, []
 
 
-def _score_pending_tools(data: dict[str, Any]) -> tuple[float, list[str]]:
+def _pending_tool_ids(data: dict[str, Any]) -> dict[str, str]:
     pending: dict[str, str] = {}
     for event in data.get("events", []):
         key = event.get("action_key") or event.get("id")
@@ -197,7 +192,31 @@ def _score_pending_tools(data: dict[str, Any]) -> tuple[float, list[str]]:
             pending[str_key] = event["id"]
         elif event.get("type") == "tool_result" and str_key in pending:
             pending.pop(str_key, None)
-    score = min(15.0, 5.0 * len(pending))
+    return pending
+
+
+def _score_claim_overhang(data: dict[str, Any]) -> tuple[float, list[str]]:
+    claim_events = _claim_events(data)
+    if not claim_events:
+        return 0.0, []
+    unsupported = _unsupported_claim_events(data)
+    score = 30.0 * _ratio(len(unsupported), len(claim_events))
+    if unsupported:
+        return score, [f"Conversation claims lack nearby evidence: {', '.join(event['id'] for event in unsupported[-4:])}."]
+    return 0.0, []
+
+
+def _score_unresolved_failures(data: dict[str, Any]) -> tuple[float, list[str]]:
+    failures = _unresolved_failure_events(data)
+    score = min(24.0, 8.0 * len(failures))
+    if failures:
+        return score, [f"Conversation has unresolved failed events: {', '.join(event['id'] for event in failures[-4:])}."]
+    return 0.0, []
+
+
+def _score_pending_tools(data: dict[str, Any]) -> tuple[float, list[str]]:
+    pending = _pending_tool_ids(data)
+    score = min(18.0, 8.0 * len(pending))
     if pending:
         return score, [f"Tool calls are still pending: {', '.join(pending.values())}."]
     return 0.0, []
@@ -252,11 +271,35 @@ def _score_cost_pressure(data: dict[str, Any]) -> tuple[float, list[str]]:
     return 0.0, []
 
 
+def _score_final_gate(data: dict[str, Any]) -> tuple[float, list[str]]:
+    final_events = [event for event in _recent(data, 12) if event.get("type") == "final_attempt" or event.get("phase") == "final"]
+    if not final_events:
+        return 0.0, []
+
+    score = 0.0
+    reasons: list[str] = []
+    unsupported = _unsupported_claim_events(data)
+    pending = _pending_tool_ids(data)
+    failures = _unresolved_failure_events(data)
+
+    if unsupported:
+        score += 10.0
+        reasons.append("Final gate is open while completion claims have no nearby evidence.")
+    if pending:
+        score += 8.0
+        reasons.append("Final gate is open while tool calls are still pending.")
+    if failures:
+        score += 18.0
+        reasons.append("Final gate is open while failed events are unresolved.")
+    return min(24.0, score), reasons
+
+
 def scan_conversation(data: dict[str, Any], *, checkpoint_stale_minutes: int = 45) -> dict[str, Any]:
     parts = {
         "claim_overhang": _score_claim_overhang(data),
         "unresolved_failures": _score_unresolved_failures(data),
         "pending_tools": _score_pending_tools(data),
+        "final_gate": _score_final_gate(data),
         "stagnation": _score_stagnation(data),
         "user_challenge": _score_user_challenge(data),
         "context_decay": _score_context_decay(data, checkpoint_stale_minutes),

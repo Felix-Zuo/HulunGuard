@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import functools
 import http.server
+import ipaddress
 import json
 import socketserver
 import sys
@@ -51,6 +52,17 @@ from .storage import (
 )
 from .util import hash_file, next_counter_id, next_id, normalize_list, sort_ids, status_counts, utc_now
 from .validation import build_validation_markdown, run_validation_suite, validation_json
+
+
+def host_for_browser_url(actual_host: str) -> str:
+    if not actual_host:
+        return "127.0.0.1"
+    try:
+        if ipaddress.ip_address(actual_host).is_unspecified:
+            return "127.0.0.1"
+    except ValueError:
+        return actual_host
+    return actual_host
 
 
 def package_version() -> str:
@@ -840,7 +852,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(hulun_dir(root)))
     with socketserver.ThreadingTCPServer((args.host, args.port), handler) as server:
         actual_host, actual_port = server.server_address
-        host_for_url = "127.0.0.1" if actual_host in {"0.0.0.0", ""} else actual_host
+        host_for_url = host_for_browser_url(actual_host)
         url = f"http://{host_for_url}:{actual_port}/{DASHBOARD_FILE}"
         print(f"Dashboard file: {output}")
         print(f"Serving HulunGauge: {url}")
@@ -866,8 +878,8 @@ def cmd_open_monitor(args: argparse.Namespace) -> int:
             risk = scan_state(state, threshold=None, final_attempt=False, checkpoint_stale_minutes=45)
             score = int(risk["score"]) if score is None else score
             reasons = risk.get("reasons", reasons)
-    except Exception:
-        pass
+    except Exception as exc:  # pragma: no cover - diagnostics for interactive monitor startup
+        print(f"Monitor startup scan failed: {exc}", file=sys.stderr)
     if score is None:
         score = 30
     monitor = create_monitor(args.conversation, args.group, str(root), score, reasons=reasons)
@@ -936,7 +948,7 @@ def cmd_board(args: argparse.Namespace) -> int:
         handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(hulun_home()))
         with socketserver.ThreadingTCPServer((args.host, args.port), handler) as server:
             actual_host, actual_port = server.server_address
-            host_for_url = "127.0.0.1" if actual_host in {"0.0.0.0", ""} else actual_host
+            host_for_url = host_for_browser_url(actual_host)
             url = f"http://{host_for_url}:{actual_port}/{output.name}"
             print(f"Board file: {output}")
             print(f"Serving HulunGuard Board: {url}")
