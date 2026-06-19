@@ -313,6 +313,178 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertGreater(payload["risk"]["components"]["claim_overhang"], 0)
             self.assertGreater(payload["risk"]["components"]["unhandled_failures"], 0)
 
+    def test_observe_redacts_sensitive_text_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "init",
+                    "--objective",
+                    "monitor traces without leaking secrets",
+                    "--criterion",
+                    "runtime observations are privacy safe",
+                )[0],
+                0,
+            )
+
+            code, out = self.run_cli(
+                "--root",
+                tmp,
+                "observe",
+                "--type",
+                "tool_result",
+                "--summary",
+                "called with sk-testsecret012345678901234567890 for alice@example.com password=hunter2",
+                "--ref",
+                "https://example.test/run?id=123&token=secret#debug",
+                "--claim",
+                "email alice@example.com is safe",
+                "--json",
+            )
+            self.assertEqual(code, 0, out)
+            event = json.loads(out)
+            joined = json.dumps(event, ensure_ascii=False)
+            self.assertIn("[redacted:openai-key]", event["summary"])
+            self.assertIn("[redacted:email]", event["summary"])
+            self.assertIn("password=[redacted:secret]", event["summary"])
+            self.assertNotIn("sk-testsecret", joined)
+            self.assertNotIn("alice@example.com", joined)
+            self.assertNotIn("hunter2", joined)
+            self.assertEqual(event["refs"], ["https://example.test/run"])
+            self.assertEqual(event["privacy"]["mode"], "redacted-default")
+            self.assertEqual(event["privacy"]["retention_days"], 30)
+
+    def test_ingest_withholds_trace_payload_and_fingerprints_action_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "trace.json"
+            raw_content = "model output includes sk-testsecret012345678901234567890 and alice@example.com"
+            trace.write_text(
+                json.dumps(
+                    {
+                        "events": [
+                            {
+                                "type": "llm_call",
+                                "phase": "implement",
+                                "content": raw_content,
+                                "ref": "https://trace.example/session?id=abc&token=secret",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "init",
+                    "--objective",
+                    "import traces safely",
+                    "--criterion",
+                    "sensitive payload is not persisted",
+                )[0],
+                0,
+            )
+
+            code, out = self.run_cli("--root", tmp, "ingest", "--file", str(trace), "--json", "--include-events")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            event = payload["events"][0]
+            joined = json.dumps(event, ensure_ascii=False)
+            self.assertIn("sensitive payload withheld", event["summary"])
+            self.assertNotIn(raw_content, joined)
+            self.assertNotIn("sk-testsecret", joined)
+            self.assertNotIn("alice@example.com", joined)
+            self.assertEqual(event["action_key"].split(":")[0], "generic")
+            self.assertEqual(event["refs"], ["https://trace.example/session"])
+            self.assertEqual(event["privacy"]["mode"], "redacted-default")
+
+    def test_ingest_include_sensitive_preserves_trace_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "trace.json"
+            raw_content = "local debug prompt includes sk-testsecret012345678901234567890"
+            trace.write_text(json.dumps({"events": [{"type": "llm_call", "prompt": raw_content}]}), encoding="utf-8")
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "init",
+                    "--objective",
+                    "debug a local trace",
+                    "--criterion",
+                    "sensitive payload can be explicitly retained",
+                )[0],
+                0,
+            )
+
+            code, out = self.run_cli(
+                "--root",
+                tmp,
+                "ingest",
+                "--file",
+                str(trace),
+                "--include-sensitive",
+                "--include-events",
+                "--retention-days",
+                "7",
+                "--json",
+            )
+            self.assertEqual(code, 0, out)
+            event = json.loads(out)["events"][0]
+            self.assertEqual(event["summary"], raw_content)
+            self.assertEqual(event["privacy"]["mode"], "sensitive-opt-in")
+            self.assertEqual(event["privacy"]["retention_days"], 7)
+
+    def test_conversation_event_redacts_sensitive_text_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            old_home = os.environ.get("HULUN_HOME")
+            os.environ["HULUN_HOME"] = home
+            try:
+                code, out = self.run_cli(
+                    "--root",
+                    tmp,
+                    "conversation",
+                    "start",
+                    "--name",
+                    "privacy-runtime-test",
+                    "--group",
+                    "tests",
+                    "--json",
+                )
+                self.assertEqual(code, 0)
+                conversation = json.loads(out)
+
+                code, out = self.run_cli(
+                    "conversation",
+                    "event",
+                    "--id",
+                    conversation["id"],
+                    "--type",
+                    "tool_result",
+                    "--summary",
+                    "trace included token=secret123 and bob@example.com",
+                    "--ref",
+                    "https://example.test/run?token=secret123",
+                    "--json",
+                )
+                self.assertEqual(code, 0, out)
+                event = json.loads(out)["event"]
+                joined = json.dumps(event, ensure_ascii=False)
+                self.assertIn("token=[redacted:secret]", event["summary"])
+                self.assertIn("[redacted:email]", event["summary"])
+                self.assertNotIn("secret123", joined)
+                self.assertNotIn("bob@example.com", joined)
+                self.assertEqual(event["refs"], ["https://example.test/run"])
+                self.assertEqual(event["privacy"]["mode"], "redacted-default")
+            finally:
+                if old_home is None:
+                    os.environ.pop("HULUN_HOME", None)
+                else:
+                    os.environ["HULUN_HOME"] = old_home
+
     def test_validate_runs_builtin_scenarios(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             code, out = self.run_cli("--root", tmp, "validate", "--json")

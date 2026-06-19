@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0 - 2026-06-19
+
+- Added default privacy-safe redaction for runtime observations, conversation events, evidence records, and imported traces.
+- Added `--include-sensitive` and `--retention-days` controls for trusted local debugging and explicit retention metadata.
+- Changed trace ingestion to withhold raw payload fields by default and use privacy-preserving action fingerprints for retry-loop detection.
+- Added regression tests for secret, email, URL-query, conversation-event, and sensitive trace import handling.
+
 ## 0.6.2 - 2026-06-19
 
 - Applied Dependabot workflow updates for checkout and Scorecard actions.

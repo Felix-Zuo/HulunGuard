@@ -31,5 +31,6 @@ Every release must pass:
 
 HulunGuard is local-first. Users must not commit `.hulun/`, private traces, credentials, customer data, or production conversation logs.
 
-Adapters should store summaries, references, and evidence IDs by default. Full prompts, completions, tool arguments, and file contents should be opt-in because they may contain sensitive data.
+Runtime observations, conversation events, evidence records, and trace imports are redacted by default. Stored records include privacy metadata with `mode` and `retention_days`.
 
+Adapters should store summaries, references, evidence IDs, cost/latency/token pressure, and stable action fingerprints by default. Full prompts, completions, tool arguments, tool results, and file contents require explicit `--include-sensitive` opt-in because they may contain private or regulated data.

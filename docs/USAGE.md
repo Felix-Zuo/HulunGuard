@@ -50,6 +50,8 @@ Important fields:
 
 With `--scan`, HulunGuard recalculates `slop_index` immediately and writes `.hulun/risk.json`.
 
+Runtime writes are privacy-safe by default. Summaries, claims, references, action keys, model names, and evidence fields are sanitized before they are persisted. Known secret patterns, emails, private home paths, and URL query strings are removed or replaced with redaction markers.
+
 ## Monitor A Live Conversation
 
 Project state monitoring uses `.hulun/state.json`. Conversation runtime monitoring uses separate per-conversation files under `HULUN_HOME/conversations`.
@@ -93,6 +95,25 @@ Supported formats:
 - `openhands`: maps action/observation/error/condensation-like events into command, tool_result, agent_error, and summary observations.
 - `swe-agent`: maps action/observation trajectory steps into command/tool_result observations with retry-loop fingerprints.
 - `auto`: guesses from the filename.
+
+## Privacy And Retention
+
+HulunGuard is designed to ingest real agent traces without turning the local ledger into a secret dump.
+
+Defaults:
+
+- Raw payload fields such as `content`, `text`, `prompt`, `response`, `output`, `completion`, tool arguments, and tool results are not persisted as summaries unless the trace already provides a safe summary.
+- Imported events keep enough structure for scoring: type, phase, result, cost/latency/token pressure, evidence IDs, sanitized refs, and a privacy-preserving action fingerprint.
+- Each stored event and evidence record includes `privacy.mode` and `privacy.retention_days`.
+- The default retention hint is 30 days.
+
+Use explicit opt-in only for trusted local debugging:
+
+```powershell
+python .\hulun.py observe --type llm_call --summary "raw local debug text" --include-sensitive --retention-days 7
+python .\hulun.py ingest --file .\trace.jsonl --include-sensitive --retention-days 7
+python .\hulun.py conversation event --id C1 --type tool_result --summary "raw local debug text" --include-sensitive --retention-days 7
+```
 
 ## Run Release Validation
 

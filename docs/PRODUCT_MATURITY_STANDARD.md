@@ -31,6 +31,7 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 ### M2: Reliable Developer Product
 
 - Stable event schema.
+- Privacy-safe trace redaction defaults.
 - Public SDK for adapters.
 - MCP server.
 - OpenTelemetry/OpenInference import/export path.
@@ -41,7 +42,7 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 ### M3: Production-Ready Open Source Product
 
 - Async/batched event ingestion.
-- Privacy-safe trace redaction defaults.
+- Enforced retention cleanup for local ledgers.
 - Cross-platform UI and no hidden local assumptions.
 - Integration tests for supported adapters.
 - Backward-compatible schema migrations.
@@ -66,5 +67,4 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 ## Current Target
 
-The current target is M1. The next target is M2.
-
+The current target is M2. The privacy-safe redaction baseline is implemented; the remaining M2 gates are adapter SDK, MCP server, OpenTelemetry/OpenInference alignment, labeled real-agent trajectories, calibration report, and release provenance.

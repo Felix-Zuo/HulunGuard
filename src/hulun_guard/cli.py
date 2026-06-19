@@ -35,6 +35,7 @@ from .monitor import (
     load_monitor,
     update_monitor,
 )
+from .privacy import DEFAULT_RETENTION_DAYS, sanitize_event, sanitize_evidence
 from .reports import build_board_html, build_dashboard_html, build_verify_markdown
 from .risk import scan_state
 from .storage import (
@@ -101,6 +102,8 @@ def append_event(
     resolved: bool | None = None,
     evidence: list[str] | None = None,
     extra: dict[str, Any] | None = None,
+    include_sensitive: bool = False,
+    retention_days: int = DEFAULT_RETENTION_DAYS,
 ) -> dict[str, Any]:
     event = {
         "id": next_counter_id(state, "events", "EV"),
@@ -116,6 +119,7 @@ def append_event(
     for key, value in (extra or {}).items():
         if value not in (None, "", []):
             event[key] = value
+    event = sanitize_event(event, include_sensitive=include_sensitive, retention_days=retention_days)
     state["events"].append(event)
     return event
 
@@ -218,8 +222,18 @@ def cmd_record_evidence(args: argparse.Namespace) -> int:
         "sha256": sha256,
         "notes": args.notes,
     }
+    evidence = sanitize_evidence(evidence, include_sensitive=args.include_sensitive, retention_days=args.retention_days)
     state["evidence"].append({k: v for k, v in evidence.items() if v not in (None, "")})
-    append_event(state, "evidence", f"{evidence['id']}: {args.summary}", result=args.result, refs=refs, evidence=[evidence["id"]])
+    append_event(
+        state,
+        "evidence",
+        f"{evidence['id']}: {args.summary}",
+        result=args.result,
+        refs=refs,
+        evidence=[evidence["id"]],
+        include_sensitive=args.include_sensitive,
+        retention_days=args.retention_days,
+    )
     save_state(root, state)
     print(f"Recorded evidence {evidence['id']}")
     return 0
@@ -238,6 +252,8 @@ def cmd_event(args: argparse.Namespace) -> int:
         refs=refs,
         resolved=args.resolved,
         evidence=evidence,
+        include_sensitive=args.include_sensitive,
+        retention_days=args.retention_days,
     )
     save_state(root, state)
     print(f"Recorded event {event['id']}")
@@ -267,6 +283,8 @@ def cmd_observe(args: argparse.Namespace) -> int:
         resolved=args.resolved,
         evidence=normalize_list(args.evidence),
         extra=extra,
+        include_sensitive=args.include_sensitive,
+        retention_days=args.retention_days,
     )
     save_state(root, state)
 
@@ -294,7 +312,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     first_id = None
     last_id = None
     sample_events: list[dict[str, Any]] = []
-    for observation in iter_observations(args.file, args.format):
+    for observation in iter_observations(args.file, args.format, include_sensitive=args.include_sensitive):
         event = append_event(
             state,
             observation.get("type") or "observation",
@@ -314,6 +332,8 @@ def cmd_ingest(args: argparse.Namespace) -> int:
                 "latency_ms": observation.get("latency_ms"),
                 "model": observation.get("model"),
             },
+            include_sensitive=args.include_sensitive,
+            retention_days=args.retention_days,
         )
         imported_count += 1
         first_id = first_id or event["id"]
@@ -565,6 +585,8 @@ def cmd_conversation_event(args: argparse.Namespace) -> int:
         cost=args.cost,
         latency_ms=args.latency_ms,
         model=args.model,
+        include_sensitive=args.include_sensitive,
+        retention_days=args.retention_days,
     )
     payload = {"event": event, "risk": risk}
     if args.json:
@@ -994,6 +1016,20 @@ def add_root(parent: argparse.ArgumentParser) -> None:
     parent.add_argument("--root", default=argparse.SUPPRESS, help="Project root. Defaults to current directory.")
 
 
+def add_privacy_controls(parent: argparse.ArgumentParser) -> None:
+    parent.add_argument(
+        "--include-sensitive",
+        action="store_true",
+        help="Persist raw sensitive trace text instead of default redacted summaries. Use only in trusted local environments.",
+    )
+    parent.add_argument(
+        "--retention-days",
+        type=int,
+        default=DEFAULT_RETENTION_DAYS,
+        help=f"Retention hint written to privacy metadata. Defaults to {DEFAULT_RETENTION_DAYS} days.",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     root_parent = argparse.ArgumentParser(add_help=False)
     add_root(root_parent)
@@ -1041,6 +1077,7 @@ def build_parser() -> argparse.ArgumentParser:
     evidence.add_argument("--url")
     evidence.add_argument("--notes")
     evidence.add_argument("--result", choices=["pass", "fail", "unknown"], default="pass")
+    add_privacy_controls(evidence)
     evidence.set_defaults(func=cmd_record_evidence)
 
     event = sub.add_parser("event", parents=[root_parent])
@@ -1050,6 +1087,7 @@ def build_parser() -> argparse.ArgumentParser:
     event.add_argument("--ref", action="append", default=[])
     event.add_argument("--evidence", action="append", default=[])
     event.add_argument("--resolved", action="store_true")
+    add_privacy_controls(event)
     event.set_defaults(func=cmd_event)
 
     quickstart = sub.add_parser("quickstart", parents=[root_parent])
@@ -1101,6 +1139,7 @@ def build_parser() -> argparse.ArgumentParser:
     conversation_event.add_argument("--latency-ms", type=int)
     conversation_event.add_argument("--model")
     conversation_event.add_argument("--fail-on-red", action="store_true")
+    add_privacy_controls(conversation_event)
     conversation_event.add_argument("--json", action="store_true")
     conversation_event.set_defaults(func=cmd_conversation_event)
 
@@ -1143,6 +1182,7 @@ def build_parser() -> argparse.ArgumentParser:
     observe.add_argument("--checkpoint-stale-minutes", type=int, default=45)
     observe.add_argument("--final-attempt", action="store_true")
     observe.add_argument("--fail-on-threshold", action="store_true")
+    add_privacy_controls(observe)
     observe.add_argument("--json", action="store_true")
     observe.set_defaults(func=cmd_observe)
 
@@ -1156,6 +1196,7 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--final-attempt", action="store_true")
     ingest.add_argument("--fail-on-threshold", action="store_true")
     ingest.add_argument("--include-events", action="store_true")
+    add_privacy_controls(ingest)
     ingest.add_argument("--json", action="store_true")
     ingest.set_defaults(func=cmd_ingest)
 

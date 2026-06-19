@@ -6,6 +6,7 @@ from typing import Any
 
 from .constants import CONVERSATIONS_DIR, FAILURE_EVENT_TYPES, USEFUL_EVENT_TYPES
 from .monitor import create_monitor, hulun_home, launch_widget, update_monitor
+from .privacy import DEFAULT_RETENTION_DAYS, sanitize_event
 from .risk import band_for
 from .util import age_minutes, clamp_score, next_counter_id, next_id, utc_now
 
@@ -116,6 +117,8 @@ def append_conversation_event(
     cost: float | None = None,
     latency_ms: int | None = None,
     model: str | None = None,
+    include_sensitive: bool = False,
+    retention_days: int = DEFAULT_RETENTION_DAYS,
 ) -> dict[str, Any]:
     event = {
         "id": next_counter_id(data, "events", "EV"),
@@ -140,6 +143,7 @@ def append_conversation_event(
     for key, value in optional.items():
         if value not in (None, "", []):
             event[key] = value
+    event = sanitize_event(event, include_sensitive=include_sensitive, retention_days=retention_days)
     data.setdefault("events", []).append(event)
     return event
 
@@ -346,7 +350,7 @@ def record_conversation_event(
         update_monitor(
             data["monitor_id"],
             score=int(risk["score"]),
-            summary=summary,
+            summary=event["summary"],
             result=kwargs.get("result", "pass"),
             reason=risk["reasons"][0] if risk.get("reasons") else None,
         )

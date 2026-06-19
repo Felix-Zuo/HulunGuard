@@ -49,7 +49,13 @@ Sources:
 - Add project governance docs.
 - Create GitHub issues for the remaining maturity track.
 
+## Second Remediation Slice
+
+- Add default redaction for observations, conversation events, evidence records, and trace imports.
+- Withhold raw trace payload fields by default while preserving scoring structure and action fingerprints.
+- Add explicit `--include-sensitive` and `--retention-days` controls for trusted local debugging.
+- Cover privacy behavior with tests for secrets, emails, URL query strings, conversation runtime events, and trace import modes.
+
 ## Product Position
 
-HulunGuard is currently a developer-preview reliability monitor. It should not be marketed as a mature production product until M2 gates are met with real trajectory data and adapter coverage.
-
+HulunGuard is currently moving from developer preview toward a reliable developer product. It should not be marketed as production-ready until M2 gates are met with real trajectory data, adapter coverage, telemetry interoperability, and release provenance.

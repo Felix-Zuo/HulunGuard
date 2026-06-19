@@ -17,7 +17,7 @@ using HulunGuard on real work.
 - Universal startup prompt: `#HULUN_ON` for any agent that can run shell commands.
 - OpenClaw hook: injects HulunGuard guidance into OpenClaw agent bootstrap.
 - Realtime HulunIndex observations: record phase, claims, failures, tokens, cost, latency, and retry fingerprints.
-- Trace ingestion: import generic JSON/JSONL, OpenHands-like events, and SWE-agent-like trajectories.
+- Privacy-safe trace ingestion: import generic JSON/JSONL, OpenHands-like events, and SWE-agent-like trajectories without persisting raw sensitive payloads by default.
 - Built-in validation suite: run synthetic healthy/slop-risk scenarios before release.
 - Product operations: `quickstart`, `doctor`, and `benchmark` commands for onboarding, diagnostics, and scan performance checks.
 - Conversation runtime monitoring: per-conversation events, user challenges, pending tool calls, unresolved failures, unsupported final claims, and monitor sync.
@@ -70,6 +70,8 @@ python .\hulun.py ingest --file .\trace.jsonl --format generic --scan
 python .\hulun.py ingest --file .\openhands-events.json --format openhands --scan
 python .\hulun.py ingest --file .\run.traj --format swe-agent --scan
 ```
+
+By default, runtime observations and imported traces redact known secrets, emails, URL query strings, private home paths, and raw payload fields such as prompts, completions, outputs, and tool arguments. Use `--include-sensitive --retention-days 7` only for trusted local debugging.
 
 Run the release validation suite:
 

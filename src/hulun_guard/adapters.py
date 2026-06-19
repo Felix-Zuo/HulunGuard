@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .constants import VALID_EVENT_PHASES
+from .privacy import TRACE_TEXT_KEYS, fingerprint_text, redact_refs, redact_text, safe_summary_from_trace
 from .util import tokens
 
 Observation = dict[str, Any]
@@ -141,8 +142,9 @@ def _normalize_phase(value: Any, text: str) -> str | None:
     return _phase_from_text(text)
 
 
-def normalize_generic(item: dict[str, Any], *, source_platform: str = "generic") -> Observation:
-    text = _first_text(item, ["summary", "message", "content", "text", "observation", "response"]) or "Imported observation."
+def normalize_generic(item: dict[str, Any], *, source_platform: str = "generic", include_sensitive: bool = False) -> Observation:
+    raw_text = _first_text(item, ["summary", *TRACE_TEXT_KEYS])
+    text = safe_summary_from_trace(item, include_sensitive=include_sensitive)
     event_type = _as_text(item.get("type") or item.get("event_type") or "observation").strip() or "observation"
     claims = item.get("claims", item.get("claim", []))
     if isinstance(claims, str):
@@ -162,19 +164,22 @@ def normalize_generic(item: dict[str, Any], *, source_platform: str = "generic")
 
     result = _as_text(item.get("result") or "").strip().lower()
     if result not in {"pass", "fail", "unknown"}:
-        result = _result_from_text(text, default="unknown")
+        result = _result_from_text(raw_text or text, default="unknown")
+    action_key = _as_text(item.get("action_key") or "").strip()
+    if not action_key and raw_text and not include_sensitive:
+        action_key = fingerprint_text(raw_text, prefix=source_platform)
 
     return {
         "type": event_type,
         "summary": text,
         "result": result,
-        "phase": _normalize_phase(item.get("phase"), text),
-        "claims": [str(claim).strip() for claim in claims if str(claim).strip()],
+        "phase": _normalize_phase(item.get("phase"), raw_text or text),
+        "claims": [redact_text(claim, include_sensitive=include_sensitive) for claim in claims if str(claim).strip()],
         "evidence": [str(eid).strip() for eid in evidence if str(eid).strip()],
-        "refs": [str(ref).strip() for ref in refs if str(ref).strip()],
+        "refs": redact_refs([str(ref).strip() for ref in refs if str(ref).strip()], include_sensitive=include_sensitive),
         "resolved": bool(item.get("resolved")) if "resolved" in item else None,
         "source_platform": _as_text(item.get("source_platform") or source_platform),
-        "action_key": _as_text(item.get("action_key") or "").strip() or None,
+        "action_key": redact_text(action_key, include_sensitive=include_sensitive) or None,
         "prompt_tokens": _coerce_int(item.get("prompt_tokens")),
         "completion_tokens": _coerce_int(item.get("completion_tokens")),
         "cost": _coerce_float(item.get("cost")),
@@ -183,7 +188,7 @@ def normalize_generic(item: dict[str, Any], *, source_platform: str = "generic")
     }
 
 
-def normalize_openhands(item: dict[str, Any]) -> Observation:
+def normalize_openhands(item: dict[str, Any], *, include_sensitive: bool = False) -> Observation:
     raw_type = _first_text(item, ["type", "event_type", "class", "name"]).lower()
     text = _first_text(item, ["message", "error", "observation", "content", "thought", "action"]) or raw_type or "OpenHands event."
 
@@ -204,40 +209,42 @@ def normalize_openhands(item: dict[str, Any]) -> Observation:
         result = "unknown"
         phase = _phase_from_text(text, "orchestrate")
     else:
-        return normalize_generic(item, source_platform="openhands")
+        return normalize_generic(item, source_platform="openhands", include_sensitive=include_sensitive)
 
+    action_key = _stable_action_key(text, raw_type or event_type) if include_sensitive else fingerprint_text(text, prefix="openhands")
     return {
-        **normalize_generic(item, source_platform="openhands"),
+        **normalize_generic(item, source_platform="openhands", include_sensitive=include_sensitive),
         "type": event_type,
-        "summary": text,
+        "summary": redact_text(text, include_sensitive=True) if include_sensitive else safe_summary_from_trace(item, fallback=f"Imported {event_type} observation; sensitive payload withheld."),
         "result": result,
         "phase": phase,
-        "action_key": _stable_action_key(text, raw_type or event_type),
+        "action_key": action_key,
     }
 
 
-def normalize_swe_agent(item: dict[str, Any]) -> Observation:
+def normalize_swe_agent(item: dict[str, Any], *, include_sensitive: bool = False) -> Observation:
     action = _first_text(item, ["action", "command", "tool_call"])
     observation = _first_text(item, ["observation", "result", "tool_result", "output"])
     thought = _first_text(item, ["thought", "response", "message"])
     text = " | ".join(part for part in [action, observation, thought] if part).strip() or "SWE-agent trajectory step."
     result = _result_from_text(observation or text, default="pass" if observation else "unknown")
     event_type = "tool_result" if observation else "command"
+    action_key = _stable_action_key(action or text, "swe-agent-step") if include_sensitive else fingerprint_text(action or text, prefix="swe-agent")
     return {
-        **normalize_generic(item, source_platform="swe-agent"),
+        **normalize_generic(item, source_platform="swe-agent", include_sensitive=include_sensitive),
         "type": event_type,
-        "summary": text,
+        "summary": redact_text(text, include_sensitive=True) if include_sensitive else safe_summary_from_trace(item, fallback=f"Imported {event_type} observation; sensitive payload withheld."),
         "result": result,
         "phase": _phase_from_text(text, "orchestrate"),
-        "action_key": _stable_action_key(action or text, "swe-agent-step"),
+        "action_key": action_key,
     }
 
 
-def load_observations(path: str | Path, source_format: str = "auto") -> list[Observation]:
-    return list(iter_observations(path, source_format))
+def load_observations(path: str | Path, source_format: str = "auto", *, include_sensitive: bool = False) -> list[Observation]:
+    return list(iter_observations(path, source_format, include_sensitive=include_sensitive))
 
 
-def iter_observations(path: str | Path, source_format: str = "auto") -> Iterator[Observation]:
+def iter_observations(path: str | Path, source_format: str = "auto", *, include_sensitive: bool = False) -> Iterator[Observation]:
     trace_path = Path(path)
     if not trace_path.exists():
         raise SystemExit(f"Trace file does not exist: {trace_path}")
@@ -260,4 +267,4 @@ def iter_observations(path: str | Path, source_format: str = "auto") -> Iterator
         raise SystemExit(f"Unsupported trace format: {source_format}")
     normalizer = normalizers[fmt]
     for item in _iter_items(trace_path):
-        yield normalizer(item)
+        yield normalizer(item, include_sensitive=include_sensitive)
