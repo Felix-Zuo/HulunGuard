@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.2 - 2026-06-19
+
+- Applied Dependabot workflow updates for checkout and Scorecard actions.
+
 ## 0.6.1 - 2026-06-19
 
 - Fixed OpenSSF Scorecard workflow permissions so publishing results does not use global write permissions.
