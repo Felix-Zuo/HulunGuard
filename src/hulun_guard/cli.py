@@ -35,9 +35,10 @@ from .monitor import (
     load_monitor,
     update_monitor,
 )
-from .privacy import DEFAULT_RETENTION_DAYS, sanitize_event, sanitize_evidence
+from .privacy import DEFAULT_RETENTION_DAYS, sanitize_evidence
 from .reports import build_board_html, build_dashboard_html, build_verify_markdown
 from .risk import scan_state
+from .sdk import append_project_event
 from .storage import (
     criteria,
     find_item,
@@ -51,7 +52,7 @@ from .storage import (
     verify_path,
     write_json,
 )
-from .util import hash_file, next_counter_id, next_id, normalize_list, sort_ids, status_counts, utc_now
+from .util import hash_file, next_id, normalize_list, sort_ids, status_counts, utc_now
 from .validation import build_validation_markdown, run_validation_suite, validation_json
 
 
@@ -105,23 +106,18 @@ def append_event(
     include_sensitive: bool = False,
     retention_days: int = DEFAULT_RETENTION_DAYS,
 ) -> dict[str, Any]:
-    event = {
-        "id": next_counter_id(state, "events", "EV"),
-        "type": event_type,
-        "summary": summary.strip(),
-        "result": result,
-        "refs": refs or [],
-        "evidence": evidence or [],
-        "created_at": utc_now(),
-    }
-    if resolved is not None:
-        event["resolved"] = resolved
-    for key, value in (extra or {}).items():
-        if value not in (None, "", []):
-            event[key] = value
-    event = sanitize_event(event, include_sensitive=include_sensitive, retention_days=retention_days)
-    state["events"].append(event)
-    return event
+    return append_project_event(
+        state,
+        event_type,
+        summary,
+        result=result,
+        refs=refs,
+        resolved=resolved,
+        evidence=evidence,
+        extra=extra,
+        include_sensitive=include_sensitive,
+        retention_days=retention_days,
+    )
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -384,6 +380,13 @@ def cmd_validate(args: argparse.Namespace) -> int:
         print(f"HulunGuard validation: {result['passes']} / {result['total']} scenarios matched expected bands.")
         print(f"Report: {md_path}")
     return 0 if result["passes"] == result["total"] else 2
+
+
+def cmd_mcp(args: argparse.Namespace) -> int:
+    from .mcp import HulunMCPServer, serve_stdio
+
+    serve_stdio(HulunMCPServer(root=args.root, include_sensitive=args.include_sensitive, retention_days=args.retention_days))
+    return 0
 
 
 def cmd_quickstart(args: argparse.Namespace) -> int:
@@ -1203,6 +1206,10 @@ def build_parser() -> argparse.ArgumentParser:
     validate = sub.add_parser("validate", parents=[root_parent])
     validate.add_argument("--json", action="store_true")
     validate.set_defaults(func=cmd_validate)
+
+    mcp = sub.add_parser("mcp", parents=[root_parent])
+    add_privacy_controls(mcp)
+    mcp.set_defaults(func=cmd_mcp)
 
     risk = sub.add_parser("add-risk", parents=[root_parent])
     risk.add_argument("--text", required=True)

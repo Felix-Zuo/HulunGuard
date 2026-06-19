@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0 - 2026-06-19
+
+- Added `HulunGuardClient` as the stable Python adapter SDK for project and conversation runtime monitoring.
+- Added a stdio MCP server through `hulun-mcp`, `python -m hulun_guard.mcp`, and `hulun mcp`.
+- Added MCP tools for project init, observe, scan, conversation start, conversation event, and conversation scan.
+- Added SDK and MCP integration tests, including live conversation pending-tool behavior.
+- Documented SDK and MCP usage in `docs/SDK_AND_MCP.md`.
+
 ## 0.7.0 - 2026-06-19
 
 - Added default privacy-safe redaction for runtime observations, conversation events, evidence records, and imported traces.

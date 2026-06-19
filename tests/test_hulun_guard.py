@@ -15,6 +15,8 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from hulun_guard.cli import main
+from hulun_guard.mcp import HulunMCPServer
+from hulun_guard.sdk import HulunGuardClient
 
 
 class HulunGuardCliTest(unittest.TestCase):
@@ -437,6 +439,141 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertEqual(event["summary"], raw_content)
             self.assertEqual(event["privacy"]["mode"], "sensitive-opt-in")
             self.assertEqual(event["privacy"]["retention_days"], 7)
+
+    def test_sdk_records_project_and_conversation_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            old_home = os.environ.get("HULUN_HOME")
+            os.environ["HULUN_HOME"] = home
+            try:
+                client = HulunGuardClient(tmp)
+                state = client.init(
+                    objective="ship a stable adapter sdk",
+                    criteria=["sdk can record verified runtime observations"],
+                )
+                self.assertEqual(state["objective"], "ship a stable adapter sdk")
+
+                observed = client.observe(
+                    event_type="tool_result",
+                    phase="verify",
+                    summary="pytest passed",
+                    result="pass",
+                    scan=True,
+                    source_platform="sdk",
+                    action_key="pytest",
+                )
+                self.assertEqual(observed["event"]["source_platform"], "sdk")
+                self.assertIn("risk", observed)
+                self.assertTrue((Path(tmp) / ".hulun" / "state.json").exists())
+
+                conversation = client.start_conversation(name="sdk-live-test", group="tests")
+                pending = client.conversation_event(
+                    conversation_id=conversation["id"],
+                    event_type="tool_call",
+                    phase="verify",
+                    summary="Run pytest.",
+                    action_key="pytest",
+                )
+                self.assertGreater(pending["risk"]["components"]["pending_tools"], 0)
+                resolved = client.conversation_event(
+                    conversation_id=conversation["id"],
+                    event_type="tool_result",
+                    phase="verify",
+                    summary="pytest passed.",
+                    action_key="pytest",
+                )
+                self.assertEqual(resolved["risk"]["components"]["pending_tools"], 0)
+            finally:
+                if old_home is None:
+                    os.environ.pop("HULUN_HOME", None)
+                else:
+                    os.environ["HULUN_HOME"] = old_home
+
+    def test_mcp_smoke_lists_tools_and_records_runtime_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            old_home = os.environ.get("HULUN_HOME")
+            os.environ["HULUN_HOME"] = home
+            try:
+                server = HulunMCPServer(root=tmp)
+                initialized = server.handle_message({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
+                self.assertEqual(initialized["result"]["serverInfo"]["name"], "hulunguard")
+
+                listed = server.handle_message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+                tool_names = {tool["name"] for tool in listed["result"]["tools"]}
+                self.assertIn("hulun_project_init", tool_names)
+                self.assertIn("hulun_conversation_event", tool_names)
+
+                init_result = server.handle_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "hulun_project_init",
+                            "arguments": {
+                                "objective": "mcp records runtime state",
+                                "criteria": ["mcp observation is persisted"],
+                            },
+                        },
+                    }
+                )
+                self.assertEqual(init_result["result"]["structuredContent"]["objective"], "mcp records runtime state")
+
+                observed = server.handle_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 4,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "hulun_observe",
+                            "arguments": {
+                                "type": "tool_result",
+                                "summary": "pytest passed",
+                                "phase": "verify",
+                                "action_key": "pytest",
+                                "scan": True,
+                            },
+                        },
+                    }
+                )
+                structured = observed["result"]["structuredContent"]
+                self.assertEqual(structured["event"]["source_platform"], "mcp")
+                self.assertIn("risk", structured)
+
+                started = server.handle_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 5,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "hulun_conversation_start",
+                            "arguments": {"name": "mcp-live-test", "group": "tests"},
+                        },
+                    }
+                )
+                conversation_id = started["result"]["structuredContent"]["id"]
+                event = server.handle_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 6,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "hulun_conversation_event",
+                            "arguments": {
+                                "conversation_id": conversation_id,
+                                "type": "tool_call",
+                                "summary": "Run pytest.",
+                                "phase": "verify",
+                                "action_key": "pytest",
+                            },
+                        },
+                    }
+                )
+                self.assertGreater(event["result"]["structuredContent"]["risk"]["components"]["pending_tools"], 0)
+            finally:
+                if old_home is None:
+                    os.environ.pop("HULUN_HOME", None)
+                else:
+                    os.environ["HULUN_HOME"] = old_home
 
     def test_conversation_event_redacts_sensitive_text_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:

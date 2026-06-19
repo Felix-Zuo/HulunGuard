@@ -18,6 +18,7 @@ using HulunGuard on real work.
 - OpenClaw hook: injects HulunGuard guidance into OpenClaw agent bootstrap.
 - Realtime HulunIndex observations: record phase, claims, failures, tokens, cost, latency, and retry fingerprints.
 - Privacy-safe trace ingestion: import generic JSON/JSONL, OpenHands-like events, and SWE-agent-like trajectories without persisting raw sensitive payloads by default.
+- Python SDK and MCP server: agents can record runtime state directly without shell glue.
 - Built-in validation suite: run synthetic healthy/slop-risk scenarios before release.
 - Product operations: `quickstart`, `doctor`, and `benchmark` commands for onboarding, diagnostics, and scan performance checks.
 - Conversation runtime monitoring: per-conversation events, user challenges, pending tool calls, unresolved failures, unsupported final claims, and monitor sync.
@@ -95,6 +96,37 @@ python .\hulun.py prompt --conversation "Claude research" --group "Market Resear
 ```
 
 Paste the output beginning with `#HULUN_ON` into that agent conversation.
+
+## SDK And MCP
+
+Python agents can integrate directly:
+
+```python
+from hulun_guard import HulunGuardClient
+
+client = HulunGuardClient(".")
+client.init(
+    objective="Ship an evidence-backed agent workflow",
+    criteria=["final claims have verification evidence"],
+)
+client.observe(
+    event_type="tool_result",
+    phase="verify",
+    summary="pytest passed",
+    result="pass",
+    source_platform="my-agent",
+    action_key="pytest",
+    scan=True,
+)
+```
+
+MCP-capable hosts can run:
+
+```powershell
+hulun-mcp --root .
+```
+
+See `docs/SDK_AND_MCP.md` for tool names, schemas, and privacy behavior.
 
 ## Task Ledger Mode
 

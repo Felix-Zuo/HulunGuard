@@ -56,6 +56,13 @@ Sources:
 - Add explicit `--include-sensitive` and `--retention-days` controls for trusted local debugging.
 - Cover privacy behavior with tests for secrets, emails, URL query strings, conversation runtime events, and trace import modes.
 
+## Third Remediation Slice
+
+- Add `HulunGuardClient` as the stable Python adapter SDK.
+- Add a stdio MCP server with tool discovery and tool call support.
+- Expose project init/observe/scan and conversation start/event/scan over MCP.
+- Cover SDK and MCP behavior with tests, including live conversation pending-tool risk.
+
 ## Product Position
 
 HulunGuard is currently moving from developer preview toward a reliable developer product. It should not be marketed as production-ready until M2 gates are met with real trajectory data, adapter coverage, telemetry interoperability, and release provenance.

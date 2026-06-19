@@ -166,3 +166,47 @@ Paste the output into the target agent. It starts with:
 ```
 
 Any agent that can run shell commands can then open its own widget and update the same board.
+
+## Use The Python SDK
+
+```python
+from hulun_guard import HulunGuardClient
+
+client = HulunGuardClient(".")
+client.init(
+    objective="Ship an evidence-backed agent workflow",
+    criteria=["final claims have verification evidence"],
+)
+client.observe(
+    event_type="tool_result",
+    phase="verify",
+    summary="pytest passed",
+    result="pass",
+    source_platform="my-agent",
+    action_key="pytest",
+    scan=True,
+)
+```
+
+For live conversation monitoring:
+
+```python
+conversation = client.start_conversation(name="agent-live-task", group="HulunGuard")
+client.conversation_event(
+    conversation_id=conversation["id"],
+    event_type="tool_call",
+    phase="verify",
+    summary="Run pytest",
+    action_key="pytest",
+)
+```
+
+## Run The MCP Server
+
+```powershell
+hulun-mcp --root .
+python -m hulun_guard.mcp --root .
+python .\hulun.py --root . mcp
+```
+
+The MCP server exposes project init, observe, scan, conversation start, conversation event, and conversation scan tools. See `docs/SDK_AND_MCP.md`.

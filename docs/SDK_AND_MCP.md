@@ -1,0 +1,131 @@
+# HulunGuard SDK And MCP
+
+HulunGuard exposes two adapter surfaces for agents that should record runtime state without shell glue:
+
+- Python SDK: import `HulunGuardClient` and write events directly.
+- MCP stdio server: run `hulun-mcp` or `python -m hulun_guard.mcp` from any MCP-capable host.
+
+Both surfaces use the same event schema, privacy redaction defaults, and risk engine as the CLI.
+
+## Python SDK
+
+```python
+from hulun_guard import HulunGuardClient
+
+client = HulunGuardClient(".")
+client.init(
+    objective="Ship an evidence-backed agent workflow",
+    criteria=["final claims have verification evidence"],
+)
+
+observed = client.observe(
+    event_type="tool_result",
+    phase="verify",
+    summary="pytest passed",
+    result="pass",
+    source_platform="my-agent",
+    action_key="pytest",
+    scan=True,
+)
+
+print(observed["risk"]["slop_index"])
+```
+
+### Project Methods
+
+- `init(objective, criteria=None, constraints=None, assumptions=None, threshold=66, force=False)`: create `.hulun/state.json`.
+- `observe(event_type, summary, ..., scan=False)`: record a project observation.
+- `scan(threshold=None, final_attempt=False, checkpoint_stale_minutes=45)`: recompute project HulunIndex.
+- `load_state()`: return the current project ledger.
+
+Useful `observe` fields:
+
+- `phase`: `explore`, `plan`, `implement`, `verify`, `recover`, `summarize`, `final`, or `orchestrate`.
+- `claims`: completion or verification claims.
+- `evidence`: evidence ids supporting the observation.
+- `refs`: paths, URLs, trace ids, or command references.
+- `action_key`: stable retry-loop fingerprint.
+- `prompt_tokens`, `completion_tokens`, `cost`, `latency_ms`, `model`: model pressure signals.
+
+### Conversation Methods
+
+```python
+conversation = client.start_conversation(name="codex-live-task", group="HulunGuard")
+
+client.conversation_event(
+    conversation_id=conversation["id"],
+    event_type="tool_call",
+    phase="verify",
+    summary="Run pytest",
+    action_key="pytest",
+)
+
+client.conversation_event(
+    conversation_id=conversation["id"],
+    event_type="tool_result",
+    phase="verify",
+    summary="pytest passed",
+    action_key="pytest",
+)
+```
+
+- `start_conversation(name, group="default", objective=None, monitor=False, widget=False)`: create a live runtime conversation.
+- `conversation_event(conversation_id, event_type, summary, ...)`: record a live event and return conversation risk.
+- `conversation_scan(conversation_id, checkpoint_stale_minutes=45)`: recompute conversation risk.
+- `conversation_status(conversation_id)`: return conversation state.
+- `close_conversation(conversation_id)`: close a conversation.
+
+## MCP Server
+
+Start a stdio MCP server for the current project root:
+
+```powershell
+hulun-mcp --root .
+```
+
+Equivalent module form:
+
+```powershell
+python -m hulun_guard.mcp --root .
+```
+
+The CLI also exposes:
+
+```powershell
+python .\hulun.py --root . mcp
+```
+
+Available tools:
+
+- `hulun_project_init`: initialize a project ledger.
+- `hulun_observe`: record a project observation and optionally scan.
+- `hulun_scan`: scan the project ledger.
+- `hulun_conversation_start`: start a live conversation monitor.
+- `hulun_conversation_event`: record a live conversation event.
+- `hulun_conversation_scan`: scan a live conversation.
+
+MCP responses include both human-readable text content and `structuredContent`.
+
+The server implements the MCP Tools interface for protocol version `2025-11-25`.
+
+## Privacy Defaults
+
+SDK and MCP use the same defaults as the CLI:
+
+- Secrets, emails, private home paths, and URL query strings are redacted.
+- Raw trace payloads should be summarized by adapters before recording.
+- Stored events include `privacy.mode` and `privacy.retention_days`.
+
+Only use sensitive mode for trusted local debugging:
+
+```python
+client = HulunGuardClient(".", include_sensitive=True, retention_days=7)
+```
+
+```powershell
+hulun-mcp --root . --include-sensitive --retention-days 7
+```
+
+## Compatibility Contract
+
+The SDK and MCP tools are intended as the stable adapter layer. Future releases may add optional fields, but should not remove existing methods, tool names, or core output keys without a minor-version migration note.

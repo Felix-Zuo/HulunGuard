@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hulun-guard"
-version = "0.7.0"
+version = "0.8.0"
 description = "Proof-first reliability guard for long-running AI agents."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -40,6 +40,7 @@ Issues = "https://github.com/Felix-Zuo/HulunGuard/issues"
 
 [project.scripts]
 hulun = "hulun_guard.cli:main"
+hulun-mcp = "hulun_guard.mcp:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

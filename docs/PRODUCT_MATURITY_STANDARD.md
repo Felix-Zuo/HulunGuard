@@ -33,7 +33,7 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 - Stable event schema.
 - Privacy-safe trace redaction defaults.
 - Public SDK for adapters.
-- MCP server.
+- MCP stdio server.
 - OpenTelemetry/OpenInference import/export path.
 - 50-100 labeled agent trajectories.
 - Precision/recall report for major risk classes.
@@ -67,4 +67,4 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 ## Current Target
 
-The current target is M2. The privacy-safe redaction baseline is implemented; the remaining M2 gates are adapter SDK, MCP server, OpenTelemetry/OpenInference alignment, labeled real-agent trajectories, calibration report, and release provenance.
+The current target is M2. The privacy-safe redaction baseline, adapter SDK, and MCP stdio server are implemented. The remaining M2 gates are OpenTelemetry/OpenInference alignment, labeled real-agent trajectories, calibration report, and release provenance.
