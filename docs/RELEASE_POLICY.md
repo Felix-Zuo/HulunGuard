@@ -9,6 +9,7 @@ Run these before every version push:
 ```powershell
 python -m pytest -q
 python .\hulun.py validate
+python .\hulun.py calibrate
 python .\hulun.py benchmark --events 10000
 python .\hulun.py doctor --run-validation
 ```
@@ -18,7 +19,7 @@ python .\hulun.py doctor --run-validation
 1. Update `pyproject.toml`.
 2. Update `src/hulun_guard/__init__.py`.
 3. Update docs for new commands, parameters, or product meaning.
-4. Run tests and validation.
+4. Run tests, validation, and calibration.
 5. Run the benchmark and doctor checks.
 6. Commit with a versioned message.
 7. Tag the version.

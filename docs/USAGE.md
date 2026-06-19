@@ -131,10 +131,12 @@ Before publishing a new version:
 
 ```powershell
 python .\hulun.py validate
+python .\hulun.py calibrate
 python -m pytest -q
 ```
 
 `validate` writes `.hulun/validation_report.md` and `.hulun/validation_report.json`.
+`calibrate` writes `.hulun/calibration_report.md` and `.hulun/calibration_report.json` with component precision, recall, false-positive rate, and false-negative rate over 60 labeled trajectories.
 
 ## Benchmark Scan Performance
 

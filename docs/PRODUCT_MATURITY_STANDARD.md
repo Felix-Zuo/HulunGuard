@@ -61,10 +61,10 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 - No final-gate relaxation without tests and a changelog entry.
 - No adapter can contain a developer machine path.
-- No release without CI, validation, benchmark, and security scans.
+- No release without CI, validation, calibration, benchmark, and security scans.
 - No public claim that HulunGuard detects intent or truth; it computes reliability risk.
 - No private conversation logs in the repository.
 
 ## Current Target
 
-The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, and release provenance baseline are implemented. The remaining M2 gates are labeled real-agent trajectories and calibration report.
+The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, release provenance baseline, and labeled trajectory calibration baseline are implemented. The next gates are broader external trajectory coverage and recurring calibration drift review.

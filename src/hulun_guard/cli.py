@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from .adapters import export_opentelemetry, iter_observations
+from .calibration import build_calibration_markdown, calibration_json, run_trajectory_calibration
 from .constants import DASHBOARD_FILE, RISK_REPORT_FILE, VALID_EVENT_PHASES, VALID_STATUSES
 from .conversation import (
     close_conversation,
@@ -397,6 +398,25 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 0 if result["passes"] == result["total"] else 2
 
 
+def cmd_calibrate(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    result = run_trajectory_calibration(min_precision=args.min_precision, min_recall=args.min_recall)
+    output_dir = hulun_dir(root)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    json_path = output_dir / "calibration_report.json"
+    md_path = output_dir / "calibration_report.md"
+    json_path.write_text(calibration_json(result), encoding="utf-8")
+    md_path.write_text(build_calibration_markdown(result), encoding="utf-8")
+
+    if args.json:
+        print(calibration_json(result), end="")
+    else:
+        gate = "passed" if result["gate"]["passed"] else "failed"
+        print(f"HulunGuard calibration {gate}: {result['dataset']['size']} labeled trajectories.")
+        print(f"Report: {md_path}")
+    return 0 if result["gate"]["passed"] else 2
+
+
 def cmd_mcp(args: argparse.Namespace) -> int:
     from .mcp import HulunMCPServer, serve_stdio
 
@@ -481,6 +501,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         payload["validation"] = validation
         status = "ok" if validation["passes"] == validation["total"] else "error"
         add_check("validation", status, f"{validation['passes']} / {validation['total']} scenarios.")
+        calibration = run_trajectory_calibration()
+        payload["calibration"] = {key: value for key, value in calibration.items() if key != "trajectories"}
+        calibration_status = "ok" if calibration["gate"]["passed"] else "error"
+        add_check("calibration", calibration_status, f"{calibration['dataset']['size']} labeled trajectories.")
 
     has_error = any(check["status"] == "error" for check in checks)
     has_warn = any(check["status"] == "warn" for check in checks)
@@ -1226,6 +1250,12 @@ def build_parser() -> argparse.ArgumentParser:
     validate = sub.add_parser("validate", parents=[root_parent])
     validate.add_argument("--json", action="store_true")
     validate.set_defaults(func=cmd_validate)
+
+    calibrate = sub.add_parser("calibrate", parents=[root_parent])
+    calibrate.add_argument("--min-precision", type=float, default=0.90)
+    calibrate.add_argument("--min-recall", type=float, default=0.90)
+    calibrate.add_argument("--json", action="store_true")
+    calibrate.set_defaults(func=cmd_calibrate)
 
     mcp = sub.add_parser("mcp", parents=[root_parent])
     add_privacy_controls(mcp)

@@ -76,6 +76,12 @@ Sources:
 - Generate GitHub build provenance attestations for wheel and sdist artifacts.
 - Document branch protection, release approval, and release asset controls.
 
+## Sixth Remediation Slice
+
+- Add a 60-item labeled trajectory calibration dataset covering healthy, unsupported-final, failure-masking, retry-loop, context-decay, and polish-without-progress cases.
+- Add `hulun calibrate` with precision, recall, false-positive rate, false-negative rate, and mismatch reporting for HulunIndex components.
+- Add calibration to the release gate so scoring changes must preserve measured component behavior.
+
 ## Product Position
 
-HulunGuard is currently moving from developer preview toward a reliable developer product. It should not be marketed as production-ready until M2 gates are met with real trajectory data, adapter coverage, telemetry interoperability, and calibrated validation evidence.
+HulunGuard is currently moving from developer preview toward a reliable developer product. It should not be marketed as production-ready until M2 gates are met with broader external trajectory data, adapter coverage, telemetry interoperability, and recurring calibration evidence.

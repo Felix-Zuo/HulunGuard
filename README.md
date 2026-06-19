@@ -82,6 +82,7 @@ Run the release validation suite:
 ```powershell
 python .\hulun.py doctor --run-validation
 python .\hulun.py validate
+python .\hulun.py calibrate
 python .\hulun.py benchmark --events 10000
 python -m pytest -q
 ```

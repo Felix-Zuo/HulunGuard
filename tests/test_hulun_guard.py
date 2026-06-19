@@ -832,6 +832,23 @@ class HulunGuardCliTest(unittest.TestCase):
                 self.assertEqual(scenario["expected"], scenario["band"], scenario["scenario"])
             self.assertTrue((Path(tmp) / ".hulun" / "validation_report.md").exists())
 
+    def test_calibrate_reports_labeled_trajectory_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.run_cli("--root", tmp, "calibrate", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["dataset"]["size"], 60)
+            self.assertTrue(payload["gate"]["passed"], payload["gate"])
+            self.assertEqual(payload["dataset"]["labels"]["healthy"], 10)
+            self.assertEqual(payload["dataset"]["labels"]["unsupported-final"], 10)
+            self.assertEqual(payload["dataset"]["labels"]["failure-masking"], 10)
+            self.assertEqual(payload["dataset"]["labels"]["retry-loop"], 10)
+            self.assertEqual(payload["dataset"]["labels"]["context-decay"], 10)
+            self.assertEqual(payload["dataset"]["labels"]["polish-without-progress"], 10)
+            self.assertEqual(payload["component_metrics"]["claim_overhang"]["false_negative_rate"], 0.0)
+            self.assertEqual(payload["component_metrics"]["retry_loop"]["false_positive_rate"], 0.0)
+            self.assertTrue((Path(tmp) / ".hulun" / "calibration_report.md").exists())
+
     def test_usability_commands_doctor_quickstart_and_benchmark(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             code, out = self.run_cli("--root", tmp, "quickstart", "--json")
@@ -844,6 +861,13 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertEqual(code, 0)
             doctor = json.loads(out)
             self.assertEqual(doctor["result"], "warn")
+
+            code, out = self.run_cli("--root", tmp, "doctor", "--run-validation", "--json")
+            self.assertEqual(code, 0)
+            doctor = json.loads(out)
+            self.assertEqual(doctor["calibration"]["dataset"]["size"], 60)
+            self.assertTrue(doctor["calibration"]["gate"]["passed"])
+            self.assertNotIn("trajectories", doctor["calibration"])
 
             code, out = self.run_cli("--root", tmp, "benchmark", "--events", "200", "--json")
             self.assertEqual(code, 0)

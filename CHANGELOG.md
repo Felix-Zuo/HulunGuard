@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.0 - 2026-06-20
+
+- Added `calibrate` to run a 60-trajectory labeled validation dataset across healthy, unsupported-final, failure-masking, retry-loop, context-decay, and polish-without-progress cases.
+- Added component-level calibration reporting with precision, recall, false-positive rate, and false-negative rate.
+- Added release-gate documentation and tests for calibration reports.
+
 ## 0.10.0 - 2026-06-20
 
 - Added a tag-triggered Release workflow that builds wheel/sdist artifacts, uploads them, and generates build provenance attestations.
