@@ -88,6 +88,12 @@ Sources:
 - Add component support counts for every HulunIndex component.
 - Fail calibration when a required component has zero expected-positive support unless the report declares an explicit waiver.
 
+## Eighth Remediation Slice
+
+- Add cross-process conversation write locking for runtime event writes, scans, and close operations.
+- Change conversation saves to use atomic file replacement instead of direct overwrite.
+- Add concurrent CLI process regression coverage so parallel agent or adapter writes keep every event with unique IDs.
+
 ## Product Position
 
 HulunGuard is currently moving from developer preview toward a reliable developer product. It should not be marketed as production-ready until M2 gates are met with broader external trajectory data, adapter coverage, telemetry interoperability, and recurring calibration evidence.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.0 - 2026-06-20
+
+- Added cross-process conversation write locking to prevent concurrent runtime event loss.
+- Changed conversation saves to use atomic file replacement.
+- Added regression coverage for concurrent conversation event recording.
+
 ## 0.12.0 - 2026-06-20
 
 - Expanded calibration to 80 labeled trajectories with cost-pressure and uncertainty positive cases.

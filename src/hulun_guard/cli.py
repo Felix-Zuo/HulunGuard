@@ -21,8 +21,7 @@ from .conversation import (
     close_conversation,
     load_conversation,
     record_conversation_event,
-    save_conversation,
-    scan_conversation,
+    refresh_conversation_scan,
     start_conversation,
 )
 from .monitor import (
@@ -641,17 +640,7 @@ def cmd_conversation_event(args: argparse.Namespace) -> int:
 
 
 def cmd_conversation_scan(args: argparse.Namespace) -> int:
-    data = load_conversation(args.id)
-    risk = scan_conversation(data, checkpoint_stale_minutes=args.checkpoint_stale_minutes)
-    data["last_scan"] = risk
-    save_conversation(data)
-    if data.get("monitor_id"):
-        update_monitor(
-            data["monitor_id"],
-            score=int(risk["score"]),
-            summary="Conversation scan refreshed.",
-            reason=risk["reasons"][0] if risk.get("reasons") else None,
-        )
+    data, risk = refresh_conversation_scan(args.id, checkpoint_stale_minutes=args.checkpoint_stale_minutes)
     if args.json:
         print(json.dumps({"conversation": data, "risk": risk}, ensure_ascii=False, indent=2))
     else:

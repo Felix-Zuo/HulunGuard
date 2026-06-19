@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +30,9 @@ CONVERSATION_FAILURE_TYPES = FAILURE_EVENT_TYPES | {
 CLAIM_TYPES = {"assistant_claim", "final_attempt"}
 POLISH_TYPES = {"assistant_summary", "summary", "assistant_update"}
 USER_CHALLENGE_TYPES = {"user_challenge", "user_correction", "user_objection"}
+LOCK_TIMEOUT_SECONDS = 10.0
+STALE_LOCK_SECONDS = 120.0
+LOCK_POLL_SECONDS = 0.025
 
 
 def conversations_dir() -> Path:
@@ -51,9 +57,50 @@ def load_conversation(conversation_id: str) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.{time.monotonic_ns()}.tmp")
+    tmp_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp_path, path)
+
+
+@contextmanager
+def conversation_write_lock(conversation_id: str) -> Any:
+    lock_path = conversation_path(conversation_id).with_suffix(".json.lock")
+    deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
+    while True:
+        try:
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                lock_age = time.time() - lock_path.stat().st_mtime
+            except FileNotFoundError:
+                continue
+            if lock_age > STALE_LOCK_SECONDS:
+                try:
+                    lock_path.unlink()
+                except FileNotFoundError:
+                    pass
+                continue
+            if time.monotonic() >= deadline:
+                raise SystemExit(f"Timed out waiting for conversation lock: {lock_path}")
+            time.sleep(LOCK_POLL_SECONDS)
+        else:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(f"pid={os.getpid()} created_at={utc_now()}\n")
+            break
+    try:
+        yield
+    finally:
+        try:
+            lock_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def save_conversation(data: dict[str, Any]) -> None:
     data["updated_at"] = utc_now()
-    conversation_path(data["id"]).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _atomic_write_json(conversation_path(data["id"]), data)
 
 
 def start_conversation(
@@ -341,11 +388,12 @@ def record_conversation_event(
     summary: str,
     **kwargs: Any,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    data = load_conversation(conversation_id)
-    event = append_conversation_event(data, event_type, summary, **kwargs)
-    risk = scan_conversation(data)
-    data["last_scan"] = risk
-    save_conversation(data)
+    with conversation_write_lock(conversation_id):
+        data = load_conversation(conversation_id)
+        event = append_conversation_event(data, event_type, summary, **kwargs)
+        risk = scan_conversation(data)
+        data["last_scan"] = risk
+        save_conversation(data)
     if data.get("monitor_id"):
         update_monitor(
             data["monitor_id"],
@@ -357,13 +405,34 @@ def record_conversation_event(
     return data, event, risk
 
 
+def refresh_conversation_scan(
+    conversation_id: str,
+    *,
+    checkpoint_stale_minutes: int = 45,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    with conversation_write_lock(conversation_id):
+        data = load_conversation(conversation_id)
+        risk = scan_conversation(data, checkpoint_stale_minutes=checkpoint_stale_minutes)
+        data["last_scan"] = risk
+        save_conversation(data)
+    if data.get("monitor_id"):
+        update_monitor(
+            data["monitor_id"],
+            score=int(risk["score"]),
+            summary="Conversation scan refreshed.",
+            reason=risk["reasons"][0] if risk.get("reasons") else None,
+        )
+    return data, risk
+
+
 def close_conversation(conversation_id: str) -> dict[str, Any]:
-    data = load_conversation(conversation_id)
-    data["status"] = "closed"
-    append_conversation_event(data, "conversation_close", "Conversation closed.", result="pass")
-    risk = scan_conversation(data)
-    data["last_scan"] = risk
-    save_conversation(data)
+    with conversation_write_lock(conversation_id):
+        data = load_conversation(conversation_id)
+        data["status"] = "closed"
+        append_conversation_event(data, "conversation_close", "Conversation closed.", result="pass")
+        risk = scan_conversation(data)
+        data["last_scan"] = risk
+        save_conversation(data)
     if data.get("monitor_id"):
         update_monitor(data["monitor_id"], status="closed", score=int(risk["score"]), summary="Conversation closed.")
     return data

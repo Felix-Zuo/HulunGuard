@@ -8,8 +8,7 @@ from .conversation import (
     close_conversation,
     load_conversation,
     record_conversation_event,
-    save_conversation,
-    scan_conversation,
+    refresh_conversation_scan,
     start_conversation,
 )
 from .privacy import DEFAULT_RETENTION_DAYS, sanitize_event
@@ -272,12 +271,12 @@ class HulunGuardClient:
 
     def conversation_scan(self, *, conversation_id: str, checkpoint_stale_minutes: int = 45) -> dict[str, Any]:
         try:
-            data = load_conversation(conversation_id)
+            data, risk = refresh_conversation_scan(
+                conversation_id,
+                checkpoint_stale_minutes=checkpoint_stale_minutes,
+            )
         except SystemExit as exc:
             raise HulunGuardError(str(exc)) from None
-        risk = scan_conversation(data, checkpoint_stale_minutes=checkpoint_stale_minutes)
-        data["last_scan"] = risk
-        save_conversation(data)
         return {"conversation": data, "risk": risk}
 
     def conversation_status(self, *, conversation_id: str) -> dict[str, Any]:

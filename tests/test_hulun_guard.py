@@ -4,6 +4,7 @@ import contextlib
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -1020,6 +1021,73 @@ class HulunGuardCliTest(unittest.TestCase):
                     os.environ.pop("HULUN_HOME", None)
                 else:
                     os.environ["HULUN_HOME"] = old_home
+
+    def test_conversation_event_writes_survive_concurrent_processes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            env = os.environ.copy()
+            env["HULUN_HOME"] = home
+            env["PYTHONPATH"] = str(SRC) + os.pathsep + env.get("PYTHONPATH", "")
+            start = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "hulun_guard",
+                    "--root",
+                    tmp,
+                    "conversation",
+                    "start",
+                    "--name",
+                    "concurrent-event-test",
+                    "--group",
+                    "tests",
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(start.returncode, 0, start.stderr)
+            conversation = json.loads(start.stdout)
+
+            processes = [
+                subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-m",
+                        "hulun_guard",
+                        "conversation",
+                        "event",
+                        "--id",
+                        conversation["id"],
+                        "--type",
+                        "tool_result",
+                        "--summary",
+                        f"Concurrent event {index}",
+                        "--action-key",
+                        f"parallel-{index}",
+                        "--json",
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=env,
+                )
+                for index in range(8)
+            ]
+            outputs = [process.communicate(timeout=20) + (process.returncode,) for process in processes]
+            for stdout, stderr, returncode in outputs:
+                self.assertEqual(returncode, 0, stderr or stdout)
+
+            conversation_path = Path(home) / "conversations" / f"{conversation['id']}.json"
+            data = json.loads(conversation_path.read_text(encoding="utf-8"))
+            events = data["events"]
+            event_ids = [event["id"] for event in events]
+            summaries = {event["summary"] for event in events}
+            self.assertEqual(len(events), 9)
+            self.assertEqual(len(event_ids), len(set(event_ids)))
+            for index in range(8):
+                self.assertIn(f"Concurrent event {index}", summaries)
 
     def test_conversation_final_gate_calibrates_when_tools_are_pending(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
