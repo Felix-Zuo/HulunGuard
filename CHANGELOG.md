@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.0 - 2026-06-20
+
+- Expanded calibration to 80 labeled trajectories with cost-pressure and uncertainty positive cases.
+- Added component support counts for every HulunIndex component.
+- Added zero-support calibration gate reporting with explicit waiver support.
+
 ## 0.11.0 - 2026-06-20
 
 - Added `calibrate` to run a 60-trajectory labeled validation dataset across healthy, unsupported-final, failure-masking, retry-loop, context-decay, and polish-without-progress cases.

@@ -8,12 +8,14 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from hulun_guard import calibration
 from hulun_guard.cli import main
 from hulun_guard.mcp import HulunMCPServer
 from hulun_guard.sdk import HulunGuardClient
@@ -837,7 +839,7 @@ class HulunGuardCliTest(unittest.TestCase):
             code, out = self.run_cli("--root", tmp, "calibrate", "--json")
             self.assertEqual(code, 0, out)
             payload = json.loads(out)
-            self.assertEqual(payload["dataset"]["size"], 60)
+            self.assertEqual(payload["dataset"]["size"], 80)
             self.assertTrue(payload["gate"]["passed"], payload["gate"])
             self.assertEqual(payload["dataset"]["labels"]["healthy"], 10)
             self.assertEqual(payload["dataset"]["labels"]["unsupported-final"], 10)
@@ -845,9 +847,37 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertEqual(payload["dataset"]["labels"]["retry-loop"], 10)
             self.assertEqual(payload["dataset"]["labels"]["context-decay"], 10)
             self.assertEqual(payload["dataset"]["labels"]["polish-without-progress"], 10)
+            self.assertEqual(payload["dataset"]["labels"]["cost-pressure"], 10)
+            self.assertEqual(payload["dataset"]["labels"]["uncertainty"], 10)
+            self.assertEqual(payload["gate"]["support_failures"], [])
+            self.assertEqual(payload["component_support"]["cost_pressure"]["expected_positive"], 10)
+            self.assertEqual(payload["component_support"]["uncertainty"]["expected_positive"], 10)
             self.assertEqual(payload["component_metrics"]["claim_overhang"]["false_negative_rate"], 0.0)
             self.assertEqual(payload["component_metrics"]["retry_loop"]["false_positive_rate"], 0.0)
             self.assertTrue((Path(tmp) / ".hulun" / "calibration_report.md").exists())
+
+    def test_calibrate_fails_zero_required_component_support_unless_waived(self) -> None:
+        reduced_dataset = [
+            item for item in calibration.build_trajectory_dataset() if "cost_pressure" not in item["expected_components"]
+        ]
+        with mock.patch.object(calibration, "build_trajectory_dataset", return_value=reduced_dataset):
+            with mock.patch.object(calibration, "DATASET_SIZE", len(reduced_dataset)):
+                result = calibration.run_trajectory_calibration()
+        self.assertFalse(result["gate"]["passed"], result["gate"])
+        self.assertEqual(result["gate"]["support_failures"], [
+            {"component": "cost_pressure", "expected_positive": 0, "waiver": None}
+        ])
+
+        with mock.patch.object(calibration, "build_trajectory_dataset", return_value=reduced_dataset):
+            with mock.patch.object(calibration, "DATASET_SIZE", len(reduced_dataset)):
+                with mock.patch.object(
+                    calibration,
+                    "COMPONENT_SUPPORT_WAIVERS",
+                    {"cost_pressure": "Covered by external calibration report."},
+                ):
+                    waived = calibration.run_trajectory_calibration()
+        self.assertTrue(waived["gate"]["passed"], waived["gate"])
+        self.assertEqual(waived["component_support"]["cost_pressure"]["waiver"], "Covered by external calibration report.")
 
     def test_usability_commands_doctor_quickstart_and_benchmark(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -865,7 +895,7 @@ class HulunGuardCliTest(unittest.TestCase):
             code, out = self.run_cli("--root", tmp, "doctor", "--run-validation", "--json")
             self.assertEqual(code, 0)
             doctor = json.loads(out)
-            self.assertEqual(doctor["calibration"]["dataset"]["size"], 60)
+            self.assertEqual(doctor["calibration"]["dataset"]["size"], 80)
             self.assertTrue(doctor["calibration"]["gate"]["passed"])
             self.assertNotIn("trajectories", doctor["calibration"])
 

@@ -10,7 +10,6 @@ from .util import next_id, utc_now
 
 DATASET_SCHEMA = "hulun.trajectory_dataset.v1"
 CALIBRATION_SCHEMA = "hulun.calibration.v1"
-DATASET_SIZE = 60
 LABELS = (
     "healthy",
     "unsupported-final",
@@ -18,8 +17,14 @@ LABELS = (
     "retry-loop",
     "context-decay",
     "polish-without-progress",
+    "cost-pressure",
+    "uncertainty",
 )
+TRAJECTORIES_PER_LABEL = 10
+DATASET_SIZE = len(LABELS) * TRAJECTORIES_PER_LABEL
 TRACKED_COMPONENTS = tuple(WEIGHTS.keys())
+REQUIRED_COMPONENT_SUPPORT = TRACKED_COMPONENTS
+COMPONENT_SUPPORT_WAIVERS: dict[str, str] = {}
 COMPONENT_POSITIVE_THRESHOLDS = {
     "intent_drift": 2,
     "stagnation": 8,
@@ -258,6 +263,50 @@ def _polish_without_progress(index: int) -> dict[str, Any]:
     )
 
 
+def _cost_pressure(index: int) -> dict[str, Any]:
+    case_id = f"HG-T{index:03d}"
+    state = _base_state(case_id, f"Control {case_id} cost pressure budget review")
+    _add_checkpoint(state, f"{case_id} budget checkpoint")
+    for turn in range(1, 5):
+        _append_event(
+            state,
+            "llm_call",
+            f"{case_id} cost pressure budget review turn {turn} consumed tokens without evidence.",
+            phase="plan",
+            prompt_tokens=3500,
+            completion_tokens=800,
+            cost=1.6,
+            latency_ms=65000,
+        )
+    return _trajectory(
+        case_id,
+        "cost-pressure",
+        state,
+        ["cost_pressure", "evidence_gap", "stagnation", "unfinished_criteria"],
+        "High token, cost, and latency pressure accumulates without execution evidence.",
+    )
+
+
+def _uncertainty(index: int) -> dict[str, Any]:
+    case_id = f"HG-T{index:03d}"
+    state = _base_state(case_id, f"Resolve {case_id} uncertainty with source verification")
+    _add_checkpoint(state, f"{case_id} uncertainty checkpoint")
+    for turn in range(1, 5):
+        _append_event(
+            state,
+            "llm_call",
+            f"{case_id} uncertainty source verification is maybe probably okay, but not sure yet on turn {turn}.",
+            phase="plan",
+        )
+    return _trajectory(
+        case_id,
+        "uncertainty",
+        state,
+        ["evidence_gap", "stagnation", "unfinished_criteria", "uncertainty"],
+        "Uncertainty language repeats without fresh verification evidence.",
+    )
+
+
 def build_trajectory_dataset() -> list[dict[str, Any]]:
     builders = (
         _healthy,
@@ -266,11 +315,13 @@ def build_trajectory_dataset() -> list[dict[str, Any]]:
         _retry_loop,
         _context_decay,
         _polish_without_progress,
+        _cost_pressure,
+        _uncertainty,
     )
     dataset: list[dict[str, Any]] = []
     index = 1
     for builder in builders:
-        for _ in range(10):
+        for _ in range(TRAJECTORIES_PER_LABEL):
             dataset.append(builder(index))
             index += 1
     return dataset
@@ -324,6 +375,17 @@ def _label_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+def _component_support(rows: list[dict[str, Any]], component_names: Iterable[str]) -> dict[str, dict[str, int | str | None]]:
+    support: dict[str, dict[str, int | str | None]] = {}
+    for component in component_names:
+        support[component] = {
+            "expected_positive": sum(1 for row in rows if component in row["expected_components"]),
+            "predicted_positive": sum(1 for row in rows if component in row["predicted_components"]),
+            "waiver": COMPONENT_SUPPORT_WAIVERS.get(component),
+        }
+    return support
+
+
 def run_trajectory_calibration(
     *,
     min_precision: float = 0.90,
@@ -353,6 +415,7 @@ def run_trajectory_calibration(
         )
 
     component_metrics = _component_metrics(rows, TRACKED_COMPONENTS)
+    component_support = _component_support(rows, TRACKED_COMPONENTS)
     failures = [
         {
             "component": component,
@@ -362,8 +425,17 @@ def run_trajectory_calibration(
         for component, values in component_metrics.items()
         if float(values["precision"]) < min_precision or float(values["recall"]) < min_recall
     ]
+    support_failures = [
+        {
+            "component": component,
+            "expected_positive": component_support[component]["expected_positive"],
+            "waiver": component_support[component]["waiver"],
+        }
+        for component in REQUIRED_COMPONENT_SUPPORT
+        if int(component_support[component]["expected_positive"]) == 0 and not component_support[component]["waiver"]
+    ]
     mismatches = [row for row in rows if not row["matched"]]
-    passed = not failures and not mismatches and len(rows) == DATASET_SIZE
+    passed = not failures and not support_failures and not mismatches and len(rows) == DATASET_SIZE
     return {
         "schema": CALIBRATION_SCHEMA,
         "generated_at": utc_now(),
@@ -375,14 +447,17 @@ def run_trajectory_calibration(
             "component_positive_thresholds": {
                 component: COMPONENT_POSITIVE_THRESHOLDS.get(component, 1) for component in TRACKED_COMPONENTS
             },
+            "required_component_support": list(REQUIRED_COMPONENT_SUPPORT),
         },
         "gate": {
             "min_precision": min_precision,
             "min_recall": min_recall,
             "passed": passed,
             "failures": failures,
+            "support_failures": support_failures,
             "mismatches": mismatches,
         },
+        "component_support": component_support,
         "component_metrics": component_metrics,
         "trajectories": rows,
     }
@@ -405,6 +480,21 @@ def build_calibration_markdown(result: dict[str, Any]) -> str:
     ]
     for label, count in result["dataset"]["labels"].items():
         lines.append(f"| {label} | {count} |")
+
+    lines.extend(
+        [
+            "",
+            "## Component Support",
+            "",
+            "| Component | Expected positive | Predicted positive | Waiver |",
+            "| --- | ---: | ---: | --- |",
+        ]
+    )
+    for component, values in result["component_support"].items():
+        lines.append(
+            f"| {component} | {values['expected_positive']} | {values['predicted_positive']} | "
+            f"{values['waiver'] or ''} |"
+        )
 
     lines.extend(
         [

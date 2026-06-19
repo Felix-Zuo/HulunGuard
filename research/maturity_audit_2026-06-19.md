@@ -82,6 +82,12 @@ Sources:
 - Add `hulun calibrate` with precision, recall, false-positive rate, false-negative rate, and mismatch reporting for HulunIndex components.
 - Add calibration to the release gate so scoring changes must preserve measured component behavior.
 
+## Seventh Remediation Slice
+
+- Expand calibration to 80 labeled trajectories by adding cost-pressure and uncertainty positive cases.
+- Add component support counts for every HulunIndex component.
+- Fail calibration when a required component has zero expected-positive support unless the report declares an explicit waiver.
+
 ## Product Position
 
 HulunGuard is currently moving from developer preview toward a reliable developer product. It should not be marketed as production-ready until M2 gates are met with broader external trajectory data, adapter coverage, telemetry interoperability, and recurring calibration evidence.
