@@ -9,9 +9,14 @@
 - [ ] `python -m hulun_guard validate`
 - [ ] `python -m hulun_guard benchmark --events 10000 --max-ms 1000`
 
+## Release / Supply Chain
+
+- [ ] Version files updated when this changes release behavior
+- [ ] Release workflow and provenance impact considered
+- [ ] Branch protection requirements still satisfied
+
 ## Risk Notes
 
 - Scoring changed: no / yes
 - Adapter behavior changed: no / yes
 - Security or privacy impact: no / yes
-

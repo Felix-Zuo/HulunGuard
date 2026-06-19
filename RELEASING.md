@@ -26,6 +26,7 @@ GitHub must pass:
 - CI matrix.
 - CodeQL and Bandit.
 - OpenSSF Scorecard.
+- Release workflow with artifact provenance on tags.
 - Dependabot has no unresolved critical updates.
 
 ## Version Checklist
@@ -36,8 +37,12 @@ GitHub must pass:
 4. Commit with a clear release-oriented message.
 5. Tag the commit, for example `v0.6.0`.
 6. Push `main` and tags.
-7. Confirm GitHub Actions pass.
-8. Create or update GitHub issues for unfinished maturity work.
+7. Confirm GitHub Actions pass, including Release on tags.
+8. Confirm GitHub Release assets were uploaded by the release workflow.
+9. Confirm build provenance attestations exist for release artifacts.
+10. Create or update GitHub issues for unfinished maturity work.
+
+See `docs/SUPPLY_CHAIN.md` for branch protection and release approval gates.
 
 ## Artifact Policy
 
@@ -48,4 +53,3 @@ Do not release generated private state:
 - credentials
 - local screenshots with private data
 - customer or production logs
-

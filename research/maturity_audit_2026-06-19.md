@@ -70,6 +70,12 @@ Sources:
 - Add OTLP-style export for HulunGuard event ledgers.
 - Preserve privacy defaults by withholding prompt, output, and tool argument payloads unless sensitive mode is explicitly enabled.
 
+## Fifth Remediation Slice
+
+- Add a tag-triggered Release workflow that builds release artifacts from the tagged commit.
+- Generate GitHub build provenance attestations for wheel and sdist artifacts.
+- Document branch protection, release approval, and release asset controls.
+
 ## Product Position
 
-HulunGuard is currently moving from developer preview toward a reliable developer product. It should not be marketed as production-ready until M2 gates are met with real trajectory data, adapter coverage, telemetry interoperability, and release provenance.
+HulunGuard is currently moving from developer preview toward a reliable developer product. It should not be marketed as production-ready until M2 gates are met with real trajectory data, adapter coverage, telemetry interoperability, and calibrated validation evidence.

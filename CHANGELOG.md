@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0 - 2026-06-20
+
+- Added a tag-triggered Release workflow that builds wheel/sdist artifacts, uploads them, and generates build provenance attestations.
+- Added supply-chain documentation for provenance, branch protection, release approval gates, and release asset policy.
+- Updated release checklists and PR template to include provenance and branch protection controls.
+
 ## 0.9.0 - 2026-06-20
 
 - Added OpenTelemetry GenAI trace ingestion through `ingest --format opentelemetry`.

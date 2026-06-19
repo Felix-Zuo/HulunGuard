@@ -37,7 +37,7 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 - OpenTelemetry/OpenInference import/export path.
 - 50-100 labeled agent trajectories.
 - Precision/recall report for major risk classes.
-- Signed or provenance-backed release artifacts.
+- Provenance-backed release artifacts.
 
 ### M3: Production-Ready Open Source Product
 
@@ -67,4 +67,4 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 ## Current Target
 
-The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, and OpenTelemetry/OpenInference import/export baseline are implemented. The remaining M2 gates are labeled real-agent trajectories, calibration report, and release provenance.
+The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, and release provenance baseline are implemented. The remaining M2 gates are labeled real-agent trajectories and calibration report.

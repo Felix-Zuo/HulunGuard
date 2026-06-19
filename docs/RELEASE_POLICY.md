@@ -23,9 +23,13 @@ python .\hulun.py doctor --run-validation
 6. Commit with a versioned message.
 7. Tag the version.
 8. Push to `origin/main` with tags.
+9. Confirm the Release workflow publishes artifacts with provenance.
+10. Confirm required branch protection rules are active.
 
 ## Current Policy
 
 - Patch versions: bug fixes, docs, small scoring fixes.
 - Minor versions: new CLI commands, adapters, validation suites, scoring dimensions.
 - Major versions: incompatible state schema or CLI changes.
+
+Supply-chain controls are defined in `docs/SUPPLY_CHAIN.md`.
