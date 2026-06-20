@@ -83,6 +83,7 @@ Run the release validation suite:
 python .\hulun.py doctor --run-validation
 python .\hulun.py validate
 python .\hulun.py calibrate
+python .\hulun.py calibration-drift
 python .\hulun.py benchmark --events 10000
 python -m pytest -q
 ```
@@ -199,6 +200,7 @@ The hook should show `hulunguard` as eligible, loadable, enabled, and attached t
 ```powershell
 python -m unittest discover -s tests
 python .\hulun.py validate
+python .\hulun.py calibration-drift
 python .\hulun.py benchmark --events 10000
 python .\hulun.py --help
 python .\hulun.py open --help

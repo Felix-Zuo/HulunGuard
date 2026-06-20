@@ -23,8 +23,20 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install build dependencies
-        run: python -m pip install build
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Ruff
+        run: python -m ruff check .
+      - name: Tests
+        run: python -m pytest -q
+      - name: HulunGuard validation
+        run: python -m hulun_guard validate
+      - name: HulunGuard calibration
+        run: python -m hulun_guard calibrate
+      - name: HulunGuard calibration drift
+        run: python -m hulun_guard calibration-drift
+      - name: HulunGuard benchmark
+        run: python -m hulun_guard benchmark --events 10000 --max-ms 1000
       - name: Build package
         run: python -m build
       - name: Upload workflow artifacts

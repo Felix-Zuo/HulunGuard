@@ -15,7 +15,14 @@ from pathlib import Path
 from typing import Any
 
 from .adapters import export_opentelemetry, iter_observations
-from .calibration import build_calibration_markdown, calibration_json, run_trajectory_calibration
+from .calibration import (
+    build_calibration_drift_markdown,
+    build_calibration_markdown,
+    calibration_drift_json,
+    calibration_json,
+    compare_calibration_drift,
+    run_trajectory_calibration,
+)
 from .constants import DASHBOARD_FILE, RISK_REPORT_FILE, VALID_EVENT_PHASES, VALID_STATUSES
 from .conversation import (
     close_conversation,
@@ -412,6 +419,56 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
     else:
         gate = "passed" if result["gate"]["passed"] else "failed"
         print(f"HulunGuard calibration {gate}: {result['dataset']['size']} labeled trajectories.")
+        print(f"Report: {md_path}")
+    return 0 if result["gate"]["passed"] else 2
+
+
+def cmd_calibration_drift(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    baseline_path = Path(args.baseline)
+    if not baseline_path.is_absolute():
+        baseline_path = root / baseline_path
+    if not baseline_path.exists():
+        payload = {
+            "schema": "hulun.calibration_drift_error.v1",
+            "error": "baseline_not_found",
+            "baseline": str(baseline_path),
+        }
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(f"HulunGuard calibration drift failed: baseline not found: {baseline_path}", file=sys.stderr)
+        return 2
+    try:
+        baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        payload = {
+            "schema": "hulun.calibration_drift_error.v1",
+            "error": "baseline_json_invalid",
+            "baseline": str(baseline_path),
+            "detail": str(exc),
+        }
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(f"HulunGuard calibration drift failed: invalid baseline JSON: {exc}", file=sys.stderr)
+        return 2
+    calibration = run_trajectory_calibration(min_precision=args.min_precision, min_recall=args.min_recall)
+    result = compare_calibration_drift(calibration, baseline, rationale=args.rationale)
+    output_dir = hulun_dir(root)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    json_path = output_dir / "calibration_drift_report.json"
+    md_path = output_dir / "calibration_drift_report.md"
+    json_path.write_text(calibration_drift_json(result), encoding="utf-8")
+    md_path.write_text(build_calibration_drift_markdown(result), encoding="utf-8")
+
+    if args.json:
+        print(calibration_drift_json(result), end="")
+    else:
+        print(
+            "HulunGuard calibration drift "
+            f"{result['gate']['status']}: {result['gate']['regression_count']} regressions against {baseline_path}."
+        )
         print(f"Report: {md_path}")
     return 0 if result["gate"]["passed"] else 2
 
@@ -1067,6 +1124,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(prog="hulun", description="HulunGuard: proof-first reliability guard for long-running agents.")
     parser.add_argument("--root", default=".", help="Project root. Defaults to current directory.")
+    parser.add_argument("--version", action="version", version=f"hulun {package_version()}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     init = sub.add_parser("init", parents=[root_parent])
@@ -1245,6 +1303,14 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.add_argument("--min-recall", type=float, default=0.90)
     calibrate.add_argument("--json", action="store_true")
     calibrate.set_defaults(func=cmd_calibrate)
+
+    calibration_drift = sub.add_parser("calibration-drift", parents=[root_parent])
+    calibration_drift.add_argument("--baseline", default="docs/calibration_baseline.json")
+    calibration_drift.add_argument("--min-precision", type=float, default=0.90)
+    calibration_drift.add_argument("--min-recall", type=float, default=0.90)
+    calibration_drift.add_argument("--rationale")
+    calibration_drift.add_argument("--json", action="store_true")
+    calibration_drift.set_defaults(func=cmd_calibration_drift)
 
     mcp = sub.add_parser("mcp", parents=[root_parent])
     add_privacy_controls(mcp)

@@ -4,11 +4,12 @@ HulunGuard calibration is the release gate for HulunIndex scoring behavior. It c
 
 ## Latest Snapshot
 
-- Version candidate: 0.14.0
+- Version candidate: 0.15.0
 - Command: `python -m hulun_guard calibrate`
 - Dataset size: 100 labeled trajectories
 - Gate: pass
 - Private logs in repository: none
+- Drift baseline: `docs/calibration_baseline.json`
 
 ## Label Coverage
 
@@ -66,7 +67,10 @@ For release review, run:
 ```powershell
 python -m hulun_guard validate
 python -m hulun_guard calibrate
+python -m hulun_guard calibration-drift
 python -m pytest -q
 ```
 
 `calibrate` writes `.hulun/calibration_report.json` and `.hulun/calibration_report.md` with component support, precision, recall, false-positive rate, false-negative rate, source coverage, workflow coverage, redaction status, and source URIs.
+
+`calibration-drift` compares current calibration against `docs/calibration_baseline.json`. It fails on lower dataset size, label coverage, source coverage, workflow coverage, redaction coverage, source URI coverage, component support, precision, or recall. Use `--rationale` only when an intentional regression has been reviewed and accepted.

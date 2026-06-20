@@ -908,6 +908,62 @@ class HulunGuardCliTest(unittest.TestCase):
         self.assertTrue(waived["gate"]["passed"], waived["gate"])
         self.assertEqual(waived["component_support"]["cost_pressure"]["waiver"], "Covered by external calibration report.")
 
+    def test_calibration_drift_reports_baseline_comparison(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline = calibration.build_calibration_baseline(
+                calibration.run_trajectory_calibration(),
+                baseline_id="test-baseline",
+                source_version="test",
+            )
+            baseline_path = Path(tmp) / "baseline.json"
+            baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+            code, out = self.run_cli("--root", tmp, "calibration-drift", "--baseline", str(baseline_path), "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["gate"]["status"], "pass")
+            self.assertTrue(payload["gate"]["passed"])
+            self.assertEqual(payload["gate"]["regression_count"], 0)
+            self.assertEqual(payload["baseline"]["baseline_id"], "test-baseline")
+            self.assertTrue((Path(tmp) / ".hulun" / "calibration_drift_report.json").exists())
+            self.assertTrue((Path(tmp) / ".hulun" / "calibration_drift_report.md").exists())
+
+    def test_calibration_drift_reports_missing_baseline_without_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.run_cli("--root", tmp, "calibration-drift", "--baseline", "missing.json", "--json")
+            self.assertEqual(code, 2)
+            payload = json.loads(out)
+            self.assertEqual(payload["error"], "baseline_not_found")
+            self.assertIn("missing.json", payload["baseline"])
+
+    def test_calibration_drift_fails_or_warns_on_regression_rationale(self) -> None:
+        baseline = calibration.build_calibration_baseline(
+            calibration.run_trajectory_calibration(),
+            baseline_id="test-baseline",
+            source_version="test",
+        )
+        current = calibration.run_trajectory_calibration()
+        current["dataset"]["labels"]["healthy"] = 9
+        current["dataset"]["source_classes"]["external-public-openhands-event-log"] = 4
+        current["dataset"]["source_uris"].remove("https://docs.openhands.dev/sdk/arch/events")
+        current["component_support"]["cost_pressure"]["expected_positive"] = 14
+        current["component_metrics"]["cost_pressure"]["recall"] = 0.9
+
+        failed = calibration.compare_calibration_drift(current, baseline)
+        self.assertFalse(failed["gate"]["passed"])
+        self.assertEqual(failed["gate"]["status"], "fail")
+        self.assertGreaterEqual(failed["gate"]["regression_count"], 5)
+        kinds = {regression["kind"] for regression in failed["regressions"]}
+        self.assertIn("labels", kinds)
+        self.assertIn("source_classes", kinds)
+        self.assertIn("source_uris", kinds)
+        self.assertIn("component_support.expected_positive", kinds)
+        self.assertIn("component_metrics.recall", kinds)
+
+        warned = calibration.compare_calibration_drift(current, baseline, rationale="Intentional fixture retirement.")
+        self.assertTrue(warned["gate"]["passed"])
+        self.assertEqual(warned["gate"]["status"], "warn")
+        self.assertEqual(warned["gate"]["rationale"], "Intentional fixture retirement.")
+
     def test_usability_commands_doctor_quickstart_and_benchmark(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             code, out = self.run_cli("--root", tmp, "quickstart", "--json")

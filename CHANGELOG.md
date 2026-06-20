@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.0 - 2026-06-20
+
+- Added `calibration-drift` to compare current HulunIndex calibration against a checked-in public-safe baseline.
+- Added `docs/calibration_baseline.json` as the accepted v0.14.0 calibration summary for drift review.
+- Added calibration and calibration-drift gates to CI and Release workflows.
+
 ## 0.14.0 - 2026-06-20
 
 - Expanded calibration to 100 labeled trajectories with external public-source fixtures for SWE-agent, OpenHands, OpenTelemetry GenAI, and OpenInference.

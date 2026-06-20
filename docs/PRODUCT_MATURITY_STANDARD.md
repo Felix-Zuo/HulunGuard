@@ -37,6 +37,7 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 - OpenTelemetry/OpenInference import/export path.
 - 100 labeled agent trajectories with source, workflow, and redaction coverage reporting.
 - Precision/recall and positive-support report for major risk classes.
+- Calibration drift review against a checked-in public-safe baseline.
 - Provenance-backed release artifacts.
 
 ### M3: Production-Ready Open Source Product
@@ -67,4 +68,4 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 ## Current Target
 
-The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, release provenance baseline, and 100-trajectory labeled calibration baseline are implemented. The next gates are recurring calibration drift review, stronger adapter conformance tests, and broader real-world benchmark coverage without committing private logs.
+The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, release provenance baseline, 100-trajectory labeled calibration baseline, and checked-in calibration drift baseline are implemented. The next gates are stronger adapter conformance tests and broader real-world benchmark coverage without committing private logs.

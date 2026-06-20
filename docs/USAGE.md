@@ -132,11 +132,13 @@ Before publishing a new version:
 ```powershell
 python .\hulun.py validate
 python .\hulun.py calibrate
+python .\hulun.py calibration-drift
 python -m pytest -q
 ```
 
 `validate` writes `.hulun/validation_report.md` and `.hulun/validation_report.json`.
 `calibrate` writes `.hulun/calibration_report.md` and `.hulun/calibration_report.json` with component support, precision, recall, false-positive rate, false-negative rate, source coverage, workflow coverage, and redaction coverage over 100 labeled trajectories.
+`calibration-drift` writes `.hulun/calibration_drift_report.md` and `.hulun/calibration_drift_report.json` by comparing current calibration against `docs/calibration_baseline.json`. Regressions fail unless `--rationale` is provided for an intentional review.
 
 ## Benchmark Scan Performance
 

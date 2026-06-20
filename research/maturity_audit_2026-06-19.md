@@ -101,6 +101,13 @@ Sources:
 - Report source class, workflow class, label source, redaction status, and source URI in calibration JSON and Markdown.
 - Keep external fixtures schema-derived and public-safe; do not commit private conversation logs.
 
+## Tenth Remediation Slice
+
+- Add a checked-in public-safe calibration baseline summary derived from the accepted v0.14.0 calibration gate.
+- Add `calibration-drift` to compare current calibration against baseline dataset size, label coverage, source coverage, workflow coverage, redaction coverage, source URI coverage, component support, precision, and recall.
+- Fail unexplained calibration regressions while allowing an explicit `--rationale` path for reviewed intentional changes.
+- Add calibration and calibration-drift gates to CI and Release workflows.
+
 ## Product Position
 
-HulunGuard is currently moving from developer preview toward a reliable developer product. The M2 calibration baseline now includes external public-source coverage. It should not be marketed as production-ready until recurring calibration drift review, adapter conformance tests, and broader real-world benchmark coverage are in place without committing private logs.
+HulunGuard is currently moving from developer preview toward a reliable developer product. The M2 calibration baseline now includes external public-source coverage and drift review. It should not be marketed as production-ready until adapter conformance tests and broader real-world benchmark coverage are in place without committing private logs.

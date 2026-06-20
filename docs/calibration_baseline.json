@@ -1,0 +1,215 @@
+{
+  "schema": "hulun.calibration_baseline.v1",
+  "baseline_id": "v0.14.0-accepted-calibration",
+  "source_version": "0.14.0",
+  "dataset": {
+    "schema": "hulun.trajectory_dataset.v1",
+    "size": 100,
+    "labels": {
+      "healthy": 10,
+      "unsupported-final": 10,
+      "failure-masking": 15,
+      "retry-loop": 15,
+      "context-decay": 10,
+      "polish-without-progress": 10,
+      "cost-pressure": 15,
+      "uncertainty": 15
+    },
+    "source_classes": {
+      "curated-public-safe": 80,
+      "external-public-swe-agent-trajectory": 5,
+      "external-public-openhands-event-log": 5,
+      "external-public-opentelemetry-genai-trace": 5,
+      "external-public-openinference-trace": 5
+    },
+    "workflow_classes": {
+      "calibration": 80,
+      "coding": 5,
+      "ops": 5,
+      "artifact": 5,
+      "research": 5
+    },
+    "label_sources": {
+      "project-maintainer curated public-safe trajectory": 80,
+      "public SWE-agent trajectory schema plus maintainer component labels": 5,
+      "public OpenHands event-system docs plus maintainer component labels": 5,
+      "public OpenTelemetry GenAI observability docs plus maintainer component labels": 5,
+      "public OpenInference trace spec plus maintainer component labels": 5
+    },
+    "redaction_statuses": {
+      "no-private-content": 80,
+      "public-schema-derived-no-private-content": 20
+    },
+    "source_uris": [
+      "https://docs.openhands.dev/sdk/arch/events",
+      "https://github.com/Arize-ai/openinference/blob/main/spec/traces.md",
+      "https://github.com/SWE-agent/SWE-agent/blob/main/docs/usage/trajectories.md",
+      "https://opentelemetry.io/blog/2026/genai-observability/",
+      "internal://hulunguard/calibration/curated"
+    ],
+    "component_positive_thresholds": {
+      "evidence_gap": 1,
+      "claim_overhang": 1,
+      "unfinished_criteria": 1,
+      "stagnation": 8,
+      "unhandled_failures": 1,
+      "context_decay": 1,
+      "intent_drift": 2,
+      "phase_disorder": 1,
+      "polish_without_progress": 1,
+      "retry_loop": 1,
+      "cost_pressure": 1,
+      "uncertainty": 1
+    },
+    "required_component_support": [
+      "evidence_gap",
+      "claim_overhang",
+      "unfinished_criteria",
+      "stagnation",
+      "unhandled_failures",
+      "context_decay",
+      "intent_drift",
+      "phase_disorder",
+      "polish_without_progress",
+      "retry_loop",
+      "cost_pressure",
+      "uncertainty"
+    ]
+  },
+  "component_support": {
+    "evidence_gap": {
+      "expected_positive": 80,
+      "predicted_positive": 80,
+      "waiver": null
+    },
+    "claim_overhang": {
+      "expected_positive": 25,
+      "predicted_positive": 25,
+      "waiver": null
+    },
+    "unfinished_criteria": {
+      "expected_positive": 80,
+      "predicted_positive": 80,
+      "waiver": null
+    },
+    "stagnation": {
+      "expected_positive": 80,
+      "predicted_positive": 80,
+      "waiver": null
+    },
+    "unhandled_failures": {
+      "expected_positive": 30,
+      "predicted_positive": 30,
+      "waiver": null
+    },
+    "context_decay": {
+      "expected_positive": 10,
+      "predicted_positive": 10,
+      "waiver": null
+    },
+    "intent_drift": {
+      "expected_positive": 20,
+      "predicted_positive": 20,
+      "waiver": null
+    },
+    "phase_disorder": {
+      "expected_positive": 25,
+      "predicted_positive": 25,
+      "waiver": null
+    },
+    "polish_without_progress": {
+      "expected_positive": 10,
+      "predicted_positive": 10,
+      "waiver": null
+    },
+    "retry_loop": {
+      "expected_positive": 15,
+      "predicted_positive": 15,
+      "waiver": null
+    },
+    "cost_pressure": {
+      "expected_positive": 15,
+      "predicted_positive": 15,
+      "waiver": null
+    },
+    "uncertainty": {
+      "expected_positive": 15,
+      "predicted_positive": 15,
+      "waiver": null
+    }
+  },
+  "component_metrics": {
+    "evidence_gap": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive_rate": 0.0,
+      "false_negative_rate": 0.0
+    },
+    "claim_overhang": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive_rate": 0.0,
+      "false_negative_rate": 0.0
+    },
+    "unfinished_criteria": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive_rate": 0.0,
+      "false_negative_rate": 0.0
+    },
+    "stagnation": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive_rate": 0.0,
+      "false_negative_rate": 0.0
+    },
+    "unhandled_failures": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive_rate": 0.0,
+      "false_negative_rate": 0.0
+    },
+    "context_decay": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive_rate": 0.0,
+      "false_negative_rate": 0.0
+    },
+    "intent_drift": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive_rate": 0.0,
+      "false_negative_rate": 0.0
+    },
+    "phase_disorder": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive_rate": 0.0,
+      "false_negative_rate": 0.0
+    },
+    "polish_without_progress": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive_rate": 0.0,
+      "false_negative_rate": 0.0
+    },
+    "retry_loop": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive_rate": 0.0,
+      "false_negative_rate": 0.0
+    },
+    "cost_pressure": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive_rate": 0.0,
+      "false_negative_rate": 0.0
+    },
+    "uncertainty": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive_rate": 0.0,
+      "false_negative_rate": 0.0
+    }
+  }
+}

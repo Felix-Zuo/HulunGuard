@@ -10,6 +10,8 @@ from .util import next_id, utc_now
 
 DATASET_SCHEMA = "hulun.trajectory_dataset.v1"
 CALIBRATION_SCHEMA = "hulun.calibration.v1"
+CALIBRATION_BASELINE_SCHEMA = "hulun.calibration_baseline.v1"
+CALIBRATION_DRIFT_SCHEMA = "hulun.calibration_drift.v1"
 CURATED_TRAJECTORIES_PER_LABEL = 10
 EXTERNAL_TRAJECTORIES_PER_SOURCE = 5
 PUBLIC_SOURCE_URIS = {
@@ -628,6 +630,169 @@ def run_trajectory_calibration(
     }
 
 
+def build_calibration_baseline(result: dict[str, Any], *, baseline_id: str, source_version: str) -> dict[str, Any]:
+    return {
+        "schema": CALIBRATION_BASELINE_SCHEMA,
+        "baseline_id": baseline_id,
+        "source_version": source_version,
+        "dataset": result["dataset"],
+        "component_support": result["component_support"],
+        "component_metrics": {
+            component: {
+                "precision": values["precision"],
+                "recall": values["recall"],
+                "false_positive_rate": values["false_positive_rate"],
+                "false_negative_rate": values["false_negative_rate"],
+            }
+            for component, values in result["component_metrics"].items()
+        },
+    }
+
+
+def _add_count_regressions(
+    regressions: list[dict[str, Any]],
+    *,
+    kind: str,
+    baseline_counts: dict[str, Any],
+    current_counts: dict[str, Any],
+) -> None:
+    for key, baseline_value in baseline_counts.items():
+        current_value = current_counts.get(key, 0)
+        if int(current_value) < int(baseline_value):
+            regressions.append(
+                {
+                    "kind": kind,
+                    "name": key,
+                    "baseline": baseline_value,
+                    "current": current_value,
+                    "message": f"{kind} coverage for {key} decreased from {baseline_value} to {current_value}.",
+                }
+            )
+
+
+def _add_set_regressions(
+    regressions: list[dict[str, Any]],
+    *,
+    kind: str,
+    baseline_values: Iterable[Any],
+    current_values: Iterable[Any],
+) -> None:
+    current_set = {str(value) for value in current_values}
+    for value in sorted({str(value) for value in baseline_values}):
+        if value not in current_set:
+            regressions.append(
+                {
+                    "kind": kind,
+                    "name": value,
+                    "baseline": "present",
+                    "current": "missing",
+                    "message": f"{kind} entry is missing: {value}.",
+                }
+            )
+
+
+def compare_calibration_drift(
+    current_result: dict[str, Any],
+    baseline: dict[str, Any],
+    *,
+    rationale: str | None = None,
+) -> dict[str, Any]:
+    regressions: list[dict[str, Any]] = []
+    baseline_dataset = baseline.get("dataset", {})
+    current_dataset = current_result.get("dataset", {})
+    baseline_size = int(baseline_dataset.get("size", 0))
+    current_size = int(current_dataset.get("size", 0))
+    if current_size < baseline_size:
+        regressions.append(
+            {
+                "kind": "dataset_size",
+                "name": "size",
+                "baseline": baseline_size,
+                "current": current_size,
+                "message": f"dataset size decreased from {baseline_size} to {current_size}.",
+            }
+        )
+
+    for field in ("labels", "source_classes", "workflow_classes", "redaction_statuses"):
+        _add_count_regressions(
+            regressions,
+            kind=field,
+            baseline_counts=baseline_dataset.get(field, {}),
+            current_counts=current_dataset.get(field, {}),
+        )
+    _add_set_regressions(
+        regressions,
+        kind="source_uris",
+        baseline_values=baseline_dataset.get("source_uris", []),
+        current_values=current_dataset.get("source_uris", []),
+    )
+
+    baseline_support = baseline.get("component_support", {})
+    current_support = current_result.get("component_support", {})
+    for component, values in baseline_support.items():
+        current_values = current_support.get(component, {})
+        for field in ("expected_positive", "predicted_positive"):
+            baseline_value = int(values.get(field, 0))
+            current_value = int(current_values.get(field, 0))
+            if current_value < baseline_value:
+                regressions.append(
+                    {
+                        "kind": f"component_support.{field}",
+                        "name": component,
+                        "baseline": baseline_value,
+                        "current": current_value,
+                        "message": f"{component} {field} decreased from {baseline_value} to {current_value}.",
+                    }
+                )
+
+    baseline_metrics = baseline.get("component_metrics", {})
+    current_metrics = current_result.get("component_metrics", {})
+    for component, values in baseline_metrics.items():
+        current_values = current_metrics.get(component, {})
+        for field in ("precision", "recall"):
+            baseline_value = float(values.get(field, 0.0))
+            current_value = float(current_values.get(field, 0.0))
+            if current_value < baseline_value:
+                regressions.append(
+                    {
+                        "kind": f"component_metrics.{field}",
+                        "name": component,
+                        "baseline": round(baseline_value, 4),
+                        "current": round(current_value, 4),
+                        "message": f"{component} {field} decreased from {baseline_value:.4f} to {current_value:.4f}.",
+                    }
+                )
+
+    status = "pass"
+    passed = True
+    if regressions and rationale:
+        status = "warn"
+    elif regressions:
+        status = "fail"
+        passed = False
+
+    return {
+        "schema": CALIBRATION_DRIFT_SCHEMA,
+        "generated_at": utc_now(),
+        "baseline": {
+            "schema": baseline.get("schema"),
+            "baseline_id": baseline.get("baseline_id"),
+            "source_version": baseline.get("source_version"),
+        },
+        "current": {
+            "dataset_size": current_dataset.get("size"),
+            "gate_passed": current_result.get("gate", {}).get("passed"),
+        },
+        "gate": {
+            "status": status,
+            "passed": passed,
+            "regression_count": len(regressions),
+            "rationale": rationale,
+        },
+        "regressions": regressions,
+    }
+
+
 def build_calibration_markdown(result: dict[str, Any]) -> str:
     lines = [
         "# HulunGuard Calibration Report",
@@ -722,4 +887,33 @@ def build_calibration_markdown(result: dict[str, Any]) -> str:
 
 
 def calibration_json(result: dict[str, Any]) -> str:
+    return json.dumps(result, ensure_ascii=False, indent=2) + "\n"
+
+
+def build_calibration_drift_markdown(result: dict[str, Any]) -> str:
+    lines = [
+        "# HulunGuard Calibration Drift Report",
+        "",
+        f"Generated: {result['generated_at']}",
+        f"Baseline: {result['baseline'].get('baseline_id') or 'unknown'}",
+        f"Baseline version: {result['baseline'].get('source_version') or 'unknown'}",
+        f"Current dataset size: {result['current'].get('dataset_size')}",
+        f"Gate: {result['gate']['status']}",
+        f"Regressions: {result['gate']['regression_count']}",
+    ]
+    if result["gate"].get("rationale"):
+        lines.append(f"Rationale: {result['gate']['rationale']}")
+    lines.extend(["", "## Regressions", ""])
+    if result["regressions"]:
+        for regression in result["regressions"]:
+            lines.append(
+                f"- {regression['kind']} `{regression['name']}`: "
+                f"{regression['baseline']} -> {regression['current']}. {regression['message']}"
+            )
+    else:
+        lines.append("No calibration drift regressions.")
+    return "\n".join(lines) + "\n"
+
+
+def calibration_drift_json(result: dict[str, Any]) -> str:
     return json.dumps(result, ensure_ascii=False, indent=2) + "\n"

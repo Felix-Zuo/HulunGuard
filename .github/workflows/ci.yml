@@ -34,6 +34,10 @@ jobs:
         run: python -m pytest -q
       - name: HulunGuard validation
         run: python -m hulun_guard validate
+      - name: HulunGuard calibration
+        run: python -m hulun_guard calibrate
+      - name: HulunGuard calibration drift
+        run: python -m hulun_guard calibration-drift
       - name: HulunGuard benchmark
         run: python -m hulun_guard benchmark --events 10000 --max-ms 1000
       - name: Build package
