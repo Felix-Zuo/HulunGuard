@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.19.0 - 2026-06-20
+
+- Added a public schema registry, migration/normalization layer, and `schema-check` compatibility gate for legacy JSON fixtures.
+- Normalized legacy project state and conversation ledgers on load while preserving evidence, privacy metadata, events, checkpoints, and last risk scans.
+- Documented schema compatibility in `docs/SCHEMAS.md` and added the gate to CI, Release, PR, and release-checklist workflows.
+
 ## 0.18.0 - 2026-06-20
 
 - Added `cleanup` for dry-run and explicit-apply retention cleanup of expired project events, evidence records, conversation events, stale scans, and generated `.hulun/` reports.

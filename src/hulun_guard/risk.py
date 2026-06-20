@@ -4,6 +4,7 @@ from collections import Counter
 from typing import Any
 
 from .constants import FAILURE_EVENT_TYPES, USEFUL_EVENT_TYPES
+from .schemas import RISK_SCHEMA
 from .storage import criteria
 from .util import age_minutes, clamp_score, overlap_ratio, tokens, utc_now
 
@@ -417,7 +418,7 @@ def scan_state(
     band = band_for(score)
     blocked = score >= configured_threshold
     result = {
-        "schema": "hulun.risk.v1",
+        "schema": RISK_SCHEMA,
         "generated_at": utc_now(),
         "score": score,
         "slop_index": score,

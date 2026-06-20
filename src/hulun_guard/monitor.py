@@ -11,6 +11,7 @@ from typing import Any
 
 from .constants import BOARD_FILE, MONITORS_DIR
 from .risk import band_for, scan_state
+from .schemas import MONITOR_SCHEMA
 from .storage import hulun_dir, load_state
 from .util import clamp_score, next_id, utc_now
 
@@ -96,7 +97,7 @@ def create_monitor(
     now = utc_now()
     score = clamp_score(score)
     data = {
-        "schema": "hulun.monitor.v1",
+        "schema": MONITOR_SCHEMA,
         "id": new_monitor_id(),
         "conversation": conversation,
         "group": group,

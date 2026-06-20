@@ -11,6 +11,7 @@ from .constants import CONVERSATIONS_DIR, FAILURE_EVENT_TYPES, USEFUL_EVENT_TYPE
 from .monitor import create_monitor, hulun_home, launch_widget, update_monitor
 from .privacy import DEFAULT_RETENTION_DAYS, sanitize_event
 from .risk import band_for
+from .schemas import CONVERSATION_RISK_SCHEMA, CONVERSATION_SCHEMA, normalize_conversation
 from .util import age_minutes, clamp_score, next_counter_id, next_id, utc_now
 
 CONVERSATION_USEFUL_TYPES = USEFUL_EVENT_TYPES | {
@@ -54,7 +55,7 @@ def load_conversation(conversation_id: str) -> dict[str, Any]:
     path = conversation_path(conversation_id)
     if not path.exists():
         raise SystemExit(f"Unknown conversation id: {conversation_id}")
-    return json.loads(path.read_text(encoding="utf-8"))
+    return normalize_conversation(json.loads(path.read_text(encoding="utf-8")), source=str(path))
 
 
 def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
@@ -99,6 +100,7 @@ def conversation_write_lock(conversation_id: str) -> Any:
 
 
 def save_conversation(data: dict[str, Any]) -> None:
+    data = normalize_conversation(data, source=str(conversation_path(str(data.get("id", "C1")))))
     data["updated_at"] = utc_now()
     _atomic_write_json(conversation_path(data["id"]), data)
 
@@ -114,7 +116,7 @@ def start_conversation(
 ) -> dict[str, Any]:
     now = utc_now()
     data = {
-        "schema": "hulun.conversation.v1",
+        "schema": CONVERSATION_SCHEMA,
         "id": new_conversation_id(),
         "name": name,
         "group": group,
@@ -371,7 +373,7 @@ def scan_conversation(data: dict[str, Any], *, checkpoint_stale_minutes: int = 4
     else:
         action = "continue"
     return {
-        "schema": "hulun.conversation_risk.v1",
+        "schema": CONVERSATION_RISK_SCHEMA,
         "generated_at": utc_now(),
         "score": score,
         "slop_index": score,

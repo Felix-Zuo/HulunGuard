@@ -133,6 +133,14 @@ Sources:
 - Cover dry-run behavior, actual cleanup, conversation cleanup, generated report deletion, and outside-directory protection with tests.
 - Document the retention model and maintainer expectations in `docs/RETENTION.md`; add cleanup dry-run to CI, Release, PR, and release-checklist gates.
 
+## Fourteenth Remediation Slice
+
+- Add a public schema registry for HulunGuard state, risk, conversation, validation, calibration, benchmark, retention, doctor, and adapter command reports.
+- Add a migration and normalization layer for older project state and conversation ledgers so evidence, privacy metadata, events, checkpoints, and last risk scans are preserved while writing current schemas.
+- Add fixture-based schema compatibility tests for legacy state, risk, conversation, calibration, benchmark, and adapter export command reports.
+- Add `schema-check` as a release gate and include it in CI, Release, PR, doctor, and release-checklist workflows.
+- Document schema compatibility promises and minor-version bump rules in `docs/SCHEMAS.md`.
+
 ## Product Position
 
-HulunGuard is currently moving from developer preview toward a reliable developer product. The M2 baseline now includes external public-source calibration coverage, drift review, adapter conformance coverage, public-safe real-world benchmark coverage, and retention cleanup. It should not be marketed as production-ready until schema migration discipline, broader adapter integration tests, a documented threat model, and larger real-world coverage are in place.
+HulunGuard is currently moving from developer preview toward a reliable developer product. The M2 baseline now includes external public-source calibration coverage, drift review, adapter conformance coverage, public-safe real-world benchmark coverage, retention cleanup, and schema compatibility. It should not be marketed as production-ready until broader adapter integration tests, a documented threat model, and larger real-world coverage are in place.

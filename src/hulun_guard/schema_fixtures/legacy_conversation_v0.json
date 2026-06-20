@@ -1,0 +1,28 @@
+{
+  "id": "C9",
+  "conversation": "legacy compatibility conversation",
+  "group": "compat",
+  "root": ".",
+  "messages": [
+    {
+      "id": "EV9",
+      "event_type": "tool_result",
+      "summary": "legacy conversation tool result",
+      "result": "pass",
+      "evidence_ids": ["E9"],
+      "created_at": "2026-01-01T00:02:00+00:00",
+      "privacy": {
+        "mode": "redacted-default",
+        "retention_days": 7
+      }
+    }
+  ],
+  "last_scan": {
+    "score": 19,
+    "band": "green",
+    "components": {
+      "pending_tools": 0
+    },
+    "reasons": ["legacy conversation was healthy"]
+  }
+}

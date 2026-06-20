@@ -8,10 +8,9 @@ from typing import Any
 from .constants import CONVERSATIONS_DIR
 from .monitor import hulun_home
 from .privacy import DEFAULT_RETENTION_DAYS
+from .schemas import RETENTION_CLEANUP_SCHEMA
 from .storage import hulun_dir, load_state, save_state
 from .util import parse_time, utc_now
-
-RETENTION_CLEANUP_SCHEMA = "hulun.retention_cleanup.v1"
 
 GENERATED_REPORT_FILES = (
     "risk.json",

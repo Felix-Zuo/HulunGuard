@@ -21,6 +21,7 @@ Every release must pass:
 
 - Unit tests.
 - Built-in HulunGuard validation scenarios.
+- Schema compatibility fixture gate.
 - Benchmark gate for expected scan latency.
 - Retention cleanup dry-run gate.
 - Ruff import/syntax gate.

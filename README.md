@@ -20,7 +20,7 @@ using HulunGuard on real work.
 - Privacy-safe trace ingestion: import generic JSON/JSONL, OpenTelemetry GenAI, OpenInference, OpenHands-like events, and SWE-agent-like trajectories without persisting raw sensitive payloads by default.
 - Python SDK and MCP server: agents can record runtime state directly without shell glue.
 - Built-in validation suite: run synthetic healthy/slop-risk scenarios before release.
-- Product operations: `quickstart`, `doctor`, `cleanup`, and `benchmark` commands for onboarding, diagnostics, retention cleanup, scan performance, and public-safe real-world workflow checks.
+- Product operations: `quickstart`, `doctor`, `schema-check`, `cleanup`, and `benchmark` commands for onboarding, diagnostics, schema compatibility, retention cleanup, scan performance, and public-safe real-world workflow checks.
 - Conversation runtime monitoring: per-conversation events, user challenges, pending tool calls, unresolved failures, unsupported final claims, and monitor sync.
 
 ## Quick Start
@@ -84,6 +84,7 @@ python .\hulun.py doctor --run-validation
 python .\hulun.py validate
 python .\hulun.py calibrate
 python .\hulun.py calibration-drift
+python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000
 python .\hulun.py benchmark --suite real-world
@@ -197,6 +198,7 @@ The hook should show `hulunguard` as eligible, loadable, enabled, and attached t
 - `docs/`: usage and integration docs.
 - `research/`: source matrix and industrial design notes.
 - `docs/ADAPTER_CONFORMANCE.md`: supported adapter contract and unsupported-field policy.
+- `docs/SCHEMAS.md`: public JSON schema compatibility and migration policy.
 - `docs/RETENTION.md`: local retention cleanup model and safety boundary.
 - `docs/REAL_WORLD_BENCHMARKS.md`: public-safe real-world benchmark suite and fixture policy.
 
@@ -206,6 +208,7 @@ The hook should show `hulunguard` as eligible, loadable, enabled, and attached t
 python -m unittest discover -s tests
 python .\hulun.py validate
 python .\hulun.py calibration-drift
+python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000
 python .\hulun.py benchmark --suite real-world

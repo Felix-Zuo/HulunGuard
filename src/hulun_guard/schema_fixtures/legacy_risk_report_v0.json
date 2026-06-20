@@ -1,0 +1,11 @@
+{
+  "index": 44,
+  "band": "yellow",
+  "threshold": 66,
+  "blocked": false,
+  "components": {
+    "evidence_gap": 10,
+    "claim_overhang": 8
+  },
+  "reasons": ["legacy risk report used index instead of score"]
+}

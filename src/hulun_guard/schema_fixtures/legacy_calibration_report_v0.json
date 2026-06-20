@@ -1,0 +1,16 @@
+{
+  "dataset_size": 8,
+  "passed": true,
+  "component_metrics": {
+    "evidence_gap": {
+      "precision": 1.0,
+      "recall": 1.0
+    }
+  },
+  "component_support": {
+    "evidence_gap": {
+      "expected_positive": 4,
+      "predicted_positive": 4
+    }
+  }
+}

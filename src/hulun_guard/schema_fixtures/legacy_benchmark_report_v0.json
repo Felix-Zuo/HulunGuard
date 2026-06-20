@@ -1,0 +1,9 @@
+{
+  "version": "0.0.0",
+  "event_count": 100,
+  "latency_ms": 2.5,
+  "events_per_second": 40000,
+  "score": 11,
+  "band": "green",
+  "passed": true
+}
