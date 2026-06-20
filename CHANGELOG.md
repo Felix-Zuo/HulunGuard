@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.0 - 2026-06-20
+
+- Added `cleanup` for dry-run and explicit-apply retention cleanup of expired project events, evidence records, conversation events, stale scans, and generated `.hulun/` reports.
+- Added path-boundary protection so cleanup refuses to delete outside the project `.hulun` directory or `HULUN_HOME/conversations`.
+- Documented retention cleanup in `docs/RETENTION.md` and added cleanup dry-run to CI, Release, PR, and release-checklist gates.
+
 ## 0.17.0 - 2026-06-20
 
 - Added `benchmark --suite real-world` with 12 public-safe workflow fixtures across coding, research, ops, and artifact tasks.

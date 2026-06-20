@@ -127,6 +127,20 @@ python .\hulun.py ingest --file .\trace.jsonl --include-sensitive --retention-da
 python .\hulun.py conversation event --id C1 --type tool_result --summary "raw local debug text" --include-sensitive --retention-days 7
 ```
 
+Preview expired local records:
+
+```powershell
+python .\hulun.py cleanup --json
+```
+
+Apply cleanup only in a trusted local working copy:
+
+```powershell
+python .\hulun.py cleanup --apply --write-report
+```
+
+`cleanup` prunes expired project events, evidence records, conversation events, stale scans, and generated `.hulun/` reports. It refuses to delete anything outside the project `.hulun` directory or `HULUN_HOME/conversations`. See `docs/RETENTION.md`.
+
 ## Run Release Validation
 
 Before publishing a new version:
@@ -135,6 +149,7 @@ Before publishing a new version:
 python .\hulun.py validate
 python .\hulun.py calibrate
 python .\hulun.py calibration-drift
+python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000
 python .\hulun.py benchmark --suite real-world
 python -m pytest -q

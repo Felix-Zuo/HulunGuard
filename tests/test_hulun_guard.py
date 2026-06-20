@@ -16,7 +16,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from hulun_guard import calibration
+from hulun_guard import calibration, retention
 from hulun_guard.cli import main
 from hulun_guard.mcp import HulunMCPServer
 from hulun_guard.sdk import HulunGuardClient
@@ -1023,6 +1023,177 @@ class HulunGuardCliTest(unittest.TestCase):
             payload = json.loads(out)
             self.assertFalse(payload["gate"]["passed"])
             self.assertTrue(any(failure["kind"] == "fixture_too_large" for failure in payload["gate"]["failures"]))
+
+    def test_cleanup_dry_run_reports_expired_records_without_deleting(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertEqual(self.run_cli("--root", tmp, "init", "--objective", "cleanup dry run", "--criterion", "evidence retained")[0], 0)
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "record-evidence",
+                    "--kind",
+                    "test",
+                    "--summary",
+                    "old test evidence",
+                    "--retention-days",
+                    "1",
+                )[0],
+                0,
+            )
+            state_path = root / ".hulun" / "state.json"
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            old = "2000-01-01T00:00:00+00:00"
+            state["events"][-1]["created_at"] = old
+            state["evidence"][-1]["created_at"] = old
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            benchmark_report = root / ".hulun" / "benchmark_report.json"
+            benchmark_report.write_text(json.dumps({"generated_at": old}), encoding="utf-8")
+
+            code, out = self.run_cli("--root", tmp, "cleanup", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertTrue(payload["dry_run"])
+            self.assertEqual(payload["summary"]["expired_project_events"], 1)
+            self.assertEqual(payload["summary"]["expired_project_evidence"], 1)
+            self.assertTrue(any(item["name"] == "benchmark_report.json" and item["action"] == "would_delete" for item in payload["reports"]["items"]))
+            self.assertTrue(benchmark_report.exists())
+            after = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(len(after["events"]), len(state["events"]))
+            self.assertEqual(len(after["evidence"]), len(state["evidence"]))
+
+    def test_cleanup_apply_prunes_project_conversation_and_reports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            old_home = os.environ.get("HULUN_HOME")
+            os.environ["HULUN_HOME"] = home
+            try:
+                root = Path(tmp)
+                self.assertEqual(self.run_cli("--root", tmp, "init", "--objective", "cleanup apply", "--criterion", "fresh state remains")[0], 0)
+                self.assertEqual(
+                    self.run_cli(
+                        "--root",
+                        tmp,
+                        "record-evidence",
+                        "--kind",
+                        "test",
+                        "--summary",
+                        "expired evidence",
+                        "--retention-days",
+                        "1",
+                    )[0],
+                    0,
+                )
+                state_path = root / ".hulun" / "state.json"
+                state = json.loads(state_path.read_text(encoding="utf-8"))
+                evidence_id = state["evidence"][-1]["id"]
+                old = "2000-01-01T00:00:00+00:00"
+                state["events"][-1]["created_at"] = old
+                state["evidence"][-1]["created_at"] = old
+                state["criteria"][0]["evidence"] = [evidence_id]
+                state_path.write_text(json.dumps(state), encoding="utf-8")
+
+                risk_report = root / ".hulun" / "risk_report.md"
+                risk_report.write_text("old risk report", encoding="utf-8")
+                benchmark_report = root / ".hulun" / "benchmark_report.json"
+                benchmark_report.write_text(json.dumps({"generated_at": old}), encoding="utf-8")
+
+                code, out = self.run_cli("--root", tmp, "conversation", "start", "--name", "cleanup-conversation", "--json")
+                self.assertEqual(code, 0, out)
+                conversation = json.loads(out)
+                self.assertEqual(
+                    self.run_cli(
+                        "--root",
+                        tmp,
+                        "conversation",
+                        "event",
+                        "--id",
+                        conversation["id"],
+                        "--type",
+                        "tool_result",
+                        "--summary",
+                        "expired conversation event",
+                        "--retention-days",
+                        "1",
+                    )[0],
+                    0,
+                )
+                conversation_path = Path(home) / "conversations" / f"{conversation['id']}.json"
+                conversation_data = json.loads(conversation_path.read_text(encoding="utf-8"))
+                conversation_data["events"][-1]["created_at"] = old
+                conversation_path.write_text(json.dumps(conversation_data), encoding="utf-8")
+
+                code, out = self.run_cli("--root", tmp, "cleanup", "--apply", "--json")
+                self.assertEqual(code, 0, out)
+                payload = json.loads(out)
+                self.assertFalse(payload["dry_run"])
+                self.assertEqual(payload["summary"]["expired_project_events"], 1)
+                self.assertEqual(payload["summary"]["expired_project_evidence"], 1)
+                self.assertEqual(payload["summary"]["expired_conversation_events"], 1)
+                self.assertGreaterEqual(payload["summary"]["report_files_deleted"], 1)
+
+                cleaned = json.loads(state_path.read_text(encoding="utf-8"))
+                self.assertNotIn(evidence_id, [item["id"] for item in cleaned["evidence"]])
+                self.assertEqual(cleaned["criteria"][0]["evidence"], [])
+                cleaned_conversation = json.loads(conversation_path.read_text(encoding="utf-8"))
+                self.assertFalse(any(event.get("summary") == "expired conversation event" for event in cleaned_conversation["events"]))
+                self.assertFalse(benchmark_report.exists())
+                self.assertTrue((root / ".hulun" / "retention_cleanup_report.json").exists())
+                self.assertTrue((root / ".hulun" / "retention_cleanup_report.md").exists())
+            finally:
+                if old_home is None:
+                    os.environ.pop("HULUN_HOME", None)
+                else:
+                    os.environ["HULUN_HOME"] = old_home
+
+    def test_cleanup_tolerates_non_dict_ledger_items(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertEqual(self.run_cli("--root", tmp, "init", "--objective", "cleanup dirty ledger", "--criterion", "state survives")[0], 0)
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "record-evidence",
+                    "--kind",
+                    "test",
+                    "--summary",
+                    "expired evidence",
+                    "--retention-days",
+                    "1",
+                )[0],
+                0,
+            )
+            state_path = root / ".hulun" / "state.json"
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            evidence_id = state["evidence"][-1]["id"]
+            old = "2000-01-01T00:00:00+00:00"
+            state["events"][-1]["created_at"] = old
+            state["evidence"][-1]["created_at"] = old
+            state["events"].append("legacy-event-junk")
+            state["evidence"].append("legacy-evidence-junk")
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+
+            code, out = self.run_cli("--root", tmp, "cleanup", "--apply", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["summary"]["expired_project_events"], 1)
+            self.assertEqual(payload["summary"]["expired_project_evidence"], 1)
+            cleaned = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertNotIn(evidence_id, [item["id"] for item in cleaned["evidence"] if isinstance(item, dict)])
+            self.assertIn("legacy-event-junk", cleaned["events"])
+            self.assertIn("legacy-evidence-junk", cleaned["evidence"])
+
+    def test_cleanup_blocks_report_paths_outside_hulun_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            outside = root / "outside.txt"
+            outside.write_text("do not delete", encoding="utf-8")
+            with mock.patch.object(retention, "GENERATED_REPORT_FILES", ("../outside.txt",)):
+                result = retention.run_retention_cleanup(root, dry_run=False, include_conversations=False)
+            self.assertFalse(result["gate"]["passed"])
+            self.assertEqual(result["summary"]["safety_violations"], 1)
+            self.assertTrue(outside.exists())
 
     def test_ingest_streams_jsonl_without_echoing_all_events(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
