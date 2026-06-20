@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from .risk import scan_state
+from .schemas import VALIDATION_SCHEMA
 from .storage import criteria, initial_state
 from .util import next_id, utc_now
 
@@ -173,7 +174,7 @@ def run_validation_suite() -> dict[str, Any]:
         if expected == band:
             passes += 1
     return {
-        "schema": "hulun.validation.v1",
+        "schema": VALIDATION_SCHEMA,
         "generated_at": utc_now(),
         "passes": passes,
         "total": len(scenarios),

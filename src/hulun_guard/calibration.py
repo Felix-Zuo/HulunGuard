@@ -5,13 +5,11 @@ from collections.abc import Iterable
 from typing import Any
 
 from .risk import WEIGHTS, scan_state
+from .schemas import CALIBRATION_BASELINE_SCHEMA, CALIBRATION_DRIFT_SCHEMA, CALIBRATION_SCHEMA, TRAJECTORY_DATASET_SCHEMA
 from .storage import criteria, initial_state
 from .util import next_id, utc_now
 
-DATASET_SCHEMA = "hulun.trajectory_dataset.v1"
-CALIBRATION_SCHEMA = "hulun.calibration.v1"
-CALIBRATION_BASELINE_SCHEMA = "hulun.calibration_baseline.v1"
-CALIBRATION_DRIFT_SCHEMA = "hulun.calibration_drift.v1"
+DATASET_SCHEMA = TRAJECTORY_DATASET_SCHEMA
 CURATED_TRAJECTORIES_PER_LABEL = 10
 EXTERNAL_TRAJECTORIES_PER_SOURCE = 5
 PUBLIC_SOURCE_URIS = {

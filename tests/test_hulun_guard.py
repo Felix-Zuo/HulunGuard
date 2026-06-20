@@ -16,10 +16,11 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from hulun_guard import calibration, retention
+from hulun_guard import calibration, retention, schemas
 from hulun_guard.cli import main
 from hulun_guard.mcp import HulunMCPServer
 from hulun_guard.sdk import HulunGuardClient
+from hulun_guard.storage import load_state, save_state
 
 
 class HulunGuardCliTest(unittest.TestCase):
@@ -1024,6 +1025,71 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertFalse(payload["gate"]["passed"])
             self.assertTrue(any(failure["kind"] == "fixture_too_large" for failure in payload["gate"]["failures"]))
 
+    def test_schema_check_migrates_legacy_fixtures(self) -> None:
+        code, out = self.run_cli("schema-check", "--json")
+        self.assertEqual(code, 0, out)
+        payload = json.loads(out)
+        self.assertEqual(payload["schema"], schemas.SCHEMA_COMPATIBILITY_SCHEMA)
+        self.assertTrue(payload["gate"]["passed"])
+        kinds = {item["kind"] for item in payload["fixtures"]}
+        self.assertTrue({"state", "risk", "conversation", "calibration", "benchmark", "export_opentelemetry"}.issubset(kinds))
+
+    def test_schema_check_fails_on_unsupported_future_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture_dir = Path(tmp) / "fixtures"
+            fixture_dir.mkdir()
+            (fixture_dir / "future_state.json").write_text(json.dumps({"schema": "hulun.state.v99"}), encoding="utf-8")
+            code, out = self.run_cli("schema-check", "--fixture-dir", str(fixture_dir), "--json")
+            self.assertEqual(code, 2)
+            payload = json.loads(out)
+            self.assertFalse(payload["gate"]["passed"])
+            self.assertEqual(payload["gate"]["failures"][0]["kind"], "fixture_failed")
+
+    def test_schema_check_fails_on_empty_fixture_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.run_cli("schema-check", "--fixture-dir", tmp, "--json")
+            self.assertEqual(code, 2)
+            payload = json.loads(out)
+            self.assertFalse(payload["gate"]["passed"])
+            self.assertEqual(payload["gate"]["failures"][0]["kind"], "fixture_dir_empty")
+
+    def test_load_state_migrates_legacy_state_without_losing_privacy_or_risk(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            hulun = root / ".hulun"
+            hulun.mkdir()
+            legacy = schemas.DEFAULT_SCHEMA_FIXTURE_DIR / "legacy_state_v0.json"
+            (hulun / "state.json").write_text(legacy.read_text(encoding="utf-8"), encoding="utf-8")
+
+            state = load_state(root)
+            self.assertEqual(state["schema"], schemas.STATE_SCHEMA)
+            self.assertEqual(state["criteria"][0]["id"], "C9")
+            self.assertEqual(state["evidence"][0]["id"], "E9")
+            self.assertEqual(state["evidence"][0]["privacy"]["retention_days"], 14)
+            self.assertEqual(state["events"][0]["privacy"]["retention_days"], 14)
+            self.assertEqual(state["last_scan"]["schema"], schemas.RISK_SCHEMA)
+            self.assertEqual(state["last_scan"]["score"], 12)
+            self.assertTrue(state["schema_migrations"])
+
+            save_state(root, state)
+            written = json.loads((hulun / "state.json").read_text(encoding="utf-8"))
+            self.assertEqual(written["schema"], schemas.STATE_SCHEMA)
+            self.assertEqual(written["evidence"][0]["privacy"]["retention_days"], 14)
+            self.assertEqual(written["last_scan"]["schema"], schemas.RISK_SCHEMA)
+
+    def test_current_commands_write_current_public_schemas(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertEqual(self.run_cli("--root", tmp, "init", "--objective", "schema current", "--criterion", "schemas are current")[0], 0)
+            self.assertEqual(self.run_cli("--root", tmp, "scan")[0], 0)
+            self.assertEqual(self.run_cli("--root", tmp, "validate")[0], 0)
+            self.assertEqual(self.run_cli("--root", tmp, "benchmark", "--events", "10")[0], 0)
+            self.assertEqual(self.run_cli("--root", tmp, "cleanup", "--json")[0], 0)
+            self.assertEqual(json.loads((root / ".hulun" / "state.json").read_text(encoding="utf-8"))["schema"], schemas.STATE_SCHEMA)
+            self.assertEqual(json.loads((root / ".hulun" / "risk.json").read_text(encoding="utf-8"))["schema"], schemas.RISK_SCHEMA)
+            self.assertEqual(json.loads((root / ".hulun" / "validation_report.json").read_text(encoding="utf-8"))["schema"], schemas.VALIDATION_SCHEMA)
+            self.assertEqual(json.loads((root / ".hulun" / "benchmark_report.json").read_text(encoding="utf-8"))["schema"], schemas.BENCHMARK_SCHEMA)
+
     def test_cleanup_dry_run_reports_expired_records_without_deleting(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1181,8 +1247,8 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertEqual(payload["summary"]["expired_project_evidence"], 1)
             cleaned = json.loads(state_path.read_text(encoding="utf-8"))
             self.assertNotIn(evidence_id, [item["id"] for item in cleaned["evidence"] if isinstance(item, dict)])
-            self.assertIn("legacy-event-junk", cleaned["events"])
-            self.assertIn("legacy-evidence-junk", cleaned["evidence"])
+            self.assertIn("legacy-event-junk", [item.get("summary") for item in cleaned["events"] if isinstance(item, dict)])
+            self.assertIn("legacy-evidence-junk", [item.get("summary") for item in cleaned["evidence"] if isinstance(item, dict)])
 
     def test_cleanup_blocks_report_paths_outside_hulun_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

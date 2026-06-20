@@ -13,6 +13,7 @@ from .constants import (
     VERIFY_FILE,
 )
 from .reports import build_resume_markdown
+from .schemas import STATE_SCHEMA, normalize_state
 from .util import utc_now
 
 
@@ -52,17 +53,18 @@ def load_state(root: Path, allow_legacy: bool = True) -> dict[str, Any]:
     path = state_path(root)
     if not path.exists() and allow_legacy and legacy_state_path(root).exists():
         state = json.loads(legacy_state_path(root).read_text(encoding="utf-8"))
-        state.setdefault("schema", "hulun.state.v1")
+        state = normalize_state(state, source=str(legacy_state_path(root)))
         state["migrated_from"] = str(legacy_state_path(root))
         return state
     if not path.exists():
         raise SystemExit(f"No HulunGuard state found: {path}. Run init first.")
-    return json.loads(path.read_text(encoding="utf-8"))
+    return normalize_state(json.loads(path.read_text(encoding="utf-8")), source=str(path))
 
 
 def save_state(root: Path, state: dict[str, Any], write_resume: bool = True) -> None:
+    state = normalize_state(state, source=str(state_path(root)))
     state["updated_at"] = utc_now()
-    state.setdefault("schema", "hulun.state.v1")
+    state["schema"] = STATE_SCHEMA
     hulun_dir(root).mkdir(parents=True, exist_ok=True)
     state_path(root).write_text(
         json.dumps(state, ensure_ascii=False, indent=2) + "\n",
@@ -93,7 +95,7 @@ def initial_state(
 ) -> dict[str, Any]:
     now = utc_now()
     return {
-        "schema": "hulun.state.v1",
+        "schema": STATE_SCHEMA,
         "version": 1,
         "created_at": now,
         "updated_at": now,

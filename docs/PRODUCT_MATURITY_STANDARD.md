@@ -41,6 +41,7 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 - Adapter conformance tests for CLI, SDK, MCP, and supported trace imports.
 - Public-safe real-world benchmark suite across coding, research, ops, and artifact workflows.
 - Retention cleanup for local project and conversation ledgers.
+- Backward-compatible schema migration gate for public JSON outputs.
 - Provenance-backed release artifacts.
 
 ### M3: Production-Ready Open Source Product
@@ -48,7 +49,6 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 - Async/batched event ingestion.
 - Cross-platform UI and no hidden local assumptions.
 - Integration tests for supported adapters.
-- Backward-compatible schema migrations.
 - Documented security model and threat model.
 - User-facing onboarding that works without repository-specific knowledge.
 
@@ -64,10 +64,10 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 - No final-gate relaxation without tests and a changelog entry.
 - No adapter can contain a developer machine path.
-- No release without CI, validation, calibration, calibration drift, retention cleanup dry-run, scan benchmark, real-world benchmark, and security scans.
+- No release without CI, validation, calibration, calibration drift, schema compatibility, retention cleanup dry-run, scan benchmark, real-world benchmark, and security scans.
 - No public claim that HulunGuard detects intent or truth; it computes reliability risk.
 - No private conversation logs in the repository.
 
 ## Current Target
 
-The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, release provenance baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, adapter conformance baseline, public-safe real-world benchmark baseline, and retention cleanup baseline are implemented. The next gates are schema migration discipline, broader adapter integration tests, threat-model documentation, and larger real-world coverage without committing private logs.
+The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, release provenance baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, adapter conformance baseline, public-safe real-world benchmark baseline, retention cleanup baseline, and schema compatibility baseline are implemented. The next gates are broader adapter integration tests, threat-model documentation, and larger real-world coverage without committing private logs.

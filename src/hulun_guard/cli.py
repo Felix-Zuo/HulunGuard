@@ -47,6 +47,15 @@ from .privacy import DEFAULT_RETENTION_DAYS, sanitize_evidence
 from .reports import build_board_html, build_dashboard_html, build_verify_markdown
 from .retention import retention_cleanup_json, run_retention_cleanup
 from .risk import scan_state
+from .schemas import (
+    BENCHMARK_SCHEMA,
+    CALIBRATION_DRIFT_ERROR_SCHEMA,
+    DOCTOR_SCHEMA,
+    EXPORT_OPENTELEMETRY_SCHEMA,
+    default_schema_fixture_dir,
+    run_schema_compatibility_check,
+    schema_compatibility_json,
+)
 from .sdk import append_project_event
 from .storage import (
     criteria,
@@ -380,7 +389,7 @@ def cmd_export_otel(args: argparse.Namespace) -> int:
     output = Path(args.output)
     output = output if output.is_absolute() else root / output
     write_json(output, payload)
-    result = {"schema": "hulun.export.opentelemetry.v1", "output": str(output), "spans": len(state.get("events", []))}
+    result = {"schema": EXPORT_OPENTELEMETRY_SCHEMA, "output": str(output), "spans": len(state.get("events", []))}
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
@@ -432,7 +441,7 @@ def cmd_calibration_drift(args: argparse.Namespace) -> int:
         baseline_path = root / baseline_path
     if not baseline_path.exists():
         payload = {
-            "schema": "hulun.calibration_drift_error.v1",
+            "schema": CALIBRATION_DRIFT_ERROR_SCHEMA,
             "error": "baseline_not_found",
             "baseline": str(baseline_path),
         }
@@ -445,7 +454,7 @@ def cmd_calibration_drift(args: argparse.Namespace) -> int:
         baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         payload = {
-            "schema": "hulun.calibration_drift_error.v1",
+            "schema": CALIBRATION_DRIFT_ERROR_SCHEMA,
             "error": "baseline_json_invalid",
             "baseline": str(baseline_path),
             "detail": str(exc),
@@ -526,7 +535,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     state_file = hulun_dir(root) / "state.json"
     add_check("state", "ok" if state_file.exists() else "warn", str(state_file) if state_file.exists() else "No state yet. Run hulun init.")
 
-    payload: dict[str, Any] = {"schema": "hulun.doctor.v1", "root": str(root), "checks": checks}
+    payload: dict[str, Any] = {"schema": DOCTOR_SCHEMA, "root": str(root), "checks": checks}
     if state_file.exists():
         try:
             state = load_state(root)
@@ -559,6 +568,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         payload["validation"] = validation
         status = "ok" if validation["passes"] == validation["total"] else "error"
         add_check("validation", status, f"{validation['passes']} / {validation['total']} scenarios.")
+        schema_compatibility = run_schema_compatibility_check(default_schema_fixture_dir(root))
+        payload["schema_compatibility"] = schema_compatibility
+        schema_status = "ok" if schema_compatibility["gate"]["passed"] else "error"
+        add_check("schema_compatibility", schema_status, f"{len(schema_compatibility['fixtures'])} fixtures.")
         calibration = run_trajectory_calibration()
         payload["calibration"] = {key: value for key, value in calibration.items() if key != "trajectories"}
         calibration_status = "ok" if calibration["gate"]["passed"] else "error"
@@ -605,6 +618,25 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
         if args.write_report or args.apply:
             report_dir = hulun_dir(root)
             print(f"Report: {report_dir / 'retention_cleanup_report.md'}")
+    return 0 if result["gate"]["passed"] else 2
+
+
+def cmd_schema_check(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    fixture_dir = Path(args.fixture_dir) if args.fixture_dir else default_schema_fixture_dir(root)
+    if args.fixture_dir and not fixture_dir.is_absolute():
+        fixture_dir = root / fixture_dir
+    result = run_schema_compatibility_check(fixture_dir)
+    if args.json:
+        print(schema_compatibility_json(result), end="")
+    else:
+        gate = result["gate"]
+        print(f"HulunGuard schema compatibility: {'pass' if gate['passed'] else 'fail'}")
+        print(f"Fixtures: {len(result['fixtures'])}")
+        print(f"Failures: {gate['failure_count']}")
+        for failure in gate["failures"]:
+            detail = ", ".join(f"{key}={value}" for key, value in failure.items())
+            print(f"- {detail}")
     return 0 if result["gate"]["passed"] else 2
 
 
@@ -683,7 +715,7 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
     elapsed_ms = (time.perf_counter() - started) * 1000.0
     events_per_second = args.events / max(elapsed_ms / 1000.0, 0.000001)
     result = {
-        "schema": "hulun.benchmark.v1",
+        "schema": BENCHMARK_SCHEMA,
         "generated_at": utc_now(),
         "version": package_version(),
         "events": args.events,
@@ -1264,6 +1296,11 @@ def build_parser() -> argparse.ArgumentParser:
     cleanup.add_argument("--write-report", action="store_true")
     cleanup.add_argument("--json", action="store_true")
     cleanup.set_defaults(func=cmd_cleanup)
+
+    schema_check = sub.add_parser("schema-check", parents=[root_parent])
+    schema_check.add_argument("--fixture-dir")
+    schema_check.add_argument("--json", action="store_true")
+    schema_check.set_defaults(func=cmd_schema_check)
 
     benchmark = sub.add_parser("benchmark", parents=[root_parent])
     benchmark.add_argument("--suite", choices=["scan", "real-world"], default="scan")

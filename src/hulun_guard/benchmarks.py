@@ -6,11 +6,10 @@ from collections import Counter
 from typing import Any
 
 from .risk import WEIGHTS, scan_state
+from .schemas import REAL_WORLD_BENCHMARK_SCHEMA, REAL_WORLD_FIXTURE_SCHEMA
 from .storage import criteria, initial_state
 from .util import next_id, utc_now
 
-REAL_WORLD_BENCHMARK_SCHEMA = "hulun.real_world_benchmark.v1"
-REAL_WORLD_FIXTURE_SCHEMA = "hulun.real_world_fixture.v1"
 FIXTURE_SOURCE_URI = "internal://hulunguard/benchmarks/public-safe-real-world"
 PUBLIC_SOURCE_URIS = {
     "openhands-events": "https://docs.openhands.dev/sdk/arch/events",

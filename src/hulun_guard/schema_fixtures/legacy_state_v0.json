@@ -1,0 +1,44 @@
+{
+  "objective": "Ship a legacy-compatible HulunGuard release",
+  "threshold": 60,
+  "success_criteria": [
+    {
+      "id": "C9",
+      "text": "legacy criterion has proof",
+      "status": "done",
+      "evidence": ["E9"]
+    }
+  ],
+  "proofs": [
+    {
+      "id": "E9",
+      "kind": "test",
+      "summary": "legacy pytest evidence",
+      "command": "python -m pytest -q",
+      "created_at": "2026-01-01T00:00:00+00:00",
+      "privacy": {
+        "mode": "redacted-default",
+        "retention_days": 14
+      }
+    }
+  ],
+  "log": [
+    {
+      "id": "EV9",
+      "event_type": "tool_result",
+      "summary": "legacy tests passed",
+      "result": "pass",
+      "evidence_ids": ["E9"],
+      "created_at": "2026-01-01T00:01:00+00:00",
+      "privacy": {
+        "mode": "redacted-default",
+        "retention_days": 14
+      }
+    }
+  ],
+  "last_scan": {
+    "index": 12,
+    "band": "green",
+    "reasons": ["legacy scan stayed healthy"]
+  }
+}
