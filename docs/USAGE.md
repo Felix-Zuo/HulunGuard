@@ -100,7 +100,7 @@ Supported formats:
 - `swe-agent`: maps action/observation trajectory steps into command/tool_result observations with retry-loop fingerprints.
 - `auto`: guesses from the filename.
 
-Adapter compatibility guarantees are documented in `docs/ADAPTER_CONFORMANCE.md`.
+Adapter compatibility guarantees are documented in `docs/ADAPTER_CONFORMANCE.md`. Integration-tested adapter tiers are documented in `docs/ADAPTER_MATRIX.md`.
 
 Trace imports reject files larger than the configured `--max-trace-bytes` limit before parsing. The default is 5 MiB. The full security boundary is documented in `docs/THREAT_MODEL.md`.
 
@@ -152,6 +152,7 @@ python .\hulun.py validate
 python .\hulun.py calibrate
 python .\hulun.py calibration-drift
 python .\hulun.py threat-model-check --json
+python .\hulun.py adapter-matrix --json
 python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000
@@ -163,6 +164,7 @@ python -m pytest -q
 `calibrate` writes `.hulun/calibration_report.md` and `.hulun/calibration_report.json` with component support, precision, recall, false-positive rate, false-negative rate, source coverage, workflow coverage, and redaction coverage over 100 labeled trajectories.
 `calibration-drift` writes `.hulun/calibration_drift_report.md` and `.hulun/calibration_drift_report.json` by comparing current calibration against `docs/calibration_baseline.json`. Regressions fail unless `--rationale` is provided for an intentional review.
 `threat-model-check` verifies that the public threat model exists, is linked from release/security docs, and that trace import keeps a bounded default file-size limit.
+`adapter-matrix` verifies OpenTelemetry and OpenInference round-trips plus OpenHands-like and SWE-agent-like stream coverage without committing private traces.
 `schema-check` loads legacy JSON fixtures, normalizes them through the migration layer, and fails if current public schemas are not written. See `docs/SCHEMAS.md`.
 
 ## Benchmark Scan Performance

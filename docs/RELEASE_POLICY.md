@@ -12,6 +12,7 @@ python .\hulun.py validate
 python .\hulun.py calibrate
 python .\hulun.py calibration-drift
 python .\hulun.py threat-model-check --json
+python .\hulun.py adapter-matrix --json
 python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000
@@ -25,7 +26,7 @@ python -m build
 1. Update `pyproject.toml`.
 2. Update `src/hulun_guard/__init__.py`.
 3. Update docs for new commands, parameters, or product meaning.
-4. Run tests, validation, calibration, calibration drift review, threat model check, schema compatibility, and retention cleanup dry-run.
+4. Run tests, validation, calibration, calibration drift review, threat model check, adapter matrix, schema compatibility, and retention cleanup dry-run.
 5. Run scan benchmark, real-world benchmark, doctor, security, and build checks.
 6. Commit with a versioned message.
 7. Tag the version.

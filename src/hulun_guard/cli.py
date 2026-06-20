@@ -14,6 +14,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
+from .adapter_matrix import adapter_matrix_json, run_adapter_matrix
 from .adapters import MAX_TRACE_BYTES, export_opentelemetry, iter_observations
 from .benchmarks import build_real_world_benchmark_markdown, real_world_benchmark_json, run_real_world_benchmark
 from .calibration import (
@@ -577,6 +578,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         payload["threat_model"] = threat_model
         threat_model_status = "ok" if threat_model["gate"]["passed"] else "error"
         add_check("threat_model", threat_model_status, f"{len(threat_model['checks'])} checks.")
+        adapter_matrix = run_adapter_matrix()
+        payload["adapter_matrix"] = adapter_matrix
+        adapter_matrix_status = "ok" if adapter_matrix["gate"]["passed"] else "error"
+        add_check("adapter_matrix", adapter_matrix_status, f"{adapter_matrix['gate']['case_count']} cases.")
         calibration = run_trajectory_calibration()
         payload["calibration"] = {key: value for key, value in calibration.items() if key != "trajectories"}
         calibration_status = "ok" if calibration["gate"]["passed"] else "error"
@@ -657,6 +662,22 @@ def cmd_threat_model_check(args: argparse.Namespace) -> int:
         print(f"Failures: {gate['failure_count']}")
         for failure in gate["failures"]:
             print(f"- {failure['name']}: {failure['detail']}")
+    return 0 if result["gate"]["passed"] else 2
+
+
+def cmd_adapter_matrix(args: argparse.Namespace) -> int:
+    result = run_adapter_matrix()
+    if args.json:
+        print(adapter_matrix_json(result), end="")
+    else:
+        gate = result["gate"]
+        print(f"HulunGuard adapter matrix: {'pass' if gate['passed'] else 'fail'}")
+        print(f"Cases: {gate['case_count']}")
+        print(f"Checks: {gate['check_count']}")
+        print(f"Failures: {gate['failed_check_count']}")
+        for failure in gate["failures"]:
+            failed_names = ", ".join(check["name"] for check in failure["failed_checks"])
+            print(f"- {failure['name']}: {failed_names}")
     return 0 if result["gate"]["passed"] else 2
 
 
@@ -1325,6 +1346,10 @@ def build_parser() -> argparse.ArgumentParser:
     threat_model_check = sub.add_parser("threat-model-check", parents=[root_parent])
     threat_model_check.add_argument("--json", action="store_true")
     threat_model_check.set_defaults(func=cmd_threat_model_check)
+
+    adapter_matrix = sub.add_parser("adapter-matrix", parents=[root_parent])
+    adapter_matrix.add_argument("--json", action="store_true")
+    adapter_matrix.set_defaults(func=cmd_adapter_matrix)
 
     benchmark = sub.add_parser("benchmark", parents=[root_parent])
     benchmark.add_argument("--suite", choices=["scan", "real-world"], default="scan")

@@ -21,6 +21,7 @@ Current public schemas:
 | retention cleanup | `hulun.retention_cleanup.v1` |
 | doctor | `hulun.doctor.v1` |
 | OpenTelemetry export command report | `hulun.export.opentelemetry.v1` |
+| adapter integration matrix report | `hulun.adapter_matrix.v1` |
 | schema compatibility report | `hulun.schema_compatibility.v1` |
 | threat model check report | `hulun.threat_model_check.v1` |
 
@@ -39,6 +40,7 @@ The loader normalizes older project and conversation ledgers into current schema
 - last risk scan fields
 - monitor and conversation ids
 - calibration, benchmark, and adapter report gate fields
+- adapter matrix support tiers, public-safe fixture policy, case outcomes, and gate failures
 
 Unsupported future schema majors fail the compatibility gate instead of being guessed.
 
@@ -62,6 +64,7 @@ Use a minor version bump when a change:
 - adds, removes, or renames public JSON fields
 - changes migration or normalization behavior
 - changes threat model check behavior
+- changes adapter matrix report behavior
 - changes adapter import/export report fields
 - changes release gate behavior for schemas
 
