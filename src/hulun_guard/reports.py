@@ -6,9 +6,15 @@ from typing import Any
 from .util import status_counts, utc_now
 
 
+def _dict_items(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
 def evidence_label(item: dict[str, Any]) -> str:
-    evidence = item.get("evidence") or []
-    return ", ".join(evidence) if evidence else "no evidence"
+    evidence = item.get("evidence") if isinstance(item.get("evidence"), list) else []
+    return ", ".join(str(evidence_id) for evidence_id in evidence) if evidence else "no evidence"
 
 
 def humanize_key(value: str) -> str:
@@ -16,10 +22,10 @@ def humanize_key(value: str) -> str:
 
 
 def build_resume_markdown(state: dict[str, Any]) -> str:
-    criteria = state.get("criteria") or state.get("success_criteria") or []
+    criteria = _dict_items(state.get("criteria") or state.get("success_criteria"))
     active_steps = [
         step
-        for step in state.get("steps", [])
+        for step in _dict_items(state.get("steps"))
         if step.get("status") in {"pending", "in_progress", "blocked"}
     ]
     lines: list[str] = [
@@ -33,37 +39,40 @@ def build_resume_markdown(state: dict[str, Any]) -> str:
         "## Success Criteria",
     ]
     for item in criteria:
-        lines.append(f"- {item['id']} [{item.get('status', 'pending')}]: {item.get('text', '')} ({evidence_label(item)})")
+        lines.append(f"- {item.get('id', '')} [{item.get('status', 'pending')}]: {item.get('text', '')} ({evidence_label(item)})")
     if not criteria:
         lines.append("- None")
 
     lines.extend(["", "## Active Steps"])
     if active_steps:
         for step in active_steps:
-            lines.append(f"- {step['id']} [{step.get('status', 'pending')}]: {step.get('text', '')}")
+            lines.append(f"- {step.get('id', '')} [{step.get('status', 'pending')}]: {step.get('text', '')}")
     else:
         lines.append("- None")
 
     lines.extend(["", "## Latest Evidence"])
-    for evidence in state.get("evidence", [])[-8:]:
+    evidence_items = _dict_items(state.get("evidence"))
+    for evidence in evidence_items[-8:]:
         detail = evidence.get("path") or evidence.get("url") or evidence.get("command") or ""
-        lines.append(f"- {evidence['id']} [{evidence.get('kind', '')}]: {evidence.get('summary', '')} {detail}".rstrip())
-    if not state.get("evidence"):
+        lines.append(f"- {evidence.get('id', '')} [{evidence.get('kind', '')}]: {evidence.get('summary', '')} {detail}".rstrip())
+    if not evidence_items:
         lines.append("- None")
 
     lines.extend(["", "## Latest Checkpoint"])
-    if state.get("checkpoints"):
-        checkpoint = state["checkpoints"][-1]
-        lines.append(f"- {checkpoint['id']}: {checkpoint.get('summary', '')}")
+    checkpoints = _dict_items(state.get("checkpoints"))
+    if checkpoints:
+        checkpoint = checkpoints[-1]
+        lines.append(f"- {checkpoint.get('id', '')}: {checkpoint.get('summary', '')}")
         if checkpoint.get("next_action"):
             lines.append(f"- Next action: {checkpoint['next_action']}")
     else:
         lines.append("- None")
 
     lines.extend(["", "## Risks"])
-    for risk in state.get("risks", [])[-5:]:
-        lines.append(f"- {risk['id']}: {risk.get('text', '')}")
-    if not state.get("risks"):
+    risk_items = _dict_items(state.get("risks"))
+    for risk in risk_items[-5:]:
+        lines.append(f"- {risk.get('id', '')}: {risk.get('text', '')}")
+    if not risk_items:
         lines.append("- None")
 
     last_scan = state.get("last_scan")
@@ -96,7 +105,9 @@ def build_verify_markdown(result: dict[str, Any]) -> str:
 
 
 def build_dashboard_html(state: dict[str, Any], risk: dict[str, Any]) -> str:
-    criteria = state.get("criteria") or state.get("success_criteria") or []
+    criteria = _dict_items(state.get("criteria") or state.get("success_criteria"))
+    evidence_items = _dict_items(state.get("evidence"))
+    event_items = _dict_items(state.get("events"))
     score = int(risk.get("score", 0))
     band = str(risk.get("band", "green"))
     color = {"green": "#1f9d55", "yellow": "#c68612", "red": "#c2410c"}.get(band, "#525252")
@@ -122,7 +133,7 @@ def build_dashboard_html(state: dict[str, Any], risk: dict[str, Any]) -> str:
         f"<td>{escape(item.get('summary', ''))}</td>"
         f"<td>{escape(item.get('path') or item.get('url') or item.get('command') or '')}</td>"
         "</tr>"
-        for item in state.get("evidence", [])[-10:]
+        for item in evidence_items[-10:]
     )
     counts = status_counts(criteria)
     generated = utc_now()
@@ -188,8 +199,8 @@ def build_dashboard_html(state: dict[str, Any], risk: dict[str, Any]) -> str:
     <div class="metrics">
       <div class="metric"><b>{counts.get("done", 0)}</b>criteria done</div>
       <div class="metric"><b>{counts.get("pending", 0)}</b>criteria pending</div>
-      <div class="metric"><b>{len(state.get("evidence", []))}</b>evidence items</div>
-      <div class="metric"><b>{len(state.get("events", []))}</b>events</div>
+      <div class="metric"><b>{len(evidence_items)}</b>evidence items</div>
+      <div class="metric"><b>{len(event_items)}</b>events</div>
     </div>
     <div class="grid">
       <section class="panel">

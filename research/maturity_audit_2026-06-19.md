@@ -124,6 +124,15 @@ Sources:
 - Fail the gate on oversized fixtures, slow scans, classification mismatch, missing components, unexpected components, or workflow coverage gaps.
 - Document fixture contribution rules in `docs/REAL_WORLD_BENCHMARKS.md` so maintainers do not commit private transcripts, credentials, customer logs, or production records.
 
+## Thirteenth Remediation Slice
+
+- Add `cleanup` as a dry-run-by-default retention cleanup command with explicit `--apply`.
+- Prune expired project events, evidence records, conversation events, stale scans, and generated `.hulun/` reports based on `privacy.retention_days` or default retention.
+- Clean evidence references from criteria, steps, and retained events when evidence expires.
+- Add path-boundary checks so cleanup refuses to delete outside the project `.hulun` directory or `HULUN_HOME/conversations`.
+- Cover dry-run behavior, actual cleanup, conversation cleanup, generated report deletion, and outside-directory protection with tests.
+- Document the retention model and maintainer expectations in `docs/RETENTION.md`; add cleanup dry-run to CI, Release, PR, and release-checklist gates.
+
 ## Product Position
 
-HulunGuard is currently moving from developer preview toward a reliable developer product. The M2 baseline now includes external public-source calibration coverage, drift review, adapter conformance coverage, and a public-safe real-world benchmark gate. It should not be marketed as production-ready until retention cleanup, schema migration discipline, broader adapter integration tests, and larger real-world coverage are in place.
+HulunGuard is currently moving from developer preview toward a reliable developer product. The M2 baseline now includes external public-source calibration coverage, drift review, adapter conformance coverage, public-safe real-world benchmark coverage, and retention cleanup. It should not be marketed as production-ready until schema migration discipline, broader adapter integration tests, a documented threat model, and larger real-world coverage are in place.

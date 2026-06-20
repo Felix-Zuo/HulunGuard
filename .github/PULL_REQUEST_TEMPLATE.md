@@ -9,6 +9,7 @@
 - [ ] `python -m hulun_guard validate`
 - [ ] `python -m hulun_guard calibrate`
 - [ ] `python -m hulun_guard calibration-drift`
+- [ ] `python -m hulun_guard cleanup --json`
 - [ ] `python -m hulun_guard benchmark --events 10000 --max-ms 1000`
 - [ ] `python -m hulun_guard benchmark --suite real-world`
 

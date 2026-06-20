@@ -45,6 +45,7 @@ from .monitor import (
 )
 from .privacy import DEFAULT_RETENTION_DAYS, sanitize_evidence
 from .reports import build_board_html, build_dashboard_html, build_verify_markdown
+from .retention import retention_cleanup_json, run_retention_cleanup
 from .risk import scan_state
 from .sdk import append_project_event
 from .storage import (
@@ -574,6 +575,37 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         for check in checks:
             print(f"[{check['status']}] {check['name']}: {check['detail']}")
     return 2 if has_error and args.fail_on_error else 0
+
+
+def cmd_cleanup(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    dry_run = not args.apply
+    result = run_retention_cleanup(
+        root,
+        dry_run=dry_run,
+        include_conversations=not args.skip_conversations,
+        include_reports=not args.skip_reports,
+        default_retention_days=args.default_retention_days,
+        write_report=args.write_report or args.apply,
+    )
+    if args.json:
+        print(retention_cleanup_json(result), end="")
+    else:
+        mode = "dry-run" if result["dry_run"] else "apply"
+        summary = result["summary"]
+        print(f"HulunGuard cleanup: {mode}")
+        print(f"Expired project events: {summary['expired_project_events']}")
+        print(f"Expired project evidence: {summary['expired_project_evidence']}")
+        print(f"Expired conversation events: {summary['expired_conversation_events']}")
+        print(f"Report files deleted: {summary['report_files_deleted']}")
+        if result["safety_violations"]:
+            print("Safety violations:")
+            for violation in result["safety_violations"]:
+                print(f"- {violation['reason']}: {violation['path']}")
+        if args.write_report or args.apply:
+            report_dir = hulun_dir(root)
+            print(f"Report: {report_dir / 'retention_cleanup_report.md'}")
+    return 0 if result["gate"]["passed"] else 2
 
 
 def build_benchmark_state(event_count: int) -> dict[str, Any]:
@@ -1221,6 +1253,17 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--fail-on-error", action="store_true")
     doctor.add_argument("--json", action="store_true")
     doctor.set_defaults(func=cmd_doctor)
+
+    cleanup = sub.add_parser("cleanup", parents=[root_parent])
+    cleanup_mode = cleanup.add_mutually_exclusive_group()
+    cleanup_mode.add_argument("--apply", action="store_true", help="Delete expired records and reports. Default is dry-run.")
+    cleanup_mode.add_argument("--dry-run", action="store_true", help="Preview cleanup without changing files. This is the default.")
+    cleanup.add_argument("--default-retention-days", type=int, default=DEFAULT_RETENTION_DAYS)
+    cleanup.add_argument("--skip-conversations", action="store_true")
+    cleanup.add_argument("--skip-reports", action="store_true")
+    cleanup.add_argument("--write-report", action="store_true")
+    cleanup.add_argument("--json", action="store_true")
+    cleanup.set_defaults(func=cmd_cleanup)
 
     benchmark = sub.add_parser("benchmark", parents=[root_parent])
     benchmark.add_argument("--suite", choices=["scan", "real-world"], default="scan")
