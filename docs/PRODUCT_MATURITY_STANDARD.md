@@ -42,6 +42,7 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 - Adapter integration matrix for OpenTelemetry/OpenInference round-trips and OpenHands/SWE-agent workflow streams.
 - Hosted-platform fixture coverage for LangGraph, LangSmith, Langfuse, and Phoenix.
 - Public-safe real-world benchmark suite across coding, research, ops, and artifact workflows.
+- Agent compatibility matrix for direct adapters, standards paths, and generic JSON/JSONL bridge paths.
 - Retention cleanup for local project and conversation ledgers.
 - Backward-compatible schema migration gate for public JSON outputs.
 - Documented local-first threat model with an executable release gate.
@@ -66,10 +67,10 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 - No final-gate relaxation without tests and a changelog entry.
 - No adapter can contain a developer machine path.
-- No release without CI, validation, calibration, calibration drift, threat model check, adapter matrix, schema compatibility, retention cleanup dry-run, scan benchmark, real-world benchmark, and security scans.
+- No release without CI, validation, calibration, calibration drift, threat model check, agent compatibility, adapter matrix, schema compatibility, retention cleanup dry-run, scan benchmark, real-world benchmark, and security scans.
 - No public claim that HulunGuard detects intent or truth; it computes reliability risk.
 - No private conversation logs in the repository.
 
 ## Current Target
 
-The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, hosted-platform fixture baseline, release provenance baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, adapter conformance baseline, adapter integration matrix baseline, public-safe real-world benchmark baseline, retention cleanup baseline, schema compatibility baseline, and threat-model baseline are implemented. The next gate is larger real-world coverage without committing private logs.
+The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, hosted-platform fixture baseline, release provenance baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, adapter conformance baseline, adapter integration matrix baseline, expanded public-safe real-world benchmark baseline, agent compatibility matrix baseline, retention cleanup baseline, schema compatibility baseline, and threat-model baseline are implemented. The next gate is deeper native connectors beyond standards and generic bridge paths.

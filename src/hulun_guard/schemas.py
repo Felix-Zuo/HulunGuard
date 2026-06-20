@@ -26,6 +26,7 @@ RETENTION_CLEANUP_SCHEMA = "hulun.retention_cleanup.v1"
 DOCTOR_SCHEMA = "hulun.doctor.v1"
 EXPORT_OPENTELEMETRY_SCHEMA = "hulun.export.opentelemetry.v1"
 ADAPTER_MATRIX_SCHEMA = "hulun.adapter_matrix.v1"
+AGENT_COMPATIBILITY_SCHEMA = "hulun.agent_compatibility.v1"
 CALIBRATION_DRIFT_ERROR_SCHEMA = "hulun.calibration_drift_error.v1"
 SCHEMA_COMPATIBILITY_SCHEMA = "hulun.schema_compatibility.v1"
 MONITOR_SCHEMA = "hulun.monitor.v1"
@@ -106,6 +107,11 @@ SUPPORTED_PUBLIC_SCHEMAS: dict[str, dict[str, Any]] = {
         "current": ADAPTER_MATRIX_SCHEMA,
         "supported": [ADAPTER_MATRIX_SCHEMA],
         "promise": "Adapter integration reports preserve support tiers, public-safe fixture policy, case outcomes, and gate failures.",
+    },
+    "agent_compatibility": {
+        "current": AGENT_COMPATIBILITY_SCHEMA,
+        "supported": [AGENT_COMPATIBILITY_SCHEMA],
+        "promise": "Agent compatibility reports preserve supported agents, integration category, tier, source URI, ingest format, and command.",
     },
     "calibration_drift_error": {
         "current": CALIBRATION_DRIFT_ERROR_SCHEMA,

@@ -16,6 +16,10 @@ PUBLIC_SOURCE_URIS = {
     "swe-agent-trajectories": "https://swe-agent.com/latest/usage/trajectories/",
     "opentelemetry-genai": "https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/",
     "openinference-traces": "https://arize-ai.github.io/openinference/spec/",
+    "langgraph-streaming": "https://docs.langchain.com/oss/python/langgraph/streaming",
+    "langsmith-runs": "https://docs.langchain.com/langsmith/export-traces",
+    "langfuse-otel": "https://langfuse.com/integrations/native/opentelemetry",
+    "phoenix-openinference": "https://arize-ai.github.io/openinference/spec/semantic_conventions.html",
 }
 WORKFLOW_CLASSES = ("coding", "research", "ops", "artifact")
 COMPONENT_POSITIVE_THRESHOLDS = {
@@ -236,6 +240,61 @@ def _coding_healthy_openhands_recovery() -> dict[str, Any]:
     )
 
 
+def _coding_langgraph_long_recovery() -> dict[str, Any]:
+    case_id = "RW-COD-004"
+    state = _base_state(case_id, "Recover a long-running graph task", "graph task retry finishes with test evidence")
+    _add_checkpoint(state, "LangGraph checkpoint before graph task retry")
+    for step in range(1, 5):
+        _append_event(
+            state,
+            "checkpoint",
+            f"LangGraph checkpoint stream kept graph task state at step {step}",
+            phase="implement",
+            action_key="langgraph-state",
+            source_platform="langgraph",
+        )
+    _append_event(
+        state,
+        "agent_error",
+        "LangGraph task stream reported a stale tool-state failure before retry",
+        result="fail",
+        phase="recover",
+        action_key="langgraph-task-retry",
+        source_platform="langgraph",
+    )
+    evidence_id = _add_evidence(state, "graph task retry test passed", command="python -m pytest tests/test_graph_task.py -q")
+    _append_event(
+        state,
+        "tool_result",
+        "LangGraph task retry finished and graph test passed",
+        phase="verify",
+        evidence=[evidence_id],
+        action_key="langgraph-task-retry",
+        source_platform="langgraph",
+    )
+    _append_event(
+        state,
+        "final_attempt",
+        "long-running graph task recovered with test evidence",
+        phase="final",
+        evidence=[evidence_id],
+        claims=["recovered", "verified"],
+        source_platform="langgraph",
+    )
+    state["events"][4]["resolved"] = True
+    return _case(
+        case_id,
+        "coding",
+        "Recovered LangGraph task stream",
+        "Long-running LangGraph-style checkpoint and task stream with an explicit retry recovery.",
+        state,
+        "green",
+        [],
+        source_kind="langgraph-streaming",
+        label_source="LangGraph StreamPart checkpoint and task modes plus maintainer labels",
+    )
+
+
 def _research_green() -> dict[str, Any]:
     case_id = "RW-RES-001"
     state = _base_state(case_id, "Produce a source-backed market note", "claims cite reviewed public sources")
@@ -302,6 +361,41 @@ def _research_failed_retrieval() -> dict[str, Any]:
         ["claim_overhang", "evidence_gap", "phase_disorder", "retry_loop", "stagnation", "unhandled_failures", "unfinished_criteria"],
         source_kind="openinference-traces",
         label_source="OpenInference retriever span taxonomy plus maintainer labels",
+    )
+
+
+def _research_langsmith_unresolved_evaluator() -> dict[str, Any]:
+    case_id = "RW-RES-004"
+    state = _base_state(case_id, "Validate source coverage with hosted trace runs", "LangSmith evaluator run passes with cited rows")
+    _add_checkpoint(state, "LangSmith run export checkpoint before evaluator retry")
+    for attempt in range(1, 4):
+        _append_event(
+            state,
+            "tool_result",
+            f"LangSmith evaluator run failed source coverage on attempt {attempt}",
+            result="fail",
+            phase="verify",
+            action_key="langsmith-source-evaluator",
+            source_platform="langsmith",
+        )
+    _append_event(
+        state,
+        "final_attempt",
+        "source coverage is complete and ready for handoff",
+        phase="final",
+        claims=["complete", "ready"],
+        source_platform="langsmith",
+    )
+    return _case(
+        case_id,
+        "research",
+        "Unresolved LangSmith evaluator run",
+        "Hosted run export pattern where repeated evaluator failures are followed by a completion claim.",
+        state,
+        "red",
+        ["claim_overhang", "evidence_gap", "phase_disorder", "retry_loop", "stagnation", "unhandled_failures", "unfinished_criteria"],
+        source_kind="langsmith-runs",
+        label_source="LangSmith run export and evaluator-result model plus maintainer labels",
     )
 
 
@@ -384,6 +478,42 @@ def _ops_cost_pressure() -> dict[str, Any]:
     )
 
 
+def _ops_langfuse_cost_pressure() -> dict[str, Any]:
+    case_id = "RW-OPS-004"
+    state = _base_state(case_id, "Triage hosted trace latency regression", "latency regression decision has metric evidence")
+    _add_checkpoint(state, "Langfuse OTEL trace review checkpoint")
+    for idx in range(1, 4):
+        _append_event(
+            state,
+            "llm_call",
+            f"Langfuse OTEL trace analysis pass {idx} without metric verification",
+            phase="summarize",
+            prompt_tokens=5400,
+            completion_tokens=1300,
+            cost=2.4,
+            latency_ms=64000,
+            source_platform="langfuse",
+        )
+    _append_event(
+        state,
+        "summary",
+        "hosted trace latency regression summary is ready without metric evidence",
+        phase="summarize",
+        source_platform="langfuse",
+    )
+    return _case(
+        case_id,
+        "ops",
+        "Langfuse trace cost pressure",
+        "Langfuse OTEL-style trace review where expensive summarization proceeds without verification evidence.",
+        state,
+        "yellow",
+        ["claim_overhang", "cost_pressure", "evidence_gap", "phase_disorder", "polish_without_progress", "stagnation", "unfinished_criteria"],
+        source_kind="langfuse-otel",
+        label_source="Langfuse OpenTelemetry ingestion and GenAI usage attributes plus maintainer labels",
+    )
+
+
 def _artifact_green() -> dict[str, Any]:
     case_id = "RW-ART-001"
     state = _base_state(case_id, "Prepare an exportable report artifact", "artifact hash and render check are recorded")
@@ -401,6 +531,61 @@ def _artifact_green() -> dict[str, Any]:
         [],
         source_kind="openhands-events",
         label_source="OpenHands observation event taxonomy plus maintainer labels",
+    )
+
+
+def _artifact_phoenix_evidence_rich_green() -> dict[str, Any]:
+    case_id = "RW-ART-004"
+    state = _base_state(case_id, "Ship a validated artifact with trace-backed evals", "artifact render and evaluator spans pass")
+    render_evidence = _add_evidence(
+        state,
+        "artifact render check passed",
+        kind="artifact",
+        command="python scripts/render_artifact.py --check",
+    )
+    eval_evidence = _add_evidence(
+        state,
+        "Phoenix evaluator span passed artifact quality threshold",
+        kind="eval",
+        url="https://arize-ai.github.io/openinference/spec/semantic_conventions.html",
+    )
+    _add_checkpoint(state, "Phoenix/OpenInference artifact validation checkpoint")
+    _append_event(
+        state,
+        "verification",
+        "Phoenix evaluator span passed artifact completeness threshold",
+        phase="verify",
+        evidence=[eval_evidence],
+        refs=["openinference:evaluator-span"],
+        source_platform="phoenix",
+    )
+    _append_event(
+        state,
+        "tool_result",
+        "artifact render check passed after evaluator review",
+        phase="verify",
+        evidence=[render_evidence],
+        source_platform="phoenix",
+    )
+    _append_event(
+        state,
+        "final_attempt",
+        "trace-backed artifact is completed and verified",
+        phase="final",
+        evidence=[render_evidence, eval_evidence],
+        claims=["completed", "verified"],
+        source_platform="phoenix",
+    )
+    return _case(
+        case_id,
+        "artifact",
+        "Evidence-rich Phoenix artifact check",
+        "Phoenix/OpenInference-style evaluator and artifact render events backing a healthy final claim.",
+        state,
+        "green",
+        [],
+        source_kind="phoenix-openinference",
+        label_source="Phoenix/OpenInference semantic conventions plus maintainer labels",
     )
 
 
@@ -448,13 +633,17 @@ def build_real_world_benchmark_cases() -> list[dict[str, Any]]:
         _coding_green(),
         _coding_retry_loop(),
         _coding_healthy_openhands_recovery(),
+        _coding_langgraph_long_recovery(),
         _research_green(),
         _research_uncertain_final(),
         _research_failed_retrieval(),
+        _research_langsmith_unresolved_evaluator(),
         _ops_green(),
         _ops_unresolved_incident(),
         _ops_cost_pressure(),
+        _ops_langfuse_cost_pressure(),
         _artifact_green(),
+        _artifact_phoenix_evidence_rich_green(),
         _artifact_polish_no_progress(),
         _artifact_context_decay(),
     ]

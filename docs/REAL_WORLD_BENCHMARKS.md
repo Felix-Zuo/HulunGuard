@@ -18,14 +18,14 @@ The JSON report uses schema `hulun.real_world_benchmark.v1`.
 
 ## Current Coverage
 
-The suite contains 12 public-safe cases:
+The suite contains 16 public-safe cases:
 
 | Workflow | Cases | Source shape |
 | --- | ---: | --- |
-| coding | 3 | SWE-agent trajectories and OpenHands event logs |
-| research | 3 | OpenInference traces |
-| ops | 3 | OpenTelemetry GenAI spans |
-| artifact | 3 | OpenHands events and SWE-agent trajectories |
+| coding | 4 | SWE-agent trajectories, OpenHands event logs, and LangGraph stream parts |
+| research | 4 | OpenInference traces and LangSmith run exports |
+| ops | 4 | OpenTelemetry GenAI spans and Langfuse OTEL traces |
+| artifact | 4 | OpenHands events, SWE-agent trajectories, and Phoenix/OpenInference spans |
 
 Each case records:
 
@@ -112,3 +112,7 @@ The current suite uses schema-derived fixtures from:
 - SWE-agent trajectory documentation: `https://swe-agent.com/latest/usage/trajectories/`
 - OpenTelemetry GenAI attributes: `https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/`
 - OpenInference specification: `https://arize-ai.github.io/openinference/spec/`
+- LangGraph streaming: `https://docs.langchain.com/oss/python/langgraph/streaming`
+- LangSmith trace export: `https://docs.langchain.com/langsmith/export-traces`
+- Langfuse OpenTelemetry: `https://langfuse.com/integrations/native/opentelemetry`
+- OpenInference semantic conventions used by Phoenix: `https://arize-ai.github.io/openinference/spec/semantic_conventions.html`

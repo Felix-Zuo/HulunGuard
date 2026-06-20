@@ -109,6 +109,7 @@ Supported formats:
 - `auto`: guesses from the filename.
 
 Adapter compatibility guarantees are documented in `docs/ADAPTER_CONFORMANCE.md`. Integration-tested adapter tiers are documented in `docs/ADAPTER_MATRIX.md`.
+Mainstream agent compatibility paths are documented in `docs/AGENT_COMPATIBILITY.md`.
 
 Trace imports reject files larger than the configured `--max-trace-bytes` limit before parsing. The default is 5 MiB. The full security boundary is documented in `docs/THREAT_MODEL.md`.
 
@@ -117,6 +118,17 @@ Export HulunGuard events as OTLP-style JSON spans:
 ```powershell
 python .\hulun.py export-otel --output .\hulun-otel.json
 ```
+
+## Check Agent Compatibility
+
+Use `compatibility` to see whether an agent framework has a direct adapter, a standards path, or the generic bridge:
+
+```powershell
+python .\hulun.py compatibility
+python .\hulun.py compatibility --json
+```
+
+The matrix covers OpenHands, SWE-agent, LangGraph, LangSmith, Langfuse, Phoenix, OpenTelemetry GenAI emitters, OpenInference emitters, AutoGen, CrewAI, LlamaIndex, Haystack, Semantic Kernel, OpenAI Agents SDK, and custom agents that can write JSON/JSONL records.
 
 ## Privacy And Retention
 
@@ -160,6 +172,7 @@ python .\hulun.py validate
 python .\hulun.py calibrate
 python .\hulun.py calibration-drift
 python .\hulun.py threat-model-check --json
+python .\hulun.py compatibility --json
 python .\hulun.py adapter-matrix --json
 python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
@@ -172,6 +185,7 @@ python -m pytest -q
 `calibrate` writes `.hulun/calibration_report.md` and `.hulun/calibration_report.json` with component support, precision, recall, false-positive rate, false-negative rate, source coverage, workflow coverage, and redaction coverage over 100 labeled trajectories.
 `calibration-drift` writes `.hulun/calibration_drift_report.md` and `.hulun/calibration_drift_report.json` by comparing current calibration against `docs/calibration_baseline.json`. Regressions fail unless `--rationale` is provided for an intentional review.
 `threat-model-check` verifies that the public threat model exists, is linked from release/security docs, and that trace import keeps a bounded default file-size limit.
+`compatibility` reports direct, standards-based, and bridge-based paths for mainstream agent frameworks.
 `adapter-matrix` verifies OpenTelemetry/OpenInference/Langfuse/Phoenix round-trips plus OpenHands-like, SWE-agent-like, LangGraph, and LangSmith stream coverage without committing private traces.
 `schema-check` loads legacy JSON fixtures, normalizes them through the migration layer, and fails if current public schemas are not written. See `docs/SCHEMAS.md`.
 
@@ -195,7 +209,7 @@ python .\hulun.py benchmark --suite real-world
 python .\hulun.py benchmark --suite real-world --json
 ```
 
-The suite covers coding, research, ops, and artifact workflows. It measures scan latency, fixture size, component stability, false-positive rate, and false-negative rate, then writes `.hulun/real_world_benchmark_report.json` and `.hulun/real_world_benchmark_report.md`.
+The suite covers 16 public-safe coding, research, ops, and artifact workflows. It measures scan latency, fixture size, component stability, false-positive rate, and false-negative rate, then writes `.hulun/real_world_benchmark_report.json` and `.hulun/real_world_benchmark_report.md`.
 
 Maintainer rules for adding cases are documented in `docs/REAL_WORLD_BENCHMARKS.md`.
 
