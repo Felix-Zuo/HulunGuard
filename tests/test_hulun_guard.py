@@ -985,6 +985,8 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertTrue(doctor["calibration"]["gate"]["passed"])
             self.assertNotIn("trajectories", doctor["calibration"])
             self.assertTrue(doctor["threat_model"]["gate"]["passed"])
+            self.assertEqual(doctor["agent_compatibility"]["schema"], "hulun.agent_compatibility.v1")
+            self.assertGreaterEqual(doctor["agent_compatibility"]["direct_or_standard_count"], 13)
 
             code, out = self.run_cli("--root", tmp, "benchmark", "--events", "200", "--json")
             self.assertEqual(code, 0)
@@ -1000,9 +1002,13 @@ class HulunGuardCliTest(unittest.TestCase):
             payload = json.loads(out)
             self.assertEqual(payload["schema"], "hulun.real_world_benchmark.v1")
             self.assertTrue(payload["gate"]["passed"], payload["gate"])
-            self.assertEqual(payload["case_count"], 12)
-            self.assertEqual(payload["workflow_classes"], {"artifact": 3, "coding": 3, "ops": 3, "research": 3})
-            self.assertEqual(payload["redaction_statuses"], {"public-schema-derived-no-private-content": 12})
+            self.assertEqual(payload["case_count"], 16)
+            self.assertEqual(payload["workflow_classes"], {"artifact": 4, "coding": 4, "ops": 4, "research": 4})
+            self.assertEqual(payload["redaction_statuses"], {"public-schema-derived-no-private-content": 16})
+            self.assertEqual(payload["source_classes"]["public-schema-derived-langgraph-streaming"], 1)
+            self.assertEqual(payload["source_classes"]["public-schema-derived-langsmith-runs"], 1)
+            self.assertEqual(payload["source_classes"]["public-schema-derived-langfuse-otel"], 1)
+            self.assertEqual(payload["source_classes"]["public-schema-derived-phoenix-openinference"], 1)
             self.assertEqual(payload["metrics"]["classification"]["false_positive_rate"], 0.0)
             self.assertEqual(payload["metrics"]["classification"]["false_negative_rate"], 0.0)
             self.assertEqual(payload["metrics"]["component_stability"]["rate"], 1.0)
@@ -1017,6 +1023,38 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertNotIn("sk-", serialized)
             self.assertNotIn("password=", serialized)
             self.assertNotIn("@example.com", serialized)
+
+    def test_agent_compatibility_reports_mainstream_paths(self) -> None:
+        code, out = self.run_cli("compatibility", "--json")
+        self.assertEqual(code, 0, out)
+        payload = json.loads(out)
+        self.assertEqual(payload["schema"], "hulun.agent_compatibility.v1")
+        self.assertGreaterEqual(payload["entry_count"], 15)
+        self.assertGreaterEqual(payload["direct_or_standard_count"], 13)
+        agents = {item["id"]: item for item in payload["agents"]}
+        for required in [
+            "openhands",
+            "swe-agent",
+            "langgraph",
+            "langsmith",
+            "langfuse",
+            "phoenix",
+            "opentelemetry-genai",
+            "openinference",
+            "autogen",
+            "crewai",
+            "llamaindex",
+            "haystack",
+            "semantic-kernel",
+            "openai-agents-sdk",
+            "custom-agent",
+        ]:
+            self.assertIn(required, agents)
+
+        self.assertEqual(agents["openhands"]["ingest_format"], "openhands")
+        self.assertEqual(agents["langgraph"]["ingest_format"], "langgraph")
+        self.assertEqual(agents["autogen"]["ingest_format"], "opentelemetry")
+        self.assertEqual(agents["openai-agents-sdk"]["ingest_format"], "generic")
 
     def test_real_world_benchmark_fails_when_fixture_size_limit_is_exceeded(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

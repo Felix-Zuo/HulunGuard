@@ -20,6 +20,7 @@ python -m hulun_guard validate
 python -m hulun_guard calibrate
 python -m hulun_guard calibration-drift
 python -m hulun_guard threat-model-check --json
+python -m hulun_guard compatibility --json
 python -m hulun_guard adapter-matrix --json
 python -m hulun_guard schema-check --json
 python -m hulun_guard cleanup --json

@@ -25,6 +25,7 @@ from .calibration import (
     compare_calibration_drift,
     run_trajectory_calibration,
 )
+from .compatibility import agent_compatibility_json, compatibility_report
 from .constants import DASHBOARD_FILE, RISK_REPORT_FILE, VALID_EVENT_PHASES, VALID_STATUSES
 from .conversation import (
     close_conversation,
@@ -578,6 +579,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         payload["threat_model"] = threat_model
         threat_model_status = "ok" if threat_model["gate"]["passed"] else "error"
         add_check("threat_model", threat_model_status, f"{len(threat_model['checks'])} checks.")
+        compatibility = compatibility_report()
+        payload["agent_compatibility"] = compatibility
+        compatibility_status = "ok" if compatibility["direct_or_standard_count"] >= 13 else "error"
+        add_check("agent_compatibility", compatibility_status, f"{compatibility['entry_count']} entries.")
         adapter_matrix = run_adapter_matrix()
         payload["adapter_matrix"] = adapter_matrix
         adapter_matrix_status = "ok" if adapter_matrix["gate"]["passed"] else "error"
@@ -777,6 +782,19 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
         print(f"HulunGuard benchmark: {args.events} events scanned in {elapsed_ms:.2f} ms ({events_per_second:.0f} events/s)")
         print(f"Report: {report_path}")
     return 0 if result["passed"] else 2
+
+
+def cmd_compatibility(args: argparse.Namespace) -> int:
+    result = compatibility_report()
+    if args.json:
+        print(agent_compatibility_json(result), end="")
+    else:
+        print(f"HulunGuard agent compatibility: {result['entry_count']} entries")
+        print(f"Direct or standards path: {result['direct_or_standard_count']}")
+        print(result["coverage_statement"])
+        for item in result["agents"]:
+            print(f"- {item['name']}: {item['tier']} via {item['ingest_format']}")
+    return 0
 
 
 def cmd_conversation_start(args: argparse.Namespace) -> int:
@@ -1363,6 +1381,10 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--max-false-negative-rate", type=float, default=0.0)
     benchmark.add_argument("--json", action="store_true")
     benchmark.set_defaults(func=cmd_benchmark)
+
+    compatibility = sub.add_parser("compatibility")
+    compatibility.add_argument("--json", action="store_true")
+    compatibility.set_defaults(func=cmd_compatibility)
 
     conversation = sub.add_parser("conversation")
     conversation_sub = conversation.add_subparsers(dest="conversation_command", required=True)

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.23.0 - 2026-06-20
+
+- Expanded `benchmark --suite real-world` from 12 to 16 public-safe cases with LangGraph, LangSmith, Langfuse, and Phoenix/OpenInference workflow coverage.
+- Added `compatibility` and `hulun.agent_compatibility.v1` to report mainstream agent support paths across direct adapters, OpenTelemetry/OpenInference standards, and generic JSON/JSONL bridges.
+- Documented mainstream agent compatibility boundaries in `docs/AGENT_COMPATIBILITY.md`.
+
 ## 0.22.0 - 2026-06-20
 
 - Added explicit hosted-platform trace formats for `langgraph`, `langsmith`, `langfuse`, and `phoenix`.

@@ -22,6 +22,7 @@ Current public schemas:
 | doctor | `hulun.doctor.v1` |
 | OpenTelemetry export command report | `hulun.export.opentelemetry.v1` |
 | adapter integration matrix report | `hulun.adapter_matrix.v1` |
+| agent compatibility report | `hulun.agent_compatibility.v1` |
 | schema compatibility report | `hulun.schema_compatibility.v1` |
 | threat model check report | `hulun.threat_model_check.v1` |
 
@@ -41,6 +42,7 @@ The loader normalizes older project and conversation ledgers into current schema
 - monitor and conversation ids
 - calibration, benchmark, and adapter report gate fields
 - adapter matrix support tiers, public-safe fixture policy, case outcomes, and gate failures
+- agent compatibility categories, tiers, source URIs, ingest formats, and commands
 
 Unsupported future schema majors fail the compatibility gate instead of being guessed.
 
