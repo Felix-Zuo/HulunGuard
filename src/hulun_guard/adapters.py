@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .constants import VALID_EVENT_PHASES
-from .privacy import TRACE_TEXT_KEYS, fingerprint_text, redact_refs, redact_text, safe_summary_from_trace
+from .privacy import TRACE_TEXT_KEYS, fingerprint_text, redact_list, redact_refs, redact_text, safe_summary_from_trace
 from .util import parse_time, tokens
 
 Observation = dict[str, Any]
@@ -99,7 +99,32 @@ def _first_attr(attrs: dict[str, Any], keys: list[str]) -> Any:
     return None
 
 
+def _list_from_value(value: Any) -> list[str]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, tuple | set):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [str(value).strip()]
+
+
+def _explicit_result(value: Any) -> str | None:
+    result = _as_text(value).strip().lower()
+    return result if result in {"pass", "fail", "unknown"} else None
+
+
+def _explicit_action_key(value: Any, *, include_sensitive: bool) -> str | None:
+    text = _as_text(value).strip()
+    if not text:
+        return None
+    return redact_text(text, include_sensitive=include_sensitive)
+
+
 def _span_status(span: dict[str, Any], attrs: dict[str, Any]) -> str:
+    explicit = _explicit_result(_first_attr(attrs, ["hulun.event.result", "hulun.result"]))
+    if explicit:
+        return explicit
     status = span.get("status") or {}
     code = _as_text(status.get("code") if isinstance(status, dict) else status).lower()
     text = " ".join([code, _as_text(status.get("message") if isinstance(status, dict) else ""), _as_text(attrs.get("error.type"))])
@@ -130,10 +155,13 @@ def _span_ref(source: str, span: dict[str, Any]) -> list[str]:
     return refs
 
 
-def _span_action_key(source: str, span: dict[str, Any], attrs: dict[str, Any]) -> str:
+def _span_action_key(source: str, span: dict[str, Any], attrs: dict[str, Any], *, include_sensitive: bool) -> str:
+    explicit = _explicit_action_key(_first_attr(attrs, ["hulun.action_key", "hulun.event.action_key"]), include_sensitive=include_sensitive)
+    if explicit:
+        return explicit
     key = _first_attr(attrs, ["gen_ai.tool.call.id", "tool.call.id", "tool_call.id"])
     if key:
-        return f"{source}:{redact_text(key)}"
+        return f"{source}:{redact_text(key, include_sensitive=include_sensitive)}"
     span_id = _as_text(span.get("spanId") or span.get("span_id")).strip()
     if span_id:
         return f"{source}:{span_id}"
@@ -142,6 +170,10 @@ def _span_action_key(source: str, span: dict[str, Any], attrs: dict[str, Any]) -
 
 
 def _telemetry_summary(source_label: str, span: dict[str, Any], attrs: dict[str, Any], *, include_sensitive: bool) -> str:
+    hulun_summary = _first_attr(attrs, ["hulun.event.summary", "hulun.summary"])
+    if hulun_summary not in (None, ""):
+        return redact_text(hulun_summary, include_sensitive=include_sensitive)
+
     if include_sensitive:
         raw = _first_attr(
             attrs,
@@ -181,19 +213,23 @@ def _telemetry_kind(attrs: dict[str, Any]) -> str:
 
 def _telemetry_type_and_phase(attrs: dict[str, Any], *, result: str) -> tuple[str, str | None]:
     kind = _telemetry_kind(attrs)
+    explicit_type = _as_text(_first_attr(attrs, ["hulun.event.type", "hulun.type"])).strip()
+    explicit_phase = _normalize_phase(_first_attr(attrs, ["hulun.event.phase", "hulun.phase"]), kind)
+    if explicit_type:
+        return explicit_type, explicit_phase
     if any(key in attrs for key in ["gen_ai.tool.name", "gen_ai.tool.call.id", "gen_ai.tool.call.arguments", "tool.name", "tool.parameters"]):
-        return "tool_result", "recover" if result == "fail" else "orchestrate"
+        return "tool_result", explicit_phase or ("recover" if result == "fail" else "orchestrate")
     if "retriever" in kind or "retrieval" in kind or any(key.startswith("gen_ai.retrieval") for key in attrs):
-        return "source", "explore"
+        return "source", explicit_phase or "explore"
     if "eval" in kind or any(key.startswith("gen_ai.evaluation") for key in attrs):
-        return "verification", "verify"
+        return "verification", explicit_phase or "verify"
     if result == "fail":
-        return "agent_error", "recover"
+        return "agent_error", explicit_phase or "recover"
     if "llm" in kind or kind in {"chat", "text_completion", "generate_content"} or any(key.startswith("gen_ai.") for key in attrs):
-        return "llm_call", "orchestrate"
+        return "llm_call", explicit_phase or "orchestrate"
     if "chain" in kind or "agent" in kind:
-        return "command", "orchestrate"
-    return "observation", None
+        return "command", explicit_phase or "orchestrate"
+    return "observation", explicit_phase
 
 
 def normalize_opentelemetry(span: dict[str, Any], *, include_sensitive: bool = False) -> Observation:
@@ -209,16 +245,19 @@ def normalize_opentelemetry(span: dict[str, Any], *, include_sensitive: bool = F
         "summary": _telemetry_summary("OpenTelemetry GenAI", span, attrs, include_sensitive=include_sensitive),
         "result": result,
         "phase": phase,
-        "claims": [],
-        "evidence": [],
-        "refs": redact_refs(_span_ref("otel", span), include_sensitive=include_sensitive),
+        "claims": redact_list(_list_from_value(_first_attr(attrs, ["hulun.claims", "hulun.event.claims"])), include_sensitive=include_sensitive),
+        "evidence": _list_from_value(_first_attr(attrs, ["hulun.evidence.ids", "hulun.event.evidence", "hulun.evidence"])),
+        "refs": redact_refs(
+            _span_ref("otel", span) + _list_from_value(_first_attr(attrs, ["hulun.refs", "hulun.event.refs", "hulun.ref"])),
+            include_sensitive=include_sensitive,
+        ),
         "resolved": None,
         "source_platform": "opentelemetry",
-        "action_key": _span_action_key("otel", span, attrs),
+        "action_key": _span_action_key("otel", span, attrs, include_sensitive=include_sensitive),
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
-        "cost": _coerce_float(_first_attr(attrs, ["gen_ai.usage.cost", "llm.cost.total", "cost.total"])),
-        "latency_ms": _duration_ms(span),
+        "cost": _coerce_float(_first_attr(attrs, ["hulun.cost", "gen_ai.usage.cost", "llm.cost.total", "cost.total"])),
+        "latency_ms": _coerce_int(_first_attr(attrs, ["hulun.latency_ms", "gen_ai.latency_ms"])) or _duration_ms(span),
         "model": _as_text(_first_attr(attrs, ["gen_ai.request.model", "gen_ai.response.model", "llm.model_name"])).strip() or None,
     }
 
@@ -234,8 +273,11 @@ def normalize_openinference(span: dict[str, Any], *, include_sensitive: bool = F
             "summary": _telemetry_summary("OpenInference", span, attrs, include_sensitive=include_sensitive),
             "phase": phase,
             "source_platform": "openinference",
-            "action_key": _span_action_key("openinference", span, attrs),
-            "refs": redact_refs(_span_ref("openinference", span), include_sensitive=include_sensitive),
+            "action_key": _span_action_key("openinference", span, attrs, include_sensitive=include_sensitive),
+            "refs": redact_refs(
+                _span_ref("openinference", span) + _list_from_value(_first_attr(attrs, ["hulun.refs", "hulun.event.refs", "hulun.ref"])),
+                include_sensitive=include_sensitive,
+            ),
         }
     )
     return observation
@@ -410,27 +452,30 @@ def normalize_generic(item: dict[str, Any], *, source_platform: str = "generic",
 def normalize_openhands(item: dict[str, Any], *, include_sensitive: bool = False) -> Observation:
     raw_type = _first_text(item, ["type", "event_type", "class", "name"]).lower()
     text = _first_text(item, ["message", "error", "observation", "content", "thought", "action"]) or raw_type or "OpenHands event."
+    explicit_result = _explicit_result(item.get("result"))
+    explicit_phase = _normalize_phase(item.get("phase"), text)
+    explicit_action_key = _explicit_action_key(item.get("action_key"), include_sensitive=include_sensitive)
 
     if "error" in raw_type:
         event_type = "conversation_error" if "conversation" in raw_type else "agent_error"
-        result = "fail"
-        phase = "recover"
+        result = explicit_result or "fail"
+        phase = explicit_phase or "recover"
     elif "condensation" in raw_type or "summary" in raw_type:
         event_type = "summary"
-        result = "pass"
-        phase = "summarize"
+        result = explicit_result or "pass"
+        phase = explicit_phase or "summarize"
     elif "observation" in raw_type:
         event_type = "tool_result"
-        result = _result_from_text(text)
-        phase = _phase_from_text(text, "orchestrate")
+        result = explicit_result or _result_from_text(text)
+        phase = explicit_phase or _phase_from_text(text, "orchestrate")
     elif "action" in raw_type:
         event_type = "command"
-        result = "unknown"
-        phase = _phase_from_text(text, "orchestrate")
+        result = explicit_result or "unknown"
+        phase = explicit_phase or _phase_from_text(text, "orchestrate")
     else:
         return normalize_generic(item, source_platform="openhands", include_sensitive=include_sensitive)
 
-    action_key = _stable_action_key(text, raw_type or event_type) if include_sensitive else fingerprint_text(text, prefix="openhands")
+    action_key = explicit_action_key or (_stable_action_key(text, raw_type or event_type) if include_sensitive else fingerprint_text(text, prefix="openhands"))
     return {
         **normalize_generic(item, source_platform="openhands", include_sensitive=include_sensitive),
         "type": event_type,
@@ -446,15 +491,17 @@ def normalize_swe_agent(item: dict[str, Any], *, include_sensitive: bool = False
     observation = _first_text(item, ["observation", "result", "tool_result", "output"])
     thought = _first_text(item, ["thought", "response", "message"])
     text = " | ".join(part for part in [action, observation, thought] if part).strip() or "SWE-agent trajectory step."
-    result = _result_from_text(observation or text, default="pass" if observation else "unknown")
+    explicit_result = _explicit_result(item.get("result"))
+    result = explicit_result or _result_from_text(observation or text, default="pass" if observation else "unknown")
     event_type = "tool_result" if observation else "command"
-    action_key = _stable_action_key(action or text, "swe-agent-step") if include_sensitive else fingerprint_text(action or text, prefix="swe-agent")
+    explicit_action_key = _explicit_action_key(item.get("action_key"), include_sensitive=include_sensitive)
+    action_key = explicit_action_key or (_stable_action_key(action or text, "swe-agent-step") if include_sensitive else fingerprint_text(action or text, prefix="swe-agent"))
     return {
         **normalize_generic(item, source_platform="swe-agent", include_sensitive=include_sensitive),
         "type": event_type,
         "summary": redact_text(text, include_sensitive=True) if include_sensitive else safe_summary_from_trace(item, fallback=f"Imported {event_type} observation; sensitive payload withheld."),
         "result": result,
-        "phase": _phase_from_text(text, "orchestrate"),
+        "phase": _normalize_phase(item.get("phase"), text) or _phase_from_text(text, "orchestrate"),
         "action_key": action_key,
     }
 
@@ -548,8 +595,18 @@ def export_opentelemetry(state: dict[str, Any], *, version: str = "unknown") -> 
             attrs.append(_otlp_attr("gen_ai.usage.input_tokens", int(event["prompt_tokens"])))
         if event.get("completion_tokens") is not None:
             attrs.append(_otlp_attr("gen_ai.usage.output_tokens", int(event["completion_tokens"])))
+        if event.get("cost") is not None:
+            attrs.append(_otlp_attr("hulun.cost", float(event["cost"])))
+        if event.get("latency_ms") is not None:
+            attrs.append(_otlp_attr("hulun.latency_ms", int(event["latency_ms"])))
         if event.get("action_key"):
             attrs.append(_otlp_attr("hulun.action_key", event["action_key"]))
+        if event.get("claims"):
+            attrs.append(_otlp_attr("hulun.claims", event["claims"]))
+        if event.get("evidence"):
+            attrs.append(_otlp_attr("hulun.evidence.ids", event["evidence"]))
+        if event.get("refs"):
+            attrs.append(_otlp_attr("hulun.refs", event["refs"]))
         if event.get("privacy"):
             attrs.append(_otlp_attr("hulun.privacy.mode", event["privacy"].get("mode")))
             attrs.append(_otlp_attr("hulun.privacy.retention_days", event["privacy"].get("retention_days")))

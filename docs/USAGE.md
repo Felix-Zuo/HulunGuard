@@ -100,6 +100,8 @@ Supported formats:
 - `swe-agent`: maps action/observation trajectory steps into command/tool_result observations with retry-loop fingerprints.
 - `auto`: guesses from the filename.
 
+Adapter compatibility guarantees are documented in `docs/ADAPTER_CONFORMANCE.md`.
+
 Export HulunGuard events as OTLP-style JSON spans:
 
 ```powershell

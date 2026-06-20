@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.0 - 2026-06-20
+
+- Added shared adapter conformance tests for CLI, SDK, MCP, generic, OpenTelemetry, OpenInference, OpenHands-like, and SWE-agent-like inputs.
+- Preserved explicit Hulun-compatible telemetry attributes for evidence, references, action keys, result, phase, cost, latency, and token fields.
+- Documented the adapter compatibility contract and unsupported fields in `docs/ADAPTER_CONFORMANCE.md`.
+
 ## 0.15.0 - 2026-06-20
 
 - Added `calibration-drift` to compare current HulunIndex calibration against a checked-in public-safe baseline.

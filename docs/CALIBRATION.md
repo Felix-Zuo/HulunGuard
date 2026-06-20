@@ -4,7 +4,7 @@ HulunGuard calibration is the release gate for HulunIndex scoring behavior. It c
 
 ## Latest Snapshot
 
-- Version candidate: 0.15.0
+- Version candidate: 0.16.0
 - Command: `python -m hulun_guard calibrate`
 - Dataset size: 100 labeled trajectories
 - Gate: pass

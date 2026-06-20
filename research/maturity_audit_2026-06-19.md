@@ -108,6 +108,14 @@ Sources:
 - Fail unexplained calibration regressions while allowing an explicit `--rationale` path for reviewed intentional changes.
 - Add calibration and calibration-drift gates to CI and Release workflows.
 
+## Eleventh Remediation Slice
+
+- Add shared adapter conformance coverage for CLI, Python SDK, MCP, generic trace import, OpenTelemetry, OpenInference, OpenHands-like traces, and SWE-agent-like trajectories.
+- Preserve explicit Hulun-compatible telemetry attributes for event type, phase, result, summary, evidence, refs, action key, claims, cost, latency, and model pressure fields.
+- Preserve explicit OpenHands/SWE-agent phase, result, and action key fields before falling back to inference.
+- Add negative coverage for malformed SDK/MCP payloads and default raw sensitive payload retention.
+- Document supported adapter contract fields and unsupported fields in `docs/ADAPTER_CONFORMANCE.md`.
+
 ## Product Position
 
-HulunGuard is currently moving from developer preview toward a reliable developer product. The M2 calibration baseline now includes external public-source coverage and drift review. It should not be marketed as production-ready until adapter conformance tests and broader real-world benchmark coverage are in place without committing private logs.
+HulunGuard is currently moving from developer preview toward a reliable developer product. The M2 calibration baseline now includes external public-source coverage, drift review, and adapter conformance coverage. It should not be marketed as production-ready until broader real-world benchmark coverage is in place without committing private logs.

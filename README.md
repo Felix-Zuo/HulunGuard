@@ -194,6 +194,7 @@ The hook should show `hulunguard` as eligible, loadable, enabled, and attached t
 - `candidate_skill/`: Codex skill adapter.
 - `docs/`: usage and integration docs.
 - `research/`: source matrix and industrial design notes.
+- `docs/ADAPTER_CONFORMANCE.md`: supported adapter contract and unsupported-field policy.
 
 ## Validation
 

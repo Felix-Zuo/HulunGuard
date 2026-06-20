@@ -129,3 +129,5 @@ hulun-mcp --root . --include-sensitive --retention-days 7
 ## Compatibility Contract
 
 The SDK and MCP tools are intended as the stable adapter layer. Future releases may add optional fields, but should not remove existing methods, tool names, or core output keys without a minor-version migration note.
+
+The shared adapter field contract and unsupported-field policy are defined in `docs/ADAPTER_CONFORMANCE.md`.
