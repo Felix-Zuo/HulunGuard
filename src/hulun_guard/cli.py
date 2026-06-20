@@ -14,7 +14,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
-from .adapters import export_opentelemetry, iter_observations
+from .adapters import MAX_TRACE_BYTES, export_opentelemetry, iter_observations
 from .benchmarks import build_real_world_benchmark_markdown, real_world_benchmark_json, run_real_world_benchmark
 from .calibration import (
     build_calibration_drift_markdown,
@@ -57,6 +57,7 @@ from .schemas import (
     schema_compatibility_json,
 )
 from .sdk import append_project_event
+from .security import run_threat_model_check, threat_model_check_json
 from .storage import (
     criteria,
     find_item,
@@ -326,7 +327,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     first_id = None
     last_id = None
     sample_events: list[dict[str, Any]] = []
-    for observation in iter_observations(args.file, args.format, include_sensitive=args.include_sensitive):
+    for observation in iter_observations(args.file, args.format, include_sensitive=args.include_sensitive, max_trace_bytes=args.max_trace_bytes):
         event = append_event(
             state,
             observation.get("type") or "observation",
@@ -572,6 +573,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         payload["schema_compatibility"] = schema_compatibility
         schema_status = "ok" if schema_compatibility["gate"]["passed"] else "error"
         add_check("schema_compatibility", schema_status, f"{len(schema_compatibility['fixtures'])} fixtures.")
+        threat_model = run_threat_model_check(root)
+        payload["threat_model"] = threat_model
+        threat_model_status = "ok" if threat_model["gate"]["passed"] else "error"
+        add_check("threat_model", threat_model_status, f"{len(threat_model['checks'])} checks.")
         calibration = run_trajectory_calibration()
         payload["calibration"] = {key: value for key, value in calibration.items() if key != "trajectories"}
         calibration_status = "ok" if calibration["gate"]["passed"] else "error"
@@ -637,6 +642,21 @@ def cmd_schema_check(args: argparse.Namespace) -> int:
         for failure in gate["failures"]:
             detail = ", ".join(f"{key}={value}" for key, value in failure.items())
             print(f"- {detail}")
+    return 0 if result["gate"]["passed"] else 2
+
+
+def cmd_threat_model_check(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    result = run_threat_model_check(root)
+    if args.json:
+        print(threat_model_check_json(result), end="")
+    else:
+        gate = result["gate"]
+        print(f"HulunGuard threat model: {'pass' if gate['passed'] else 'fail'}")
+        print(f"Checks: {len(result['checks'])}")
+        print(f"Failures: {gate['failure_count']}")
+        for failure in gate["failures"]:
+            print(f"- {failure['name']}: {failure['detail']}")
     return 0 if result["gate"]["passed"] else 2
 
 
@@ -1302,6 +1322,10 @@ def build_parser() -> argparse.ArgumentParser:
     schema_check.add_argument("--json", action="store_true")
     schema_check.set_defaults(func=cmd_schema_check)
 
+    threat_model_check = sub.add_parser("threat-model-check", parents=[root_parent])
+    threat_model_check.add_argument("--json", action="store_true")
+    threat_model_check.set_defaults(func=cmd_threat_model_check)
+
     benchmark = sub.add_parser("benchmark", parents=[root_parent])
     benchmark.add_argument("--suite", choices=["scan", "real-world"], default="scan")
     benchmark.add_argument("--events", type=int, default=10000)
@@ -1394,6 +1418,7 @@ def build_parser() -> argparse.ArgumentParser:
     ingest = sub.add_parser("ingest", parents=[root_parent])
     ingest.add_argument("--file", required=True, help="JSON or JSONL trace file to import.")
     ingest.add_argument("--format", choices=["auto", "generic", "opentelemetry", "openinference", "openhands", "swe-agent"], default="auto")
+    ingest.add_argument("--max-trace-bytes", type=int, default=MAX_TRACE_BYTES, help=f"Reject trace files larger than this many bytes. Defaults to {MAX_TRACE_BYTES}.")
     ingest.add_argument("--source-platform", help="Override source platform on imported events.")
     ingest.add_argument("--scan", action="store_true", help="Scan immediately after import.")
     ingest.add_argument("--threshold", type=int)

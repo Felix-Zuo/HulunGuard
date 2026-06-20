@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.20.0 - 2026-06-20
+
+- Added `docs/THREAT_MODEL.md` with local storage, remote behavior, adapter input, redaction, retention, threat scenario, and release-rule boundaries.
+- Added `threat-model-check` and wired it into doctor, CI, Release, PR, and release-checklist workflows.
+- Added a default 5 MiB trace import file-size cap with `--max-trace-bytes` and regression coverage for oversized trace rejection before persistence.
+
 ## 0.19.0 - 2026-06-20
 
 - Added a public schema registry, migration/normalization layer, and `schema-check` compatibility gate for legacy JSON fixtures.

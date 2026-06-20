@@ -141,6 +141,13 @@ Sources:
 - Add `schema-check` as a release gate and include it in CI, Release, PR, doctor, and release-checklist workflows.
 - Document schema compatibility promises and minor-version bump rules in `docs/SCHEMAS.md`.
 
+## Fifteenth Remediation Slice
+
+- Add a documented local-first threat model covering local storage, remote behavior, adapter inputs, sensitive-data handling, retention, cleanup, release assets, and realistic attacker or error scenarios.
+- Add `threat-model-check` as a release gate and include it in CI, Release, PR, doctor, and release-checklist workflows.
+- Add a default 5 MiB trace import size cap with `--max-trace-bytes` so malicious or accidental oversized trace files fail before JSON parsing or state persistence.
+- Cover the threat model gate, required links, and oversized trace rejection with tests.
+
 ## Product Position
 
-HulunGuard is currently moving from developer preview toward a reliable developer product. The M2 baseline now includes external public-source calibration coverage, drift review, adapter conformance coverage, public-safe real-world benchmark coverage, retention cleanup, and schema compatibility. It should not be marketed as production-ready until broader adapter integration tests, a documented threat model, and larger real-world coverage are in place.
+HulunGuard is currently moving from developer preview toward a reliable developer product. The M2 baseline now includes external public-source calibration coverage, drift review, adapter conformance coverage, public-safe real-world benchmark coverage, retention cleanup, schema compatibility, and a documented threat model. It should not be marketed as production-ready until broader adapter integration tests and larger real-world coverage are in place.

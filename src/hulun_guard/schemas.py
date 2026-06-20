@@ -28,6 +28,7 @@ EXPORT_OPENTELEMETRY_SCHEMA = "hulun.export.opentelemetry.v1"
 CALIBRATION_DRIFT_ERROR_SCHEMA = "hulun.calibration_drift_error.v1"
 SCHEMA_COMPATIBILITY_SCHEMA = "hulun.schema_compatibility.v1"
 MONITOR_SCHEMA = "hulun.monitor.v1"
+THREAT_MODEL_CHECK_SCHEMA = "hulun.threat_model_check.v1"
 DEFAULT_SCHEMA_FIXTURE_DIR = Path(__file__).with_name("schema_fixtures")
 RISK_WEIGHTS = {
     "evidence_gap": 20,
@@ -111,6 +112,11 @@ SUPPORTED_PUBLIC_SCHEMAS: dict[str, dict[str, Any]] = {
         "promise": "Schema compatibility reports preserve fixture outcomes, generated schemas, and release gate failures.",
     },
     "monitor": {"current": MONITOR_SCHEMA, "supported": [MONITOR_SCHEMA], "promise": "Monitor ledgers preserve live score, band, group, conversation, and status."},
+    "threat_model_check": {
+        "current": THREAT_MODEL_CHECK_SCHEMA,
+        "supported": [THREAT_MODEL_CHECK_SCHEMA],
+        "promise": "Threat model check reports preserve documented boundary checks, link checks, and gate failures.",
+    },
 }
 
 _SCHEMA_RE = re.compile(r"^(?P<family>.+)\.v(?P<major>\d+)$")

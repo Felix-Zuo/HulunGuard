@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hulun-guard"
-version = "0.19.0"
+version = "0.20.0"
 description = "Proof-first reliability guard for long-running AI agents."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -46,7 +46,7 @@ hulun-mcp = "hulun_guard.mcp:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-hulun_guard = ["schema_fixtures/*.json"]
+hulun_guard = ["schema_fixtures/*.json", "security_docs/*.md"]
 
 [tool.ruff]
 line-length = 140
