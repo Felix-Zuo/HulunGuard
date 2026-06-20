@@ -20,7 +20,7 @@ using HulunGuard on real work.
 - Privacy-safe trace ingestion: import generic JSON/JSONL, OpenTelemetry GenAI, OpenInference, OpenHands-like events, SWE-agent-like trajectories, LangGraph stream parts, LangSmith run exports, Langfuse OTEL traces, and Phoenix/OpenInference spans without persisting raw sensitive payloads by default.
 - Python SDK and MCP server: agents can record runtime state directly without shell glue.
 - Built-in validation suite: run synthetic healthy/slop-risk scenarios before release.
-- Product operations: `quickstart`, `doctor`, `compatibility`, `adapter-matrix`, `schema-check`, `cleanup`, and `benchmark` commands for onboarding, diagnostics, agent compatibility, adapter integration, schema compatibility, retention cleanup, scan performance, and public-safe real-world workflow checks.
+- Product operations: `quickstart`, `doctor`, `compatibility`, `integration-kit`, `adapter-matrix`, `schema-check`, `cleanup`, and `benchmark` commands for onboarding, diagnostics, agent compatibility, first-run integration packages, adapter integration, schema compatibility, retention cleanup, scan performance, and public-safe real-world workflow checks.
 - Conversation runtime monitoring: per-conversation events, user challenges, pending tool calls, unresolved failures, unsupported final claims, and monitor sync.
 
 ## Quick Start
@@ -79,6 +79,8 @@ python .\hulun.py ingest --file .\phoenix-openinference.json --format phoenix --
 python .\hulun.py export-otel --output .\hulun-otel.json
 ```
 
+For an empty project, add `--init-if-missing` to create the minimal local ledger before import.
+
 By default, runtime observations and imported traces redact known secrets, emails, URL query strings, private home paths, and raw payload fields such as prompts, completions, outputs, and tool arguments. Use `--include-sensitive --retention-days 7` only for trusted local debugging.
 
 Check mainstream agent compatibility:
@@ -86,6 +88,13 @@ Check mainstream agent compatibility:
 ```powershell
 python .\hulun.py compatibility
 python .\hulun.py compatibility --json
+```
+
+Generate a verified onboarding kit for an agent:
+
+```powershell
+python .\hulun.py integration-kit --agent langgraph --verify
+python .\hulun.py integration-kit --agent all --output .\.hulun\integration-kits --force --verify
 ```
 
 The security boundary and threat assumptions are documented in `docs/THREAT_MODEL.md`.
@@ -99,6 +108,7 @@ python .\hulun.py calibrate
 python .\hulun.py calibration-drift
 python .\hulun.py threat-model-check --json
 python .\hulun.py compatibility --json
+python .\hulun.py integration-kit --agent all --output .\.hulun\integration-kits --force --verify --json
 python .\hulun.py adapter-matrix --json
 python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
@@ -216,6 +226,7 @@ The hook should show `hulunguard` as eligible, loadable, enabled, and attached t
 - `docs/ADAPTER_CONFORMANCE.md`: supported adapter contract and unsupported-field policy.
 - `docs/ADAPTER_MATRIX.md`: adapter integration matrix and support tiers.
 - `docs/AGENT_COMPATIBILITY.md`: mainstream agent compatibility paths and bridge boundaries.
+- `docs/INTEGRATION_KITS.md`: first-run onboarding kits for supported agent runtimes and trace formats.
 - `docs/THREAT_MODEL.md`: local-first security model, privacy boundaries, and threat assumptions.
 - `docs/SCHEMAS.md`: public JSON schema compatibility and migration policy.
 - `docs/RETENTION.md`: local retention cleanup model and safety boundary.
@@ -229,6 +240,7 @@ python .\hulun.py validate
 python .\hulun.py calibration-drift
 python .\hulun.py threat-model-check --json
 python .\hulun.py compatibility --json
+python .\hulun.py integration-kit --agent all --output .\.hulun\integration-kits --force --verify --json
 python .\hulun.py adapter-matrix --json
 python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json

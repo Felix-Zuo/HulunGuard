@@ -7,6 +7,7 @@ import ipaddress
 import json
 import socketserver
 import sys
+import tempfile
 import threading
 import time
 import webbrowser
@@ -34,6 +35,7 @@ from .conversation import (
     refresh_conversation_scan,
     start_conversation,
 )
+from .integration_kits import generate_integration_kits, integration_kits_json, supported_agent_ids
 from .monitor import (
     board_path,
     close_monitor,
@@ -324,7 +326,19 @@ def cmd_observe(args: argparse.Namespace) -> int:
 
 def cmd_ingest(args: argparse.Namespace) -> int:
     root = project_root(args.root)
-    state = load_state(root)
+    try:
+        state = load_state(root)
+    except SystemExit:
+        if not args.init_if_missing:
+            raise
+        criterion = args.init_criterion or "Imported agent trace observations remain evidence-backed."
+        state = initial_state(
+            objective=args.init_objective or f"Monitor {args.format} agent runtime reliability",
+            criteria=[criterion],
+            constraints=[],
+            assumptions=[],
+            threshold=args.init_threshold,
+        )
     imported_count = 0
     first_id = None
     last_id = None
@@ -583,6 +597,11 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         payload["agent_compatibility"] = compatibility
         compatibility_status = "ok" if compatibility["direct_or_standard_count"] >= 13 else "error"
         add_check("agent_compatibility", compatibility_status, f"{compatibility['entry_count']} entries.")
+        with tempfile.TemporaryDirectory() as tmp:
+            integration_kits = generate_integration_kits("all", Path(tmp), force=True, verify=True)
+        payload["integration_kits"] = integration_kits
+        integration_status = "ok" if integration_kits["gate"]["passed"] else "error"
+        add_check("integration_kits", integration_status, f"{integration_kits['kit_count']} kits.")
         adapter_matrix = run_adapter_matrix()
         payload["adapter_matrix"] = adapter_matrix
         adapter_matrix_status = "ok" if adapter_matrix["gate"]["passed"] else "error"
@@ -795,6 +814,32 @@ def cmd_compatibility(args: argparse.Namespace) -> int:
         for item in result["agents"]:
             print(f"- {item['name']}: {item['tier']} via {item['ingest_format']}")
     return 0
+
+
+def cmd_integration_kit(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    if args.output:
+        output_dir = Path(args.output)
+    else:
+        base = hulun_dir(root) / "integration-kits"
+        output_dir = base if args.agent == "all" else base / args.agent
+    try:
+        result = generate_integration_kits(args.agent, output_dir, force=args.force, verify=args.verify)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    if args.json:
+        print(integration_kits_json(result), end="")
+    else:
+        print(f"HulunGuard integration kits: {result['kit_count']} generated")
+        print(f"Output: {result['output_dir']}")
+        if args.verify:
+            print(f"Verified: {result['verified_count']} / {result['kit_count']}")
+        for kit in result["kits"]:
+            verification = kit["verification"]
+            suffix = f", {verification['observation_count']} sample observations" if verification["passed"] else ""
+            print(f"- {kit['agent']['name']}: {kit['agent']['ingest_format']} -> {kit['kit_dir']}{suffix}")
+    return 0 if result["gate"]["passed"] else 2
 
 
 def cmd_conversation_start(args: argparse.Namespace) -> int:
@@ -1386,6 +1431,14 @@ def build_parser() -> argparse.ArgumentParser:
     compatibility.add_argument("--json", action="store_true")
     compatibility.set_defaults(func=cmd_compatibility)
 
+    integration_kit = sub.add_parser("integration-kit", parents=[root_parent])
+    integration_kit.add_argument("--agent", choices=["all", *supported_agent_ids()], required=True)
+    integration_kit.add_argument("--output", help="Write the kit to this directory. Defaults to .hulun/integration-kits/<agent>.")
+    integration_kit.add_argument("--force", action="store_true", help="Overwrite HulunGuard-generated kit files if they already exist.")
+    integration_kit.add_argument("--verify", action="store_true", help="Parse generated sample traces through the matching ingest adapter.")
+    integration_kit.add_argument("--json", action="store_true")
+    integration_kit.set_defaults(func=cmd_integration_kit)
+
     conversation = sub.add_parser("conversation")
     conversation_sub = conversation.add_subparsers(dest="conversation_command", required=True)
 
@@ -1477,6 +1530,10 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--final-attempt", action="store_true")
     ingest.add_argument("--fail-on-threshold", action="store_true")
     ingest.add_argument("--include-events", action="store_true")
+    ingest.add_argument("--init-if-missing", action="store_true", help="Create a minimal HulunGuard project ledger before import if no state exists.")
+    ingest.add_argument("--init-objective", help="Objective used with --init-if-missing.")
+    ingest.add_argument("--init-criterion", help="Criterion used with --init-if-missing.")
+    ingest.add_argument("--init-threshold", type=int, default=66, help="Risk threshold used with --init-if-missing.")
     add_privacy_controls(ingest)
     ingest.add_argument("--json", action="store_true")
     ingest.set_defaults(func=cmd_ingest)

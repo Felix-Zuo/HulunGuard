@@ -42,6 +42,8 @@ jobs:
         run: python -m hulun_guard threat-model-check --json
       - name: HulunGuard agent compatibility
         run: python -m hulun_guard compatibility --json
+      - name: HulunGuard integration kits
+        run: python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify --json
       - name: HulunGuard adapter matrix
         run: python -m hulun_guard adapter-matrix --json
       - name: HulunGuard schema compatibility

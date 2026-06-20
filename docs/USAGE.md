@@ -95,6 +95,12 @@ python .\hulun.py ingest --file .\langfuse-otel.json --format langfuse --scan
 python .\hulun.py ingest --file .\phoenix-openinference.json --format phoenix --scan
 ```
 
+For first-run onboarding in an empty project, allow ingest to create a minimal ledger:
+
+```powershell
+python .\hulun.py ingest --file .\trace.jsonl --format generic --scan --init-if-missing
+```
+
 Supported formats:
 
 - `generic`: JSON or JSONL with fields like `type`, `summary`, `result`, `phase`, `claim`, `evidence`, `action_key`, `prompt_tokens`, `completion_tokens`, `cost`, and `latency_ms`.
@@ -129,6 +135,20 @@ python .\hulun.py compatibility --json
 ```
 
 The matrix covers OpenHands, SWE-agent, LangGraph, LangSmith, Langfuse, Phoenix, OpenTelemetry GenAI emitters, OpenInference emitters, AutoGen, CrewAI, LlamaIndex, Haystack, Semantic Kernel, OpenAI Agents SDK, and custom agents that can write JSON/JSONL records.
+
+## Generate Integration Kits
+
+Use `integration-kit` when a user needs a runnable first-run package for a specific agent or trace format:
+
+```powershell
+python .\hulun.py integration-kit --agent langgraph --verify
+python .\hulun.py integration-kit --agent openai-agents-sdk --verify
+python .\hulun.py integration-kit --agent all --output .\.hulun\integration-kits --force --verify
+```
+
+Each kit includes a synthetic sample trace, `README.md`, PowerShell and POSIX shell runners, and `hulun_integration.json`. The generated runners use `ingest --init-if-missing` so a fresh project can import the sample without a separate initialization step. The `--verify` flag parses the generated sample trace through the selected adapter without persisting it to the project ledger.
+
+Existing generated files are not overwritten unless `--force` is used.
 
 ## Privacy And Retention
 
@@ -173,6 +193,7 @@ python .\hulun.py calibrate
 python .\hulun.py calibration-drift
 python .\hulun.py threat-model-check --json
 python .\hulun.py compatibility --json
+python .\hulun.py integration-kit --agent all --output .\.hulun\integration-kits --force --verify --json
 python .\hulun.py adapter-matrix --json
 python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
@@ -186,6 +207,7 @@ python -m pytest -q
 `calibration-drift` writes `.hulun/calibration_drift_report.md` and `.hulun/calibration_drift_report.json` by comparing current calibration against `docs/calibration_baseline.json`. Regressions fail unless `--rationale` is provided for an intentional review.
 `threat-model-check` verifies that the public threat model exists, is linked from release/security docs, and that trace import keeps a bounded default file-size limit.
 `compatibility` reports direct, standards-based, and bridge-based paths for mainstream agent frameworks.
+`integration-kit` generates first-run onboarding packages and verifies their sample traces through the matching ingest adapters.
 `adapter-matrix` verifies OpenTelemetry/OpenInference/Langfuse/Phoenix round-trips plus OpenHands-like, SWE-agent-like, LangGraph, and LangSmith stream coverage without committing private traces.
 `schema-check` loads legacy JSON fixtures, normalizes them through the migration layer, and fails if current public schemas are not written. See `docs/SCHEMAS.md`.
 

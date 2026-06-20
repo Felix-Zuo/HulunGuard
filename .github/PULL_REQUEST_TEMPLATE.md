@@ -11,6 +11,7 @@
 - [ ] `python -m hulun_guard calibration-drift`
 - [ ] `python -m hulun_guard threat-model-check --json`
 - [ ] `python -m hulun_guard compatibility --json`
+- [ ] `python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify --json`
 - [ ] `python -m hulun_guard adapter-matrix --json`
 - [ ] `python -m hulun_guard schema-check --json`
 - [ ] `python -m hulun_guard cleanup --json`
