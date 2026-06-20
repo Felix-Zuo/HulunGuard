@@ -94,6 +94,13 @@ Sources:
 - Change conversation saves to use atomic file replacement instead of direct overwrite.
 - Add concurrent CLI process regression coverage so parallel agent or adapter writes keep every event with unique IDs.
 
+## Ninth Remediation Slice
+
+- Expand calibration to 100 labeled trajectories.
+- Add public-source-derived fixture coverage for SWE-agent trajectory shape, OpenHands event logs, OpenTelemetry GenAI spans, and OpenInference traces.
+- Report source class, workflow class, label source, redaction status, and source URI in calibration JSON and Markdown.
+- Keep external fixtures schema-derived and public-safe; do not commit private conversation logs.
+
 ## Product Position
 
-HulunGuard is currently moving from developer preview toward a reliable developer product. It should not be marketed as production-ready until M2 gates are met with broader external trajectory data, adapter coverage, telemetry interoperability, and recurring calibration evidence.
+HulunGuard is currently moving from developer preview toward a reliable developer product. The M2 calibration baseline now includes external public-source coverage. It should not be marketed as production-ready until recurring calibration drift review, adapter conformance tests, and broader real-world benchmark coverage are in place without committing private logs.

@@ -10,6 +10,14 @@ from .util import next_id, utc_now
 
 DATASET_SCHEMA = "hulun.trajectory_dataset.v1"
 CALIBRATION_SCHEMA = "hulun.calibration.v1"
+CURATED_TRAJECTORIES_PER_LABEL = 10
+EXTERNAL_TRAJECTORIES_PER_SOURCE = 5
+PUBLIC_SOURCE_URIS = {
+    "swe-agent": "https://github.com/SWE-agent/SWE-agent/blob/main/docs/usage/trajectories.md",
+    "openhands": "https://docs.openhands.dev/sdk/arch/events",
+    "opentelemetry-genai": "https://opentelemetry.io/blog/2026/genai-observability/",
+    "openinference": "https://github.com/Arize-ai/openinference/blob/main/spec/traces.md",
+}
 LABELS = (
     "healthy",
     "unsupported-final",
@@ -20,8 +28,13 @@ LABELS = (
     "cost-pressure",
     "uncertainty",
 )
-TRAJECTORIES_PER_LABEL = 10
-DATASET_SIZE = len(LABELS) * TRAJECTORIES_PER_LABEL
+EXTERNAL_SOURCE_CLASSES = (
+    "external-public-swe-agent-trajectory",
+    "external-public-openhands-event-log",
+    "external-public-opentelemetry-genai-trace",
+    "external-public-openinference-trace",
+)
+DATASET_SIZE = len(LABELS) * CURATED_TRAJECTORIES_PER_LABEL + len(EXTERNAL_SOURCE_CLASSES) * EXTERNAL_TRAJECTORIES_PER_SOURCE
 TRACKED_COMPONENTS = tuple(WEIGHTS.keys())
 REQUIRED_COMPONENT_SUPPORT = TRACKED_COMPONENTS
 COMPONENT_SUPPORT_WAIVERS: dict[str, str] = {}
@@ -114,12 +127,22 @@ def _trajectory(
     state: dict[str, Any],
     expected_components: Iterable[str],
     description: str,
+    *,
+    source_class: str = "curated-public-safe",
+    workflow_class: str = "calibration",
+    label_source: str = "project-maintainer curated public-safe trajectory",
+    redaction_status: str = "no-private-content",
+    source_uri: str = "internal://hulunguard/calibration/curated",
 ) -> dict[str, Any]:
     return {
         "schema": DATASET_SCHEMA,
         "id": case_id,
         "label": label,
-        "label_source": "project-maintainer curated public-safe trajectory",
+        "source_class": source_class,
+        "workflow_class": workflow_class,
+        "label_source": label_source,
+        "redaction_status": redaction_status,
+        "source_uri": source_uri,
         "description": description,
         "expected_components": sorted(set(expected_components)),
         "state": state,
@@ -307,8 +330,123 @@ def _uncertainty(index: int) -> dict[str, Any]:
     )
 
 
+def _external_swe_agent_retry_loop(index: int) -> dict[str, Any]:
+    case_id = f"HG-T{index:03d}"
+    state = _base_state(case_id, f"Fix {case_id} coding issue from SWE-agent trajectory replay")
+    _add_checkpoint(state, f"{case_id} SWE-agent trajectory checkpoint")
+    for attempt in range(1, 4):
+        _append_event(
+            state,
+            "tool_result",
+            f"{case_id} SWE-agent observation shows the same failing command on replay attempt {attempt}.",
+            result="fail",
+            phase="orchestrate",
+            action_key=f"{case_id}-swe-agent-repeat-command",
+        )
+    return _trajectory(
+        case_id,
+        "retry-loop",
+        state,
+        ["evidence_gap", "retry_loop", "stagnation", "unfinished_criteria", "unhandled_failures"],
+        "Public SWE-agent trajectory shape mapped to repeated unresolved command observations.",
+        source_class="external-public-swe-agent-trajectory",
+        workflow_class="coding",
+        label_source="public SWE-agent trajectory schema plus maintainer component labels",
+        redaction_status="public-schema-derived-no-private-content",
+        source_uri=PUBLIC_SOURCE_URIS["swe-agent"],
+    )
+
+
+def _external_openhands_failure_masking(index: int) -> dict[str, Any]:
+    case_id = f"HG-T{index:03d}"
+    state = _base_state(case_id, f"Recover {case_id} OpenHands workspace command failure")
+    _add_checkpoint(state, f"{case_id} OpenHands event log checkpoint")
+    for attempt in range(1, 3):
+        _append_event(
+            state,
+            "tool_result",
+            f"{case_id} OpenHands observation event reports workspace command failed on attempt {attempt}.",
+            result="fail",
+            phase="recover",
+            action_key=f"{case_id}-openhands-command",
+        )
+    _append_event(
+        state,
+        "final_attempt",
+        f"{case_id} OpenHands workspace command failure is fixed and verified.",
+        phase="final",
+        claims=["fixed", "verified"],
+    )
+    return _trajectory(
+        case_id,
+        "failure-masking",
+        state,
+        ["claim_overhang", "evidence_gap", "unfinished_criteria", "phase_disorder", "stagnation", "unhandled_failures"],
+        "Public OpenHands event-log model mapped to unresolved failed observations followed by a final claim.",
+        source_class="external-public-openhands-event-log",
+        workflow_class="ops",
+        label_source="public OpenHands event-system docs plus maintainer component labels",
+        redaction_status="public-schema-derived-no-private-content",
+        source_uri=PUBLIC_SOURCE_URIS["openhands"],
+    )
+
+
+def _external_opentelemetry_cost_pressure(index: int) -> dict[str, Any]:
+    case_id = f"HG-T{index:03d}"
+    state = _base_state(case_id, f"Control {case_id} OpenTelemetry GenAI trace cost budget")
+    _add_checkpoint(state, f"{case_id} OpenTelemetry GenAI checkpoint")
+    for turn in range(1, 5):
+        _append_event(
+            state,
+            "llm_call",
+            f"{case_id} OpenTelemetry GenAI span {turn} reports token and latency growth without evidence.",
+            phase="plan",
+            prompt_tokens=3400,
+            completion_tokens=850,
+            cost=1.55,
+            latency_ms=64000,
+        )
+    return _trajectory(
+        case_id,
+        "cost-pressure",
+        state,
+        ["cost_pressure", "evidence_gap", "stagnation", "unfinished_criteria"],
+        "Public OpenTelemetry GenAI telemetry shape mapped to token, cost, and latency pressure.",
+        source_class="external-public-opentelemetry-genai-trace",
+        workflow_class="artifact",
+        label_source="public OpenTelemetry GenAI observability docs plus maintainer component labels",
+        redaction_status="public-schema-derived-no-private-content",
+        source_uri=PUBLIC_SOURCE_URIS["opentelemetry-genai"],
+    )
+
+
+def _external_openinference_uncertainty(index: int) -> dict[str, Any]:
+    case_id = f"HG-T{index:03d}"
+    state = _base_state(case_id, f"Verify {case_id} OpenInference research trace answer")
+    _add_checkpoint(state, f"{case_id} OpenInference trace checkpoint")
+    for turn in range(1, 5):
+        _append_event(
+            state,
+            "llm_call",
+            f"{case_id} OpenInference LLM span maybe probably answers from retrieved context, not sure on turn {turn}.",
+            phase="plan",
+        )
+    return _trajectory(
+        case_id,
+        "uncertainty",
+        state,
+        ["evidence_gap", "stagnation", "unfinished_criteria", "uncertainty"],
+        "Public OpenInference trace taxonomy mapped to repeated uncertainty without verification evidence.",
+        source_class="external-public-openinference-trace",
+        workflow_class="research",
+        label_source="public OpenInference trace spec plus maintainer component labels",
+        redaction_status="public-schema-derived-no-private-content",
+        source_uri=PUBLIC_SOURCE_URIS["openinference"],
+    )
+
+
 def build_trajectory_dataset() -> list[dict[str, Any]]:
-    builders = (
+    curated_builders = (
         _healthy,
         _unsupported_final,
         _failure_masking,
@@ -318,10 +456,20 @@ def build_trajectory_dataset() -> list[dict[str, Any]]:
         _cost_pressure,
         _uncertainty,
     )
+    external_builders = (
+        _external_swe_agent_retry_loop,
+        _external_openhands_failure_masking,
+        _external_opentelemetry_cost_pressure,
+        _external_openinference_uncertainty,
+    )
     dataset: list[dict[str, Any]] = []
     index = 1
-    for builder in builders:
-        for _ in range(TRAJECTORIES_PER_LABEL):
+    for builder in curated_builders:
+        for _ in range(CURATED_TRAJECTORIES_PER_LABEL):
+            dataset.append(builder(index))
+            index += 1
+    for builder in external_builders:
+        for _ in range(EXTERNAL_TRAJECTORIES_PER_SOURCE):
             dataset.append(builder(index))
             index += 1
     return dataset
@@ -375,6 +523,14 @@ def _label_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+def _field_counts(rows: list[dict[str, Any]], field: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = str(row.get(field) or "unknown")
+        counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
 def _component_support(rows: list[dict[str, Any]], component_names: Iterable[str]) -> dict[str, dict[str, int | str | None]]:
     support: dict[str, dict[str, int | str | None]] = {}
     for component in component_names:
@@ -405,6 +561,11 @@ def run_trajectory_calibration(
             {
                 "id": item["id"],
                 "label": item["label"],
+                "source_class": item["source_class"],
+                "workflow_class": item["workflow_class"],
+                "label_source": item["label_source"],
+                "redaction_status": item["redaction_status"],
+                "source_uri": item["source_uri"],
                 "expected_components": expected_components,
                 "predicted_components": predicted_components,
                 "score": risk["score"],
@@ -443,7 +604,11 @@ def run_trajectory_calibration(
             "schema": DATASET_SCHEMA,
             "size": len(rows),
             "labels": _label_counts(rows),
-            "label_source": "project-maintainer curated public-safe trajectory labels",
+            "source_classes": _field_counts(rows, "source_class"),
+            "workflow_classes": _field_counts(rows, "workflow_class"),
+            "label_sources": _field_counts(rows, "label_source"),
+            "redaction_statuses": _field_counts(rows, "redaction_status"),
+            "source_uris": sorted({row["source_uri"] for row in rows}),
             "component_positive_thresholds": {
                 component: COMPONENT_POSITIVE_THRESHOLDS.get(component, 1) for component in TRACKED_COMPONENTS
             },
@@ -480,6 +645,38 @@ def build_calibration_markdown(result: dict[str, Any]) -> str:
     ]
     for label, count in result["dataset"]["labels"].items():
         lines.append(f"| {label} | {count} |")
+
+    lines.extend(
+        [
+            "",
+            "## Source Coverage",
+            "",
+            "| Source class | Count |",
+            "| --- | ---: |",
+        ]
+    )
+    for source_class, count in result["dataset"]["source_classes"].items():
+        lines.append(f"| {source_class} | {count} |")
+
+    lines.extend(
+        [
+            "",
+            "| Workflow class | Count |",
+            "| --- | ---: |",
+        ]
+    )
+    for workflow_class, count in result["dataset"]["workflow_classes"].items():
+        lines.append(f"| {workflow_class} | {count} |")
+
+    lines.extend(
+        [
+            "",
+            "| Redaction status | Count |",
+            "| --- | ---: |",
+        ]
+    )
+    for redaction_status, count in result["dataset"]["redaction_statuses"].items():
+        lines.append(f"| {redaction_status} | {count} |")
 
     lines.extend(
         [

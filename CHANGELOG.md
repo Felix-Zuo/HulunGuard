@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.0 - 2026-06-20
+
+- Expanded calibration to 100 labeled trajectories with external public-source fixtures for SWE-agent, OpenHands, OpenTelemetry GenAI, and OpenInference.
+- Added calibration source, workflow, label-source, redaction-status, and source-URI coverage reporting.
+- Added `docs/CALIBRATION.md` as the public calibration evidence note for release review.
+
 ## 0.13.1 - 2026-06-20
 
 - Updated Release workflow artifact upload to `actions/upload-artifact@v6` after confirming it uses the Node 24 runtime.
