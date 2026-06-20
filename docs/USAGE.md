@@ -89,6 +89,10 @@ python .\hulun.py ingest --file .\otel-trace.json --format opentelemetry --scan
 python .\hulun.py ingest --file .\openinference-trace.json --format openinference --scan
 python .\hulun.py ingest --file .\openhands-events.json --format openhands --scan
 python .\hulun.py ingest --file .\run.traj --format swe-agent --scan
+python .\hulun.py ingest --file .\langgraph-stream.json --format langgraph --scan
+python .\hulun.py ingest --file .\langsmith-runs.json --format langsmith --scan
+python .\hulun.py ingest --file .\langfuse-otel.json --format langfuse --scan
+python .\hulun.py ingest --file .\phoenix-openinference.json --format phoenix --scan
 ```
 
 Supported formats:
@@ -98,6 +102,10 @@ Supported formats:
 - `openinference`: OpenInference-style spans with `openinference.span.kind` and LLM/tool attributes.
 - `openhands`: maps action/observation/error/condensation-like events into command, tool_result, agent_error, and summary observations.
 - `swe-agent`: maps action/observation trajectory steps into command/tool_result observations with retry-loop fingerprints.
+- `langgraph`: maps stream parts such as updates, values, messages, custom data, checkpoints, tasks, and debug records into runtime observations.
+- `langsmith`: maps run exports into LLM calls, tool results, sources, commands, and agent errors.
+- `langfuse`: maps Langfuse OTEL traces through the OpenTelemetry adapter while preserving `source_platform=langfuse`.
+- `phoenix`: maps Phoenix/OpenInference spans through the OpenInference adapter while preserving `source_platform=phoenix`.
 - `auto`: guesses from the filename.
 
 Adapter compatibility guarantees are documented in `docs/ADAPTER_CONFORMANCE.md`. Integration-tested adapter tiers are documented in `docs/ADAPTER_MATRIX.md`.
@@ -164,7 +172,7 @@ python -m pytest -q
 `calibrate` writes `.hulun/calibration_report.md` and `.hulun/calibration_report.json` with component support, precision, recall, false-positive rate, false-negative rate, source coverage, workflow coverage, and redaction coverage over 100 labeled trajectories.
 `calibration-drift` writes `.hulun/calibration_drift_report.md` and `.hulun/calibration_drift_report.json` by comparing current calibration against `docs/calibration_baseline.json`. Regressions fail unless `--rationale` is provided for an intentional review.
 `threat-model-check` verifies that the public threat model exists, is linked from release/security docs, and that trace import keeps a bounded default file-size limit.
-`adapter-matrix` verifies OpenTelemetry and OpenInference round-trips plus OpenHands-like and SWE-agent-like stream coverage without committing private traces.
+`adapter-matrix` verifies OpenTelemetry/OpenInference/Langfuse/Phoenix round-trips plus OpenHands-like, SWE-agent-like, LangGraph, and LangSmith stream coverage without committing private traces.
 `schema-check` loads legacy JSON fixtures, normalizes them through the migration layer, and fails if current public schemas are not written. See `docs/SCHEMAS.md`.
 
 ## Benchmark Scan Performance

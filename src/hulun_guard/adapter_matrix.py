@@ -49,8 +49,13 @@ def adapter_support_tiers() -> list[dict[str, Any]]:
             "guarantee": "Public-safe fixture streams are imported through adapters, checked for contract fields, and covered by the adapter-matrix gate.",
         },
         {
+            "tier": "hosted-fixture-tested",
+            "surfaces": ["langgraph", "langsmith", "langfuse", "phoenix"],
+            "guarantee": "Hosted platform fixture shapes are checked with synthetic public-safe exports and no service-specific private trace data.",
+        },
+        {
             "tier": "roundtrip-tested",
-            "surfaces": ["opentelemetry", "openinference"],
+            "surfaces": ["opentelemetry", "openinference", "langfuse", "phoenix"],
             "guarantee": "Hulun-compatible attributes survive import, HulunGuard persistence, OTLP export, and OTLP re-import.",
         },
         {
@@ -60,7 +65,7 @@ def adapter_support_tiers() -> list[dict[str, Any]]:
         },
         {
             "tier": "best-effort",
-            "surfaces": ["langgraph", "langsmith", "langfuse", "phoenix", "custom-json"],
+            "surfaces": ["custom-json", "provider-specific exports without supported fields"],
             "guarantee": "Use generic JSON, OpenTelemetry, or OpenInference fields; unsupported provider-specific payloads are summarized or ignored.",
         },
     ]
@@ -381,6 +386,140 @@ def _swe_agent_fixture() -> dict[str, Any]:
     }
 
 
+def _langgraph_fixture() -> dict[str, Any]:
+    return {
+        "events": [
+            {
+                "type": "updates",
+                "summary": "graph node prepared adapter fixture",
+                "result": "pass",
+                "phase": "explore",
+                "evidence": [EVIDENCE_ID],
+                "refs": [TRACE_REF_WITH_QUERY],
+                "data": {"planner": {"status": "ready"}},
+            },
+            {
+                "type": "tasks",
+                "event_type": "tool_result",
+                "summary": f"LangGraph task failed with {KEY_MARKER} for {EMAIL_MARKER} and {AUTH_MARKER}",
+                "result": "fail",
+                "phase": "verify",
+                "action_key": ACTION_KEY,
+                "prompt_tokens": 123,
+                "completion_tokens": 45,
+                "cost": 0.67,
+                "latency_ms": 890,
+                "model": MODEL,
+                "evidence": [EVIDENCE_ID],
+                "refs": [TRACE_REF_WITH_QUERY],
+                "data": {"pytest": {"status": "failed"}},
+            },
+            {
+                "type": "custom",
+                "summary": "retry adapter fixture with narrowed state",
+                "result": "unknown",
+                "phase": "recover",
+                "evidence": [EVIDENCE_ID],
+                "data": {"status": "retrying"},
+            },
+            {
+                "type": "tasks",
+                "event_type": "tool_result",
+                "summary": "retry passed after recovery state update",
+                "result": "pass",
+                "phase": "recover",
+                "evidence": [EVIDENCE_ID],
+            },
+            {
+                "type": "values",
+                "summary": "summary state contains integration evidence",
+                "result": "pass",
+                "phase": "summarize",
+                "evidence": [EVIDENCE_ID],
+            },
+            {
+                "type": "updates",
+                "event_type": "final_attempt",
+                "summary": "finalize hosted adapter fixture",
+                "result": "pass",
+                "phase": "final",
+                "evidence": [EVIDENCE_ID],
+            },
+        ]
+    }
+
+
+def _langsmith_fixture() -> list[dict[str, Any]]:
+    return [
+        {
+            "id": "run-langsmith-a",
+            "trace_id": "trace-langsmith",
+            "run_type": "chain",
+            "name": "inspect hosted adapter run",
+            "result": "pass",
+            "phase": "explore",
+            "evidence": [EVIDENCE_ID],
+            "refs": [TRACE_REF_WITH_QUERY],
+        },
+        {
+            "id": "run-langsmith-b",
+            "trace_id": "trace-langsmith",
+            "run_type": "tool",
+            "name": "pytest hosted adapter run",
+            "summary": f"LangSmith run failed with {KEY_MARKER} for {EMAIL_MARKER} and {AUTH_MARKER}",
+            "error": f"LangSmith run failed with {KEY_MARKER} for {EMAIL_MARKER} and {AUTH_MARKER}",
+            "result": "fail",
+            "phase": "verify",
+            "action_key": ACTION_KEY,
+            "prompt_tokens": 123,
+            "completion_tokens": 45,
+            "cost": 0.67,
+            "latency_ms": 890,
+            "invocation_params": {"model": MODEL},
+            "evidence": [EVIDENCE_ID],
+            "refs": [TRACE_REF_WITH_QUERY],
+        },
+        {
+            "id": "run-langsmith-c",
+            "trace_id": "trace-langsmith",
+            "run_type": "chain",
+            "name": "retry hosted adapter run",
+            "result": "unknown",
+            "phase": "recover",
+            "evidence": [EVIDENCE_ID],
+        },
+        {
+            "id": "run-langsmith-d",
+            "trace_id": "trace-langsmith",
+            "run_type": "tool",
+            "name": "retry passed hosted adapter run",
+            "result": "pass",
+            "phase": "recover",
+            "evidence": [EVIDENCE_ID],
+        },
+        {
+            "id": "run-langsmith-e",
+            "trace_id": "trace-langsmith",
+            "run_type": "chain",
+            "name": "summarize hosted adapter run",
+            "event_type": "summary",
+            "result": "pass",
+            "phase": "summarize",
+            "evidence": [EVIDENCE_ID],
+        },
+        {
+            "id": "run-langsmith-f",
+            "trace_id": "trace-langsmith",
+            "run_type": "chain",
+            "name": "finalize hosted adapter run",
+            "event_type": "final_attempt",
+            "result": "pass",
+            "phase": "final",
+            "evidence": [EVIDENCE_ID],
+        },
+    ]
+
+
 def _roundtrip_case(name: str, source_format: str, fixture: Any, tmp: Path) -> dict[str, Any]:
     source_path = tmp / f"{name}.json"
     exported_path = tmp / f"{name}.exported.otlp.json"
@@ -410,7 +549,7 @@ def _stream_case(name: str, source_format: str, fixture: Any, tmp: Path) -> dict
     return _case(
         name,
         source_format,
-        "integration-tested",
+        "hosted-fixture-tested" if source_format in {"langgraph", "langsmith"} else "integration-tested",
         checks,
         input_events=len(observations),
         output_events=len(state["events"]),
@@ -446,6 +585,16 @@ def run_adapter_matrix() -> dict[str, Any]:
                 tmp,
             ),
             _safe_case(
+                "langfuse_otel_roundtrip",
+                lambda workdir: _roundtrip_case("langfuse_otel_roundtrip", "langfuse", _opentelemetry_fixture(), workdir),
+                tmp,
+            ),
+            _safe_case(
+                "phoenix_openinference_roundtrip",
+                lambda workdir: _roundtrip_case("phoenix_openinference_roundtrip", "phoenix", _openinference_fixture(), workdir),
+                tmp,
+            ),
+            _safe_case(
                 "openhands_stream",
                 lambda workdir: _stream_case("openhands_stream", "openhands", _openhands_fixture(), workdir),
                 tmp,
@@ -453,6 +602,16 @@ def run_adapter_matrix() -> dict[str, Any]:
             _safe_case(
                 "swe_agent_stream",
                 lambda workdir: _stream_case("swe_agent_stream", "swe-agent", _swe_agent_fixture(), workdir),
+                tmp,
+            ),
+            _safe_case(
+                "langgraph_stream",
+                lambda workdir: _stream_case("langgraph_stream", "langgraph", _langgraph_fixture(), workdir),
+                tmp,
+            ),
+            _safe_case(
+                "langsmith_run_export",
+                lambda workdir: _stream_case("langsmith_run_export", "langsmith", _langsmith_fixture(), workdir),
                 tmp,
             ),
         ]

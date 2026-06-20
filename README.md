@@ -17,7 +17,7 @@ using HulunGuard on real work.
 - Universal startup prompt: `#HULUN_ON` for any agent that can run shell commands.
 - OpenClaw hook: injects HulunGuard guidance into OpenClaw agent bootstrap.
 - Realtime HulunIndex observations: record phase, claims, failures, tokens, cost, latency, and retry fingerprints.
-- Privacy-safe trace ingestion: import generic JSON/JSONL, OpenTelemetry GenAI, OpenInference, OpenHands-like events, and SWE-agent-like trajectories without persisting raw sensitive payloads by default.
+- Privacy-safe trace ingestion: import generic JSON/JSONL, OpenTelemetry GenAI, OpenInference, OpenHands-like events, SWE-agent-like trajectories, LangGraph stream parts, LangSmith run exports, Langfuse OTEL traces, and Phoenix/OpenInference spans without persisting raw sensitive payloads by default.
 - Python SDK and MCP server: agents can record runtime state directly without shell glue.
 - Built-in validation suite: run synthetic healthy/slop-risk scenarios before release.
 - Product operations: `quickstart`, `doctor`, `adapter-matrix`, `schema-check`, `cleanup`, and `benchmark` commands for onboarding, diagnostics, adapter integration, schema compatibility, retention cleanup, scan performance, and public-safe real-world workflow checks.
@@ -72,6 +72,10 @@ python .\hulun.py ingest --file .\otel-trace.json --format opentelemetry --scan
 python .\hulun.py ingest --file .\openinference-trace.json --format openinference --scan
 python .\hulun.py ingest --file .\openhands-events.json --format openhands --scan
 python .\hulun.py ingest --file .\run.traj --format swe-agent --scan
+python .\hulun.py ingest --file .\langgraph-stream.json --format langgraph --scan
+python .\hulun.py ingest --file .\langsmith-runs.json --format langsmith --scan
+python .\hulun.py ingest --file .\langfuse-otel.json --format langfuse --scan
+python .\hulun.py ingest --file .\phoenix-openinference.json --format phoenix --scan
 python .\hulun.py export-otel --output .\hulun-otel.json
 ```
 
