@@ -40,6 +40,17 @@ Each surface must be able to record the contract event, redact sensitive payload
 
 Trace-file adapters must reject files above the configured `--max-trace-bytes` limit before parsing or persisting events. The default limit is 5 MiB.
 
+Integration coverage is defined in `docs/ADAPTER_MATRIX.md`. The conformance test proves each adapter can write the shared contract; `adapter-matrix` proves supported trace families survive realistic import, export, redaction, and workflow-path checks.
+
+## Support Tiers
+
+| Tier | Surfaces | Gate |
+| --- | --- | --- |
+| integration-tested | OpenTelemetry, OpenInference, OpenHands-like, SWE-agent-like | `python -m hulun_guard adapter-matrix --json` |
+| roundtrip-tested | OpenTelemetry, OpenInference | Import to persisted events to OTLP export to OTLP re-import |
+| conformance | CLI, Python SDK, MCP, generic JSON | `tests/test_adapter_conformance.py` |
+| best-effort | LangGraph, LangSmith, Langfuse, Phoenix, custom JSON | Generic JSON, OpenTelemetry, or OpenInference field mapping |
+
 ## Telemetry Compatibility Fields
 
 OpenTelemetry and OpenInference imports recognize these Hulun-compatible attributes:

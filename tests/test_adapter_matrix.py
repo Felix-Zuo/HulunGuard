@@ -1,0 +1,62 @@
+from __future__ import annotations
+
+import contextlib
+import io
+import json
+import unittest
+
+from hulun_guard.adapter_matrix import FORBIDDEN_VALUES, run_adapter_matrix
+from hulun_guard.cli import main
+from hulun_guard.schemas import ADAPTER_MATRIX_SCHEMA
+
+
+def run_cli(*args: str) -> tuple[int, str]:
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        code = main(list(args))
+    return code, buf.getvalue()
+
+
+class AdapterMatrixTest(unittest.TestCase):
+    def test_adapter_matrix_gate_covers_roundtrip_and_stream_surfaces(self) -> None:
+        result = run_adapter_matrix()
+
+        self.assertEqual(result["schema"], ADAPTER_MATRIX_SCHEMA)
+        self.assertEqual(result["fixture_policy"], "synthetic-public-safe-no-private-traces")
+        self.assertTrue(result["gate"]["passed"], result["gate"]["failures"])
+        self.assertEqual(result["gate"]["case_count"], 4)
+
+        cases = {case["name"]: case for case in result["cases"]}
+        self.assertEqual(set(cases), {"opentelemetry_roundtrip", "openinference_roundtrip", "openhands_stream", "swe_agent_stream"})
+        self.assertEqual(cases["opentelemetry_roundtrip"]["tier"], "roundtrip-tested")
+        self.assertEqual(cases["openinference_roundtrip"]["tier"], "roundtrip-tested")
+        self.assertEqual(cases["openhands_stream"]["input_events"], 6)
+        self.assertEqual(cases["swe_agent_stream"]["output_events"], 6)
+
+        for case in result["cases"]:
+            with self.subTest(case=case["name"]):
+                self.assertTrue(case["passed"], case["checks"])
+                self.assertEqual(case["failure_count"], 0)
+                self.assertTrue(all(check["passed"] for check in case["checks"]))
+
+        tiers = {tier["tier"]: tier["surfaces"] for tier in result["support_tiers"]}
+        self.assertIn("opentelemetry", tiers["integration-tested"])
+        self.assertIn("openinference", tiers["roundtrip-tested"])
+        self.assertIn("sdk", tiers["conformance"])
+        self.assertIn("custom-json", tiers["best-effort"])
+
+        serialized = json.dumps(result, ensure_ascii=False)
+        for forbidden in FORBIDDEN_VALUES:
+            self.assertNotIn(forbidden, serialized)
+
+    def test_adapter_matrix_cli_json(self) -> None:
+        code, out = run_cli("adapter-matrix", "--json")
+
+        self.assertEqual(code, 0, out)
+        payload = json.loads(out)
+        self.assertEqual(payload["schema"], ADAPTER_MATRIX_SCHEMA)
+        self.assertTrue(payload["gate"]["passed"], payload["gate"]["failures"])
+
+
+if __name__ == "__main__":  # pragma: no cover
+    unittest.main()

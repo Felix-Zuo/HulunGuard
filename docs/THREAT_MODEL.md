@@ -131,6 +131,7 @@ Before publishing:
 
 ```powershell
 python -m hulun_guard threat-model-check --json
+python -m hulun_guard adapter-matrix --json
 python -m hulun_guard cleanup --json
 python -m hulun_guard schema-check --json
 ```
@@ -142,6 +143,7 @@ Do not publish private runtime files, local screenshots with private data, raw t
 Every release must keep these checks green:
 
 - `python -m hulun_guard threat-model-check --json`
+- `python -m hulun_guard adapter-matrix --json`
 - `python -m hulun_guard schema-check --json`
 - `python -m hulun_guard cleanup --json`
 - adapter conformance tests

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.21.0 - 2026-06-20
+
+- Added `adapter-matrix` as a public release gate for OpenTelemetry/OpenInference round-trips and OpenHands/SWE-agent workflow streams.
+- Added `hulun.adapter_matrix.v1` reports with support tiers, public-safe fixture policy, case outcomes, checks, and gate failures.
+- Documented adapter support tiers and wired the matrix into doctor, CI, Release, PR, and release-checklist workflows.
+
 ## 0.20.0 - 2026-06-20
 
 - Added `docs/THREAT_MODEL.md` with local storage, remote behavior, adapter input, redaction, retention, threat scenario, and release-rule boundaries.

@@ -25,6 +25,7 @@ REAL_WORLD_FIXTURE_SCHEMA = "hulun.real_world_fixture.v1"
 RETENTION_CLEANUP_SCHEMA = "hulun.retention_cleanup.v1"
 DOCTOR_SCHEMA = "hulun.doctor.v1"
 EXPORT_OPENTELEMETRY_SCHEMA = "hulun.export.opentelemetry.v1"
+ADAPTER_MATRIX_SCHEMA = "hulun.adapter_matrix.v1"
 CALIBRATION_DRIFT_ERROR_SCHEMA = "hulun.calibration_drift_error.v1"
 SCHEMA_COMPATIBILITY_SCHEMA = "hulun.schema_compatibility.v1"
 MONITOR_SCHEMA = "hulun.monitor.v1"
@@ -100,6 +101,11 @@ SUPPORTED_PUBLIC_SCHEMAS: dict[str, dict[str, Any]] = {
         "current": EXPORT_OPENTELEMETRY_SCHEMA,
         "supported": [EXPORT_OPENTELEMETRY_SCHEMA, "legacy:missing-schema"],
         "promise": "Adapter command reports preserve output path and exported span count. The export payload itself follows OTLP JSON.",
+    },
+    "adapter_matrix": {
+        "current": ADAPTER_MATRIX_SCHEMA,
+        "supported": [ADAPTER_MATRIX_SCHEMA],
+        "promise": "Adapter integration reports preserve support tiers, public-safe fixture policy, case outcomes, and gate failures.",
     },
     "calibration_drift_error": {
         "current": CALIBRATION_DRIFT_ERROR_SCHEMA,
@@ -445,6 +451,11 @@ def normalize_report(kind: str, payload: dict[str, Any], *, source: str | None =
     elif kind == "export_opentelemetry":
         report["output"] = str(report.get("output") or report.get("path") or "")
         report["spans"] = int(report.get("spans") or report.get("span_count") or 0)
+    elif kind == "adapter_matrix":
+        report["fixture_policy"] = str(report.get("fixture_policy") or "")
+        report["support_tiers"] = report.get("support_tiers") if isinstance(report.get("support_tiers"), list) else []
+        report["cases"] = report.get("cases") if isinstance(report.get("cases"), list) else []
+        report["gate"] = report.get("gate") if isinstance(report.get("gate"), dict) else {"passed": bool(report.get("passed", True)), "failure_count": 0, "failures": []}
     _add_migration(report, original_schema, current_schema, source)
     return report
 
@@ -460,6 +471,7 @@ def infer_fixture_kind(path: Path, payload: dict[str, Any]) -> str:
         ("conversation_risk", "conversation_risk"),
         ("real_world_benchmark", "real_world_benchmark"),
         ("calibration_drift", "calibration_drift"),
+        ("adapter_matrix", "adapter_matrix"),
         ("adapter_export", "export_opentelemetry"),
         ("opentelemetry", "export_opentelemetry"),
         ("conversation", "conversation"),
