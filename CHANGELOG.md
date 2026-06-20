@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.1 - 2026-06-20
+
+- Updated Release workflow artifact upload to `actions/upload-artifact@v6` after confirming it uses the Node 24 runtime.
+- Kept release provenance generation and GitHub Release asset upload behavior unchanged.
+
 ## 0.13.0 - 2026-06-20
 
 - Added cross-process conversation write locking to prevent concurrent runtime event loss.
