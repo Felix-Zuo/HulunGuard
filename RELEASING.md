@@ -19,6 +19,7 @@ python -m pytest -q
 python -m hulun_guard validate
 python -m hulun_guard calibrate
 python -m hulun_guard calibration-drift
+python -m hulun_guard threat-model-check --json
 python -m hulun_guard schema-check --json
 python -m hulun_guard cleanup --json
 python -m hulun_guard benchmark --events 10000 --max-ms 1000
@@ -47,7 +48,7 @@ GitHub must pass:
 9. Confirm build provenance attestations exist for release artifacts.
 10. Create or update GitHub issues for unfinished maturity work.
 
-See `docs/SUPPLY_CHAIN.md` for branch protection and release approval gates.
+See `docs/SUPPLY_CHAIN.md` for branch protection and release approval gates. See `docs/THREAT_MODEL.md` for the local-first security boundary.
 
 ## Artifact Policy
 

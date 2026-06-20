@@ -22,6 +22,7 @@ Current public schemas:
 | doctor | `hulun.doctor.v1` |
 | OpenTelemetry export command report | `hulun.export.opentelemetry.v1` |
 | schema compatibility report | `hulun.schema_compatibility.v1` |
+| threat model check report | `hulun.threat_model_check.v1` |
 
 The OpenTelemetry export file itself follows OTLP JSON. The HulunGuard command report around that export is versioned.
 
@@ -60,6 +61,7 @@ Use a minor version bump when a change:
 - adds a public JSON schema
 - adds, removes, or renames public JSON fields
 - changes migration or normalization behavior
+- changes threat model check behavior
 - changes adapter import/export report fields
 - changes release gate behavior for schemas
 

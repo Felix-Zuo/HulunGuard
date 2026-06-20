@@ -77,6 +77,8 @@ python .\hulun.py export-otel --output .\hulun-otel.json
 
 By default, runtime observations and imported traces redact known secrets, emails, URL query strings, private home paths, and raw payload fields such as prompts, completions, outputs, and tool arguments. Use `--include-sensitive --retention-days 7` only for trusted local debugging.
 
+The security boundary and threat assumptions are documented in `docs/THREAT_MODEL.md`.
+
 Run the release validation suite:
 
 ```powershell
@@ -84,6 +86,7 @@ python .\hulun.py doctor --run-validation
 python .\hulun.py validate
 python .\hulun.py calibrate
 python .\hulun.py calibration-drift
+python .\hulun.py threat-model-check --json
 python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000
@@ -198,6 +201,7 @@ The hook should show `hulunguard` as eligible, loadable, enabled, and attached t
 - `docs/`: usage and integration docs.
 - `research/`: source matrix and industrial design notes.
 - `docs/ADAPTER_CONFORMANCE.md`: supported adapter contract and unsupported-field policy.
+- `docs/THREAT_MODEL.md`: local-first security model, privacy boundaries, and threat assumptions.
 - `docs/SCHEMAS.md`: public JSON schema compatibility and migration policy.
 - `docs/RETENTION.md`: local retention cleanup model and safety boundary.
 - `docs/REAL_WORLD_BENCHMARKS.md`: public-safe real-world benchmark suite and fixture policy.
@@ -208,6 +212,7 @@ The hook should show `hulunguard` as eligible, loadable, enabled, and attached t
 python -m unittest discover -s tests
 python .\hulun.py validate
 python .\hulun.py calibration-drift
+python .\hulun.py threat-model-check --json
 python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000

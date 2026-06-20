@@ -38,6 +38,8 @@ The adapter conformance test covers:
 
 Each surface must be able to record the contract event, redact sensitive payloads by default, write `.hulun/risk.json` when scan is requested, and reject malformed SDK/MCP payloads without silently persisting a bad event.
 
+Trace-file adapters must reject files above the configured `--max-trace-bytes` limit before parsing or persisting events. The default limit is 5 MiB.
+
 ## Telemetry Compatibility Fields
 
 OpenTelemetry and OpenInference imports recognize these Hulun-compatible attributes:

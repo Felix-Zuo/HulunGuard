@@ -102,6 +102,8 @@ Supported formats:
 
 Adapter compatibility guarantees are documented in `docs/ADAPTER_CONFORMANCE.md`.
 
+Trace imports reject files larger than the configured `--max-trace-bytes` limit before parsing. The default is 5 MiB. The full security boundary is documented in `docs/THREAT_MODEL.md`.
+
 Export HulunGuard events as OTLP-style JSON spans:
 
 ```powershell
@@ -149,6 +151,7 @@ Before publishing a new version:
 python .\hulun.py validate
 python .\hulun.py calibrate
 python .\hulun.py calibration-drift
+python .\hulun.py threat-model-check --json
 python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000
@@ -159,6 +162,7 @@ python -m pytest -q
 `validate` writes `.hulun/validation_report.md` and `.hulun/validation_report.json`.
 `calibrate` writes `.hulun/calibration_report.md` and `.hulun/calibration_report.json` with component support, precision, recall, false-positive rate, false-negative rate, source coverage, workflow coverage, and redaction coverage over 100 labeled trajectories.
 `calibration-drift` writes `.hulun/calibration_drift_report.md` and `.hulun/calibration_drift_report.json` by comparing current calibration against `docs/calibration_baseline.json`. Regressions fail unless `--rationale` is provided for an intentional review.
+`threat-model-check` verifies that the public threat model exists, is linked from release/security docs, and that trace import keeps a bounded default file-size limit.
 `schema-check` loads legacy JSON fixtures, normalizes them through the migration layer, and fails if current public schemas are not written. See `docs/SCHEMAS.md`.
 
 ## Benchmark Scan Performance

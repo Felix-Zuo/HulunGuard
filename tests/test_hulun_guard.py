@@ -984,6 +984,7 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertEqual(doctor["calibration"]["dataset"]["size"], 100)
             self.assertTrue(doctor["calibration"]["gate"]["passed"])
             self.assertNotIn("trajectories", doctor["calibration"])
+            self.assertTrue(doctor["threat_model"]["gate"]["passed"])
 
             code, out = self.run_cli("--root", tmp, "benchmark", "--events", "200", "--json")
             self.assertEqual(code, 0)

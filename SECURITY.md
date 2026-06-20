@@ -21,6 +21,7 @@ Every release must pass:
 
 - Unit tests.
 - Built-in HulunGuard validation scenarios.
+- Threat model static check.
 - Schema compatibility fixture gate.
 - Benchmark gate for expected scan latency.
 - Retention cleanup dry-run gate.
@@ -32,6 +33,8 @@ Every release must pass:
 ## Data Handling
 
 HulunGuard is local-first. Users must not commit `.hulun/`, private traces, credentials, customer data, or production conversation logs.
+
+The full security boundary and threat assumptions are documented in `docs/THREAT_MODEL.md`.
 
 Runtime observations, conversation events, evidence records, and trace imports are redacted by default. Stored records include privacy metadata with `mode` and `retention_days`.
 

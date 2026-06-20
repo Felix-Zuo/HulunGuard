@@ -42,6 +42,7 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 - Public-safe real-world benchmark suite across coding, research, ops, and artifact workflows.
 - Retention cleanup for local project and conversation ledgers.
 - Backward-compatible schema migration gate for public JSON outputs.
+- Documented local-first threat model with an executable release gate.
 - Provenance-backed release artifacts.
 
 ### M3: Production-Ready Open Source Product
@@ -49,7 +50,6 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 - Async/batched event ingestion.
 - Cross-platform UI and no hidden local assumptions.
 - Integration tests for supported adapters.
-- Documented security model and threat model.
 - User-facing onboarding that works without repository-specific knowledge.
 
 ### M4: Top-Tier Product
@@ -64,10 +64,10 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 - No final-gate relaxation without tests and a changelog entry.
 - No adapter can contain a developer machine path.
-- No release without CI, validation, calibration, calibration drift, schema compatibility, retention cleanup dry-run, scan benchmark, real-world benchmark, and security scans.
+- No release without CI, validation, calibration, calibration drift, threat model check, schema compatibility, retention cleanup dry-run, scan benchmark, real-world benchmark, and security scans.
 - No public claim that HulunGuard detects intent or truth; it computes reliability risk.
 - No private conversation logs in the repository.
 
 ## Current Target
 
-The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, release provenance baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, adapter conformance baseline, public-safe real-world benchmark baseline, retention cleanup baseline, and schema compatibility baseline are implemented. The next gates are broader adapter integration tests, threat-model documentation, and larger real-world coverage without committing private logs.
+The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, release provenance baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, adapter conformance baseline, public-safe real-world benchmark baseline, retention cleanup baseline, schema compatibility baseline, and threat-model baseline are implemented. The next gates are broader adapter integration tests and larger real-world coverage without committing private logs.

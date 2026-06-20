@@ -12,6 +12,8 @@ from .util import parse_time, tokens
 
 Observation = dict[str, Any]
 
+MAX_TRACE_BYTES = 5 * 1024 * 1024
+
 
 FAIL_MARKERS = [
     "error",
@@ -506,14 +508,34 @@ def normalize_swe_agent(item: dict[str, Any], *, include_sensitive: bool = False
     }
 
 
-def load_observations(path: str | Path, source_format: str = "auto", *, include_sensitive: bool = False) -> list[Observation]:
-    return list(iter_observations(path, source_format, include_sensitive=include_sensitive))
-
-
-def iter_observations(path: str | Path, source_format: str = "auto", *, include_sensitive: bool = False) -> Iterator[Observation]:
+def validate_trace_file(path: str | Path, *, max_trace_bytes: int = MAX_TRACE_BYTES) -> Path:
     trace_path = Path(path)
     if not trace_path.exists():
         raise SystemExit(f"Trace file does not exist: {trace_path}")
+    if not trace_path.is_file():
+        raise SystemExit(f"Trace path is not a file: {trace_path}")
+    try:
+        size = trace_path.stat().st_size
+    except OSError as exc:
+        raise SystemExit(f"Cannot inspect trace file: {trace_path}: {exc}") from exc
+    limit = max(1, int(max_trace_bytes))
+    if size > limit:
+        raise SystemExit(f"Trace file is too large: {trace_path} is {size} bytes, limit is {limit} bytes.")
+    return trace_path
+
+
+def load_observations(path: str | Path, source_format: str = "auto", *, include_sensitive: bool = False, max_trace_bytes: int = MAX_TRACE_BYTES) -> list[Observation]:
+    return list(iter_observations(path, source_format, include_sensitive=include_sensitive, max_trace_bytes=max_trace_bytes))
+
+
+def iter_observations(
+    path: str | Path,
+    source_format: str = "auto",
+    *,
+    include_sensitive: bool = False,
+    max_trace_bytes: int = MAX_TRACE_BYTES,
+) -> Iterator[Observation]:
+    trace_path = validate_trace_file(path, max_trace_bytes=max_trace_bytes)
     fmt = source_format.lower()
     if fmt == "auto":
         lowered = trace_path.name.lower()
