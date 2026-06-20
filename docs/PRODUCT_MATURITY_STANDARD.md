@@ -39,6 +39,7 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 - Precision/recall and positive-support report for major risk classes.
 - Calibration drift review against a checked-in public-safe baseline.
 - Adapter conformance tests for CLI, SDK, MCP, and supported trace imports.
+- Public-safe real-world benchmark suite across coding, research, ops, and artifact workflows.
 - Provenance-backed release artifacts.
 
 ### M3: Production-Ready Open Source Product
@@ -53,7 +54,7 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 ### M4: Top-Tier Product
 
-- Real-world benchmark suite across coding, research, ops, and artifact tasks.
+- Larger real-world benchmark coverage across more adapters and workflow variants.
 - Calibrated scoring with tracked false positives and false negatives.
 - Enterprise-ready adapter model.
 - Open standards interoperability with GenAI tracing ecosystems.
@@ -63,10 +64,10 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 - No final-gate relaxation without tests and a changelog entry.
 - No adapter can contain a developer machine path.
-- No release without CI, validation, calibration, benchmark, and security scans.
+- No release without CI, validation, calibration, calibration drift, scan benchmark, real-world benchmark, and security scans.
 - No public claim that HulunGuard detects intent or truth; it computes reliability risk.
 - No private conversation logs in the repository.
 
 ## Current Target
 
-The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, release provenance baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, and adapter conformance baseline are implemented. The next gate is broader real-world benchmark coverage without committing private logs.
+The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, release provenance baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, adapter conformance baseline, and public-safe real-world benchmark baseline are implemented. The next gates are retention cleanup, schema migration discipline, broader adapter integration tests, and larger real-world coverage without committing private logs.

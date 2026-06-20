@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from .adapters import export_opentelemetry, iter_observations
+from .benchmarks import build_real_world_benchmark_markdown, real_world_benchmark_json, run_real_world_benchmark
 from .calibration import (
     build_calibration_drift_markdown,
     build_calibration_markdown,
@@ -615,6 +616,34 @@ def build_benchmark_state(event_count: int) -> dict[str, Any]:
 
 
 def cmd_benchmark(args: argparse.Namespace) -> int:
+    if args.suite == "real-world":
+        root = project_root(args.root)
+        result = run_real_world_benchmark(
+            version=package_version(),
+            max_case_ms=args.max_case_ms,
+            max_case_bytes=args.max_case_bytes,
+            max_total_bytes=args.max_total_bytes,
+            min_component_stability=args.min_component_stability,
+            max_false_positive_rate=args.max_false_positive_rate,
+            max_false_negative_rate=args.max_false_negative_rate,
+        )
+        output_dir = hulun_dir(root)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        json_path = output_dir / "real_world_benchmark_report.json"
+        markdown_path = output_dir / "real_world_benchmark_report.md"
+        json_path.write_text(real_world_benchmark_json(result), encoding="utf-8")
+        markdown_path.write_text(build_real_world_benchmark_markdown(result), encoding="utf-8")
+        if args.json:
+            print(real_world_benchmark_json(result), end="")
+        else:
+            metrics = result["metrics"]
+            print(f"HulunGuard real-world benchmark: {result['case_count']} public-safe cases")
+            print(f"Gate: {'pass' if result['gate']['passed'] else 'fail'}")
+            print(f"Max scan latency: {metrics['scan_latency']['max_ms']} ms")
+            print(f"Component stability: {metrics['component_stability']['rate']}")
+            print(f"Report: {json_path}")
+        return 0 if result["gate"]["passed"] else 2
+
     root = project_root(args.root)
     state = build_benchmark_state(args.events)
     started = time.perf_counter()
@@ -1194,8 +1223,15 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.set_defaults(func=cmd_doctor)
 
     benchmark = sub.add_parser("benchmark", parents=[root_parent])
+    benchmark.add_argument("--suite", choices=["scan", "real-world"], default="scan")
     benchmark.add_argument("--events", type=int, default=10000)
     benchmark.add_argument("--max-ms", type=float)
+    benchmark.add_argument("--max-case-ms", type=float, default=50.0)
+    benchmark.add_argument("--max-case-bytes", type=int, default=65536)
+    benchmark.add_argument("--max-total-bytes", type=int, default=524288)
+    benchmark.add_argument("--min-component-stability", type=float, default=1.0)
+    benchmark.add_argument("--max-false-positive-rate", type=float, default=0.0)
+    benchmark.add_argument("--max-false-negative-rate", type=float, default=0.0)
     benchmark.add_argument("--json", action="store_true")
     benchmark.set_defaults(func=cmd_benchmark)
 

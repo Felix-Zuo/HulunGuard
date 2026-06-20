@@ -135,6 +135,8 @@ Before publishing a new version:
 python .\hulun.py validate
 python .\hulun.py calibrate
 python .\hulun.py calibration-drift
+python .\hulun.py benchmark --events 10000
+python .\hulun.py benchmark --suite real-world
 python -m pytest -q
 ```
 
@@ -152,6 +154,19 @@ python .\hulun.py benchmark --events 50000 --max-ms 1000
 ```
 
 `benchmark` writes `.hulun/benchmark_report.json` and returns exit code `2` if `--max-ms` is exceeded.
+
+## Real-World Benchmark Suite
+
+Use `benchmark --suite real-world` to run the public-safe workflow suite separately from calibration:
+
+```powershell
+python .\hulun.py benchmark --suite real-world
+python .\hulun.py benchmark --suite real-world --json
+```
+
+The suite covers coding, research, ops, and artifact workflows. It measures scan latency, fixture size, component stability, false-positive rate, and false-negative rate, then writes `.hulun/real_world_benchmark_report.json` and `.hulun/real_world_benchmark_report.md`.
+
+Maintainer rules for adding cases are documented in `docs/REAL_WORLD_BENCHMARKS.md`.
 
 ## Open The Project Board
 

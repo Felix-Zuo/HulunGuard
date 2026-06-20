@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.17.0 - 2026-06-20
+
+- Added `benchmark --suite real-world` with 12 public-safe workflow fixtures across coding, research, ops, and artifact tasks.
+- Reported scan latency, fixture size, component stability, false-positive rate, and false-negative rate separately from calibration.
+- Documented real-world benchmark fixture rules in `docs/REAL_WORLD_BENCHMARKS.md` and added the gate to CI, Release, PR, and release-checklist workflows.
+
 ## 0.16.0 - 2026-06-20
 
 - Added shared adapter conformance tests for CLI, SDK, MCP, generic, OpenTelemetry, OpenInference, OpenHands-like, and SWE-agent-like inputs.

@@ -116,6 +116,14 @@ Sources:
 - Add negative coverage for malformed SDK/MCP payloads and default raw sensitive payload retention.
 - Document supported adapter contract fields and unsupported fields in `docs/ADAPTER_CONFORMANCE.md`.
 
+## Twelfth Remediation Slice
+
+- Add `benchmark --suite real-world` as a public-safe benchmark gate separate from calibration.
+- Cover 12 schema-derived fixtures across coding, research, ops, and artifact workflows using public SWE-agent, OpenHands, OpenTelemetry GenAI, and OpenInference source shapes.
+- Report scan latency, fixture byte size, component stability, false-positive rate, and false-negative rate for CI and release review.
+- Fail the gate on oversized fixtures, slow scans, classification mismatch, missing components, unexpected components, or workflow coverage gaps.
+- Document fixture contribution rules in `docs/REAL_WORLD_BENCHMARKS.md` so maintainers do not commit private transcripts, credentials, customer logs, or production records.
+
 ## Product Position
 
-HulunGuard is currently moving from developer preview toward a reliable developer product. The M2 calibration baseline now includes external public-source coverage, drift review, and adapter conformance coverage. It should not be marketed as production-ready until broader real-world benchmark coverage is in place without committing private logs.
+HulunGuard is currently moving from developer preview toward a reliable developer product. The M2 baseline now includes external public-source calibration coverage, drift review, adapter conformance coverage, and a public-safe real-world benchmark gate. It should not be marketed as production-ready until retention cleanup, schema migration discipline, broader adapter integration tests, and larger real-world coverage are in place.

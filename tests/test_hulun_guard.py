@@ -991,6 +991,39 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertGreater(benchmark["events_per_second"], 0)
             self.assertTrue((Path(tmp) / ".hulun" / "benchmark_report.json").exists())
 
+    def test_real_world_benchmark_reports_public_safe_workflows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.run_cli("--root", tmp, "benchmark", "--suite", "real-world", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["schema"], "hulun.real_world_benchmark.v1")
+            self.assertTrue(payload["gate"]["passed"], payload["gate"])
+            self.assertEqual(payload["case_count"], 12)
+            self.assertEqual(payload["workflow_classes"], {"artifact": 3, "coding": 3, "ops": 3, "research": 3})
+            self.assertEqual(payload["redaction_statuses"], {"public-schema-derived-no-private-content": 12})
+            self.assertEqual(payload["metrics"]["classification"]["false_positive_rate"], 0.0)
+            self.assertEqual(payload["metrics"]["classification"]["false_negative_rate"], 0.0)
+            self.assertEqual(payload["metrics"]["component_stability"]["rate"], 1.0)
+            self.assertEqual(payload["metrics"]["component_stability"]["misses"], [])
+            self.assertEqual(payload["metrics"]["component_stability"]["extras"], [])
+            self.assertGreater(payload["metrics"]["scan_latency"]["max_ms"], 0)
+            self.assertGreater(payload["metrics"]["fixture_size"]["total_bytes"], 0)
+            self.assertTrue((Path(tmp) / ".hulun" / "real_world_benchmark_report.json").exists())
+            self.assertTrue((Path(tmp) / ".hulun" / "real_world_benchmark_report.md").exists())
+
+            serialized = json.dumps(payload, ensure_ascii=False)
+            self.assertNotIn("sk-", serialized)
+            self.assertNotIn("password=", serialized)
+            self.assertNotIn("@example.com", serialized)
+
+    def test_real_world_benchmark_fails_when_fixture_size_limit_is_exceeded(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.run_cli("--root", tmp, "benchmark", "--suite", "real-world", "--max-case-bytes", "1", "--json")
+            self.assertEqual(code, 2)
+            payload = json.loads(out)
+            self.assertFalse(payload["gate"]["passed"])
+            self.assertTrue(any(failure["kind"] == "fixture_too_large" for failure in payload["gate"]["failures"]))
+
     def test_ingest_streams_jsonl_without_echoing_all_events(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

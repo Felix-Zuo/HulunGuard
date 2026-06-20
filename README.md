@@ -20,7 +20,7 @@ using HulunGuard on real work.
 - Privacy-safe trace ingestion: import generic JSON/JSONL, OpenTelemetry GenAI, OpenInference, OpenHands-like events, and SWE-agent-like trajectories without persisting raw sensitive payloads by default.
 - Python SDK and MCP server: agents can record runtime state directly without shell glue.
 - Built-in validation suite: run synthetic healthy/slop-risk scenarios before release.
-- Product operations: `quickstart`, `doctor`, and `benchmark` commands for onboarding, diagnostics, and scan performance checks.
+- Product operations: `quickstart`, `doctor`, and `benchmark` commands for onboarding, diagnostics, scan performance, and public-safe real-world workflow checks.
 - Conversation runtime monitoring: per-conversation events, user challenges, pending tool calls, unresolved failures, unsupported final claims, and monitor sync.
 
 ## Quick Start
@@ -85,6 +85,7 @@ python .\hulun.py validate
 python .\hulun.py calibrate
 python .\hulun.py calibration-drift
 python .\hulun.py benchmark --events 10000
+python .\hulun.py benchmark --suite real-world
 python -m pytest -q
 ```
 
@@ -195,6 +196,7 @@ The hook should show `hulunguard` as eligible, loadable, enabled, and attached t
 - `docs/`: usage and integration docs.
 - `research/`: source matrix and industrial design notes.
 - `docs/ADAPTER_CONFORMANCE.md`: supported adapter contract and unsupported-field policy.
+- `docs/REAL_WORLD_BENCHMARKS.md`: public-safe real-world benchmark suite and fixture policy.
 
 ## Validation
 
@@ -203,6 +205,7 @@ python -m unittest discover -s tests
 python .\hulun.py validate
 python .\hulun.py calibration-drift
 python .\hulun.py benchmark --events 10000
+python .\hulun.py benchmark --suite real-world
 python .\hulun.py --help
 python .\hulun.py open --help
 python .\hulun.py board --help

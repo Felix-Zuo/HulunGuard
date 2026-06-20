@@ -37,6 +37,8 @@ jobs:
         run: python -m hulun_guard calibration-drift
       - name: HulunGuard benchmark
         run: python -m hulun_guard benchmark --events 10000 --max-ms 1000
+      - name: HulunGuard real-world benchmark
+        run: python -m hulun_guard benchmark --suite real-world
       - name: Build package
         run: python -m build
       - name: Upload workflow artifacts
