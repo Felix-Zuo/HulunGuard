@@ -24,14 +24,32 @@ class AdapterMatrixTest(unittest.TestCase):
         self.assertEqual(result["schema"], ADAPTER_MATRIX_SCHEMA)
         self.assertEqual(result["fixture_policy"], "synthetic-public-safe-no-private-traces")
         self.assertTrue(result["gate"]["passed"], result["gate"]["failures"])
-        self.assertEqual(result["gate"]["case_count"], 4)
+        self.assertEqual(result["gate"]["case_count"], 8)
 
         cases = {case["name"]: case for case in result["cases"]}
-        self.assertEqual(set(cases), {"opentelemetry_roundtrip", "openinference_roundtrip", "openhands_stream", "swe_agent_stream"})
+        self.assertEqual(
+            set(cases),
+            {
+                "opentelemetry_roundtrip",
+                "openinference_roundtrip",
+                "langfuse_otel_roundtrip",
+                "phoenix_openinference_roundtrip",
+                "openhands_stream",
+                "swe_agent_stream",
+                "langgraph_stream",
+                "langsmith_run_export",
+            },
+        )
         self.assertEqual(cases["opentelemetry_roundtrip"]["tier"], "roundtrip-tested")
         self.assertEqual(cases["openinference_roundtrip"]["tier"], "roundtrip-tested")
+        self.assertEqual(cases["langfuse_otel_roundtrip"]["tier"], "roundtrip-tested")
+        self.assertEqual(cases["phoenix_openinference_roundtrip"]["tier"], "roundtrip-tested")
+        self.assertEqual(cases["langgraph_stream"]["tier"], "hosted-fixture-tested")
+        self.assertEqual(cases["langsmith_run_export"]["tier"], "hosted-fixture-tested")
         self.assertEqual(cases["openhands_stream"]["input_events"], 6)
         self.assertEqual(cases["swe_agent_stream"]["output_events"], 6)
+        self.assertEqual(cases["langgraph_stream"]["output_events"], 6)
+        self.assertEqual(cases["langsmith_run_export"]["input_events"], 6)
 
         for case in result["cases"]:
             with self.subTest(case=case["name"]):
@@ -42,6 +60,10 @@ class AdapterMatrixTest(unittest.TestCase):
         tiers = {tier["tier"]: tier["surfaces"] for tier in result["support_tiers"]}
         self.assertIn("opentelemetry", tiers["integration-tested"])
         self.assertIn("openinference", tiers["roundtrip-tested"])
+        self.assertIn("langgraph", tiers["hosted-fixture-tested"])
+        self.assertIn("langsmith", tiers["hosted-fixture-tested"])
+        self.assertIn("langfuse", tiers["hosted-fixture-tested"])
+        self.assertIn("phoenix", tiers["hosted-fixture-tested"])
         self.assertIn("sdk", tiers["conformance"])
         self.assertIn("custom-json", tiers["best-effort"])
 

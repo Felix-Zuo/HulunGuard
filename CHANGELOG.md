@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.22.0 - 2026-06-20
+
+- Added explicit hosted-platform trace formats for `langgraph`, `langsmith`, `langfuse`, and `phoenix`.
+- Extended `adapter-matrix` with hosted fixture coverage and Langfuse/Phoenix round-trip checks.
+- Updated adapter support tiers so hosted fixtures are no longer described as generic best-effort only.
+
 ## 0.21.0 - 2026-06-20
 
 - Added `adapter-matrix` as a public release gate for OpenTelemetry/OpenInference round-trips and OpenHands/SWE-agent workflow streams.

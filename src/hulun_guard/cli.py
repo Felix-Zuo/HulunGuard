@@ -1442,7 +1442,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     ingest = sub.add_parser("ingest", parents=[root_parent])
     ingest.add_argument("--file", required=True, help="JSON or JSONL trace file to import.")
-    ingest.add_argument("--format", choices=["auto", "generic", "opentelemetry", "openinference", "openhands", "swe-agent"], default="auto")
+    ingest.add_argument(
+        "--format",
+        choices=["auto", "generic", "opentelemetry", "openinference", "openhands", "swe-agent", "langgraph", "langsmith", "langfuse", "phoenix"],
+        default="auto",
+    )
     ingest.add_argument("--max-trace-bytes", type=int, default=MAX_TRACE_BYTES, help=f"Reject trace files larger than this many bytes. Defaults to {MAX_TRACE_BYTES}.")
     ingest.add_argument("--source-platform", help="Override source platform on imported events.")
     ingest.add_argument("--scan", action="store_true", help="Scan immediately after import.")

@@ -18,8 +18,12 @@ The gate verifies:
 - OpenTelemetry export and OTLP re-import round-trip preservation.
 - OpenInference import with Hulun-compatible attributes.
 - OpenInference import to OpenTelemetry export to OTLP re-import preservation.
+- Langfuse OTEL import to HulunGuard persistence to OTLP re-import preservation.
+- Phoenix/OpenInference import to HulunGuard persistence to OTLP re-import preservation.
 - OpenHands-like event streams with success, retry, recovery, summary, and finalization paths.
 - SWE-agent-like trajectory streams with success, retry, recovery, summary, and finalization paths.
+- LangGraph stream parts with success, retry, recovery, summary, and finalization paths.
+- LangSmith run exports with success, retry, recovery, summary, and finalization paths.
 - Privacy redaction for secrets, emails, passwords, and URL query strings.
 - Preservation of source references, evidence IDs, action keys, tokens, cost, latency, model, result, phase, and runtime event type.
 
@@ -28,9 +32,10 @@ The gate verifies:
 | Tier | Surfaces | Meaning |
 | --- | --- | --- |
 | integration-tested | OpenTelemetry, OpenInference, OpenHands-like, SWE-agent-like | Public-safe fixture streams are imported through adapters and checked by `adapter-matrix`. |
-| roundtrip-tested | OpenTelemetry, OpenInference | Hulun-compatible fields survive import, HulunGuard persistence, OTLP export, and OTLP re-import. |
+| hosted-fixture-tested | LangGraph, LangSmith, Langfuse, Phoenix | Hosted platform fixture shapes are checked with synthetic public-safe exports and no private service trace data. |
+| roundtrip-tested | OpenTelemetry, OpenInference, Langfuse, Phoenix | Hulun-compatible fields survive import, HulunGuard persistence, OTLP export, and OTLP re-import. |
 | conformance | CLI, Python SDK, MCP, generic JSON | The shared adapter contract test verifies field preservation, redaction, and malformed payload rejection. |
-| best-effort | LangGraph, LangSmith, Langfuse, Phoenix, custom JSON | Use generic JSON, OpenTelemetry, or OpenInference fields; unsupported provider-specific payloads are summarized or ignored. |
+| best-effort | Custom JSON or provider-specific exports without supported fields | Use generic JSON, OpenTelemetry, or OpenInference fields; unsupported provider-specific payloads are summarized or ignored. |
 
 ## Release Requirement
 
@@ -41,3 +46,10 @@ python -m hulun_guard adapter-matrix --json
 ```
 
 The command is also included in `doctor --run-validation`, CI, Release, and the pull request checklist.
+
+## Source Alignment
+
+- LangGraph stream parts: `https://docs.langchain.com/oss/python/langgraph/streaming`
+- LangSmith trace and run model: `https://docs.langchain.com/langsmith/observability-concepts`
+- Langfuse OTEL ingestion: `https://langfuse.com/integrations/native/opentelemetry`
+- OpenInference/Phoenix semantic conventions: `https://arize-ai.github.io/openinference/spec/semantic_conventions.html`

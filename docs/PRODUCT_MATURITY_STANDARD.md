@@ -40,6 +40,7 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 - Calibration drift review against a checked-in public-safe baseline.
 - Adapter conformance tests for CLI, SDK, MCP, and supported trace imports.
 - Adapter integration matrix for OpenTelemetry/OpenInference round-trips and OpenHands/SWE-agent workflow streams.
+- Hosted-platform fixture coverage for LangGraph, LangSmith, Langfuse, and Phoenix.
 - Public-safe real-world benchmark suite across coding, research, ops, and artifact workflows.
 - Retention cleanup for local project and conversation ledgers.
 - Backward-compatible schema migration gate for public JSON outputs.
@@ -50,7 +51,7 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 - Async/batched event ingestion.
 - Cross-platform UI and no hidden local assumptions.
-- Broader hosted-platform adapter fixtures beyond standard trace formats.
+- Native service export connectors beyond public-safe hosted fixture shapes.
 - User-facing onboarding that works without repository-specific knowledge.
 
 ### M4: Top-Tier Product
@@ -71,4 +72,4 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 ## Current Target
 
-The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, release provenance baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, adapter conformance baseline, adapter integration matrix baseline, public-safe real-world benchmark baseline, retention cleanup baseline, schema compatibility baseline, and threat-model baseline are implemented. The next gates are broader hosted-platform adapter fixtures and larger real-world coverage without committing private logs.
+The current target is M2. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, hosted-platform fixture baseline, release provenance baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, adapter conformance baseline, adapter integration matrix baseline, public-safe real-world benchmark baseline, retention cleanup baseline, schema compatibility baseline, and threat-model baseline are implemented. The next gate is larger real-world coverage without committing private logs.

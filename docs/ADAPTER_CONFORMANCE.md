@@ -35,6 +35,10 @@ The adapter conformance test covers:
 - `ingest --format openinference`
 - `ingest --format openhands`
 - `ingest --format swe-agent`
+- `ingest --format langgraph`
+- `ingest --format langsmith`
+- `ingest --format langfuse`
+- `ingest --format phoenix`
 
 Each surface must be able to record the contract event, redact sensitive payloads by default, write `.hulun/risk.json` when scan is requested, and reject malformed SDK/MCP payloads without silently persisting a bad event.
 
@@ -47,9 +51,10 @@ Integration coverage is defined in `docs/ADAPTER_MATRIX.md`. The conformance tes
 | Tier | Surfaces | Gate |
 | --- | --- | --- |
 | integration-tested | OpenTelemetry, OpenInference, OpenHands-like, SWE-agent-like | `python -m hulun_guard adapter-matrix --json` |
-| roundtrip-tested | OpenTelemetry, OpenInference | Import to persisted events to OTLP export to OTLP re-import |
+| hosted-fixture-tested | LangGraph, LangSmith, Langfuse, Phoenix | Synthetic public-safe hosted platform fixture shapes |
+| roundtrip-tested | OpenTelemetry, OpenInference, Langfuse, Phoenix | Import to persisted events to OTLP export to OTLP re-import |
 | conformance | CLI, Python SDK, MCP, generic JSON | `tests/test_adapter_conformance.py` |
-| best-effort | LangGraph, LangSmith, Langfuse, Phoenix, custom JSON | Generic JSON, OpenTelemetry, or OpenInference field mapping |
+| best-effort | Custom JSON or provider-specific exports without supported fields | Generic JSON, OpenTelemetry, or OpenInference field mapping |
 
 ## Telemetry Compatibility Fields
 

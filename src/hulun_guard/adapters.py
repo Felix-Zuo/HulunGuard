@@ -101,6 +101,23 @@ def _first_attr(attrs: dict[str, Any], keys: list[str]) -> Any:
     return None
 
 
+def _path_value(item: dict[str, Any], path: list[str]) -> Any:
+    value: Any = item
+    for key in path:
+        if not isinstance(value, dict):
+            return None
+        value = value.get(key)
+    return value
+
+
+def _first_path(item: dict[str, Any], paths: list[list[str]]) -> Any:
+    for path in paths:
+        value = _path_value(item, path)
+        if value not in (None, ""):
+            return value
+    return None
+
+
 def _list_from_value(value: Any) -> list[str]:
     if value in (None, ""):
         return []
@@ -282,6 +299,18 @@ def normalize_openinference(span: dict[str, Any], *, include_sensitive: bool = F
             ),
         }
     )
+    return observation
+
+
+def normalize_langfuse(span: dict[str, Any], *, include_sensitive: bool = False) -> Observation:
+    observation = normalize_opentelemetry(span, include_sensitive=include_sensitive)
+    observation["source_platform"] = "langfuse"
+    return observation
+
+
+def normalize_phoenix(span: dict[str, Any], *, include_sensitive: bool = False) -> Observation:
+    observation = normalize_openinference(span, include_sensitive=include_sensitive)
+    observation["source_platform"] = "phoenix"
     return observation
 
 
@@ -508,6 +537,87 @@ def normalize_swe_agent(item: dict[str, Any], *, include_sensitive: bool = False
     }
 
 
+def normalize_langgraph(item: dict[str, Any], *, include_sensitive: bool = False) -> Observation:
+    stream_type = _first_text(item, ["type", "stream_mode", "event"]).lower()
+    data = item.get("data") if isinstance(item.get("data"), dict) else {}
+    data_text = safe_summary_from_trace(data, include_sensitive=include_sensitive, fallback="")
+    raw_text = _first_text(item, ["summary", "message", "content", "text", "status"]) or data_text or stream_type or "LangGraph stream part."
+    base = normalize_generic(item, source_platform="langgraph", include_sensitive=include_sensitive)
+    explicit_type = _as_text(item.get("event_type") or item.get("hulun_type") or "").strip()
+    if explicit_type:
+        event_type = explicit_type
+    elif stream_type == "messages":
+        event_type = "llm_call"
+    elif stream_type == "tasks":
+        event_type = "tool_result" if base["result"] != "unknown" else "command"
+    elif stream_type == "checkpoints":
+        event_type = "checkpoint"
+    elif stream_type == "debug":
+        event_type = "observation"
+    elif stream_type in {"updates", "values", "custom"}:
+        event_type = "observation"
+    else:
+        event_type = base["type"]
+    action_key = base.get("action_key") or fingerprint_text(raw_text, prefix="langgraph")
+    summary = redact_text(raw_text, include_sensitive=True) if include_sensitive else safe_summary_from_trace(item, fallback=f"Imported LangGraph {event_type} observation; sensitive payload withheld.")
+    return {
+        **base,
+        "type": event_type,
+        "summary": summary,
+        "phase": base.get("phase") or _phase_from_text(raw_text, "orchestrate"),
+        "action_key": action_key,
+    }
+
+
+def normalize_langsmith(item: dict[str, Any], *, include_sensitive: bool = False) -> Observation:
+    run_type = _as_text(item.get("run_type") or item.get("type") or item.get("serialized", {}).get("name")).strip().lower()
+    name = _first_text(item, ["name", "display_name", "dotted_order"]) or run_type or "LangSmith run"
+    error = _first_text(item, ["error"])
+    base = normalize_generic(item, source_platform="langsmith", include_sensitive=include_sensitive)
+    if error:
+        result = "fail"
+    else:
+        result = base["result"] if base["result"] != "unknown" else "pass"
+    if run_type in {"llm", "chat_model"}:
+        event_type = "llm_call"
+    elif run_type == "tool":
+        event_type = "tool_result"
+    elif run_type == "retriever":
+        event_type = "source"
+    elif result == "fail":
+        event_type = "agent_error"
+    else:
+        event_type = "command"
+    refs = list(base.get("refs") or [])
+    run_id = _as_text(item.get("id") or item.get("run_id")).strip()
+    trace_id = _as_text(item.get("trace_id") or item.get("traceId")).strip()
+    if run_id:
+        refs.append(f"langsmith:run:{run_id}")
+    if trace_id:
+        refs.append(f"langsmith:trace:{trace_id}")
+    prompt_tokens = base.get("prompt_tokens") or _coerce_int(_first_path(item, [["usage_metadata", "input_tokens"], ["usage", "prompt_tokens"], ["extra", "usage", "prompt_tokens"]]))
+    completion_tokens = base.get("completion_tokens") or _coerce_int(
+        _first_path(item, [["usage_metadata", "output_tokens"], ["usage", "completion_tokens"], ["extra", "usage", "completion_tokens"]])
+    )
+    latency_ms = base.get("latency_ms") or _coerce_int(item.get("latency_ms"))
+    model = base.get("model") or _as_text(_first_path(item, [["invocation_params", "model"], ["extra", "invocation_params", "model"], ["metadata", "model"]])).strip() or None
+    summary_source = error or _first_text(item, ["summary"]) or name
+    summary = redact_text(summary_source, include_sensitive=True) if include_sensitive else redact_text(summary_source, include_sensitive=False)
+    return {
+        **base,
+        "type": event_type,
+        "summary": summary,
+        "result": result,
+        "phase": base.get("phase") or _phase_from_text(" ".join([run_type, name, error]), "orchestrate"),
+        "refs": redact_refs(refs, include_sensitive=include_sensitive),
+        "action_key": base.get("action_key") or (f"langsmith:{run_id}" if run_id else fingerprint_text(name, prefix="langsmith")),
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "latency_ms": latency_ms,
+        "model": model,
+    }
+
+
 def validate_trace_file(path: str | Path, *, max_trace_bytes: int = MAX_TRACE_BYTES) -> Path:
     trace_path = Path(path)
     if not trace_path.exists():
@@ -539,7 +649,15 @@ def iter_observations(
     fmt = source_format.lower()
     if fmt == "auto":
         lowered = trace_path.name.lower()
-        if "openinference" in lowered or "phoenix" in lowered:
+        if "langgraph" in lowered:
+            fmt = "langgraph"
+        elif "langsmith" in lowered:
+            fmt = "langsmith"
+        elif "langfuse" in lowered:
+            fmt = "langfuse"
+        elif "phoenix" in lowered:
+            fmt = "phoenix"
+        elif "openinference" in lowered:
             fmt = "openinference"
         elif "opentelemetry" in lowered or "otel" in lowered or "otlp" in lowered:
             fmt = "opentelemetry"
@@ -556,11 +674,15 @@ def iter_observations(
         "opentelemetry": normalize_opentelemetry,
         "openinference": normalize_openinference,
         "swe-agent": normalize_swe_agent,
+        "langgraph": normalize_langgraph,
+        "langsmith": normalize_langsmith,
+        "langfuse": normalize_langfuse,
+        "phoenix": normalize_phoenix,
     }
     if fmt not in normalizers:
         raise SystemExit(f"Unsupported trace format: {source_format}")
     normalizer = normalizers[fmt]
-    if fmt in {"opentelemetry", "openinference"}:
+    if fmt in {"opentelemetry", "openinference", "langfuse", "phoenix"}:
         for span in _iter_telemetry_spans(trace_path):
             yield normalizer(span, include_sensitive=include_sensitive)
         return

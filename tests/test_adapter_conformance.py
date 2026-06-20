@@ -16,7 +16,10 @@ SECRET = "sk-testsecret012345678901234567890"
 EMAIL = "alice@example.com"
 PASSWORD = "password=hunter2"
 SUMMARY = f"pytest failed with {SECRET} for {EMAIL} and {PASSWORD}"
+REDACTED_SUMMARY = "pytest failed with [redacted:openai-key] for [redacted:email] and password=[redacted:secret]"
 REF_WITH_SECRET_QUERY = "https://trace.example/run?id=abc&token=secret#debug"
+PUBLIC_SUMMARY = "pytest failed after contract mismatch"
+REF_WITH_QUERY = "https://trace.example/run?id=abc&debug=true#debug"
 REDACTED_REF = "https://trace.example/run"
 ACTION_KEY = "pytest-contract"
 EVIDENCE_ID = "E-contract"
@@ -48,7 +51,14 @@ def load_last_event(root: str | Path) -> dict[str, object]:
     return state["events"][-1]
 
 
-def assert_contract_event(test: unittest.TestCase, root: str | Path, event: dict[str, object], payload: dict[str, object]) -> None:
+def assert_contract_event(
+    test: unittest.TestCase,
+    root: str | Path,
+    event: dict[str, object],
+    payload: dict[str, object],
+    *,
+    require_secret_redaction: bool,
+) -> None:
     test.assertEqual(event["type"], "tool_result")
     test.assertEqual(event["phase"], "verify")
     test.assertEqual(event["result"], "fail")
@@ -60,9 +70,12 @@ def assert_contract_event(test: unittest.TestCase, root: str | Path, event: dict
     test.assertEqual(event["latency_ms"], 890)
     test.assertEqual(event["model"], "gpt-contract")
     test.assertIn(REDACTED_REF, event["refs"])
-    test.assertIn("[redacted:openai-key]", event["summary"])
-    test.assertIn("[redacted:email]", event["summary"])
-    test.assertIn("password=[redacted:secret]", event["summary"])
+    if require_secret_redaction:
+        test.assertIn("[redacted:openai-key]", event["summary"])
+        test.assertIn("[redacted:email]", event["summary"])
+        test.assertIn("password=[redacted:secret]", event["summary"])
+    else:
+        test.assertIn(PUBLIC_SUMMARY, event["summary"])
     test.assertEqual(event["privacy"]["mode"], "redacted-default")
     test.assertEqual(event["privacy"]["retention_days"], 30)
 
@@ -97,7 +110,7 @@ def write_generic_trace(path: Path) -> None:
                 "events": [
                     {
                         "type": "tool_result",
-                        "summary": SUMMARY,
+                        "summary": REDACTED_SUMMARY,
                         "result": "fail",
                         "phase": "verify",
                         "evidence": [EVIDENCE_ID],
@@ -242,23 +255,91 @@ def write_swe_agent_trace(path: Path) -> None:
     )
 
 
+def write_langgraph_trace(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "events": [
+                    {
+                        "type": "tasks",
+                        "event_type": "tool_result",
+                        "summary": PUBLIC_SUMMARY,
+                        "result": "fail",
+                        "phase": "verify",
+                        "evidence": [EVIDENCE_ID],
+                        "refs": [REF_WITH_QUERY],
+                        "action_key": ACTION_KEY,
+                        "prompt_tokens": 123,
+                        "completion_tokens": 45,
+                        "cost": 0.67,
+                        "latency_ms": 890,
+                        "model": "gpt-contract",
+                        "data": {"node": "pytest", "status": "redacted failure"},
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def write_langsmith_trace(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "run-contract",
+                    "trace_id": "trace-contract",
+                    "run_type": "tool",
+                    "name": "pytest contract run",
+                    "summary": PUBLIC_SUMMARY,
+                    "error": PUBLIC_SUMMARY,
+                    "result": "fail",
+                    "phase": "verify",
+                    "evidence": [EVIDENCE_ID],
+                    "refs": [REF_WITH_QUERY],
+                    "action_key": ACTION_KEY,
+                    "prompt_tokens": 123,
+                    "completion_tokens": 45,
+                    "cost": 0.67,
+                    "latency_ms": 890,
+                    "invocation_params": {"model": "gpt-contract"},
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def write_langfuse_trace(path: Path) -> None:
+    write_opentelemetry_trace(path)
+
+
+def write_phoenix_trace(path: Path) -> None:
+    write_openinference_trace(path)
+
+
 class AdapterConformanceTest(unittest.TestCase):
     def test_cli_sdk_mcp_and_trace_adapters_emit_contract_fields(self) -> None:
         cases = [
-            ("cli", self._record_cli),
-            ("sdk", self._record_sdk),
-            ("mcp", self._record_mcp),
-            ("generic", self._record_generic_ingest),
-            ("opentelemetry", self._record_opentelemetry_ingest),
-            ("openinference", self._record_openinference_ingest),
-            ("openhands", self._record_openhands_ingest),
-            ("swe-agent", self._record_swe_agent_ingest),
+            ("cli", self._record_cli, True),
+            ("sdk", self._record_sdk, True),
+            ("mcp", self._record_mcp, True),
+            ("generic", self._record_generic_ingest, True),
+            ("opentelemetry", self._record_opentelemetry_ingest, True),
+            ("openinference", self._record_openinference_ingest, True),
+            ("openhands", self._record_openhands_ingest, True),
+            ("swe-agent", self._record_swe_agent_ingest, True),
+            ("langgraph", self._record_langgraph_ingest, False),
+            ("langsmith", self._record_langsmith_ingest, False),
+            ("langfuse", self._record_langfuse_ingest, True),
+            ("phoenix", self._record_phoenix_ingest, True),
         ]
-        for name, recorder in cases:
+        for name, recorder, require_secret_redaction in cases:
             with self.subTest(adapter=name):
                 with tempfile.TemporaryDirectory() as tmp:
                     event, payload = recorder(tmp)
-                    assert_contract_event(self, tmp, event, payload)
+                    assert_contract_event(self, tmp, event, payload, require_secret_redaction=require_secret_redaction)
 
     def test_malformed_adapter_payloads_fail_without_persisting_event(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -421,3 +502,15 @@ class AdapterConformanceTest(unittest.TestCase):
 
     def _record_swe_agent_ingest(self, root: str) -> tuple[dict[str, object], dict[str, object]]:
         return self._record_ingest(root, "swe-agent", write_swe_agent_trace)
+
+    def _record_langgraph_ingest(self, root: str) -> tuple[dict[str, object], dict[str, object]]:
+        return self._record_ingest(root, "langgraph", write_langgraph_trace)
+
+    def _record_langsmith_ingest(self, root: str) -> tuple[dict[str, object], dict[str, object]]:
+        return self._record_ingest(root, "langsmith", write_langsmith_trace)
+
+    def _record_langfuse_ingest(self, root: str) -> tuple[dict[str, object], dict[str, object]]:
+        return self._record_ingest(root, "langfuse", write_langfuse_trace)
+
+    def _record_phoenix_ingest(self, root: str) -> tuple[dict[str, object], dict[str, object]]:
+        return self._record_ingest(root, "phoenix", write_phoenix_trace)
