@@ -987,6 +987,10 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertTrue(doctor["threat_model"]["gate"]["passed"])
             self.assertEqual(doctor["agent_compatibility"]["schema"], "hulun.agent_compatibility.v1")
             self.assertGreaterEqual(doctor["agent_compatibility"]["direct_or_standard_count"], 13)
+            self.assertEqual(doctor["integration_kits"]["schema"], "hulun.integration_kit.v1")
+            self.assertTrue(doctor["integration_kits"]["gate"]["passed"])
+            self.assertGreaterEqual(doctor["integration_kits"]["kit_count"], 15)
+            self.assertEqual(doctor["integration_kits"]["verified_count"], doctor["integration_kits"]["kit_count"])
 
             code, out = self.run_cli("--root", tmp, "benchmark", "--events", "200", "--json")
             self.assertEqual(code, 0)
@@ -1055,6 +1059,110 @@ class HulunGuardCliTest(unittest.TestCase):
         self.assertEqual(agents["langgraph"]["ingest_format"], "langgraph")
         self.assertEqual(agents["autogen"]["ingest_format"], "opentelemetry")
         self.assertEqual(agents["openai-agents-sdk"]["ingest_format"], "generic")
+
+    def test_integration_kit_generates_verified_agent_package(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "langgraph-kit"
+            code, out = self.run_cli(
+                "--root",
+                tmp,
+                "integration-kit",
+                "--agent",
+                "langgraph",
+                "--output",
+                str(output),
+                "--verify",
+                "--json",
+            )
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["schema"], "hulun.integration_kit.v1")
+            self.assertEqual(payload["kit_count"], 1)
+            self.assertEqual(payload["verified_count"], 1)
+            self.assertTrue(payload["gate"]["passed"])
+            kit = payload["kits"][0]
+            self.assertEqual(kit["agent"]["id"], "langgraph")
+            self.assertEqual(kit["agent"]["ingest_format"], "langgraph")
+            self.assertTrue(kit["verification"]["passed"])
+            self.assertGreaterEqual(kit["verification"]["observation_count"], 1)
+            self.assertIn("tool_result", kit["verification"]["event_types"])
+            for name in ["README.md", "hulun_integration.json", "run_ingest.ps1", "run_ingest.sh", "sample-langgraph.json"]:
+                self.assertTrue((output / name).exists(), name)
+            manifest = json.loads((output / "hulun_integration.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["schema"], "hulun.integration_kit.v1")
+            self.assertIn('"', manifest["ingest_command"])
+            self.assertIn("--init-if-missing", manifest["ingest_command"])
+
+            code, out = self.run_cli(
+                "--root",
+                tmp,
+                "ingest",
+                "--format",
+                "langgraph",
+                "--file",
+                str(output / "sample-langgraph.json"),
+                "--scan",
+                "--init-if-missing",
+                "--json",
+            )
+            self.assertEqual(code, 0, out)
+            ingest = json.loads(out)
+            self.assertEqual(ingest["imported"], kit["verification"]["observation_count"])
+            self.assertIn("risk", ingest)
+            state = load_state(Path(tmp))
+            self.assertEqual(len(state["events"]), kit["verification"]["observation_count"])
+
+            serialized = json.dumps(payload, ensure_ascii=False)
+            self.assertNotIn("sk-", serialized)
+            self.assertNotIn("password=", serialized)
+            self.assertNotIn("@example.com", serialized)
+
+    def test_integration_kit_verifies_all_supported_agents(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "kits"
+            code, out = self.run_cli(
+                "--root",
+                tmp,
+                "integration-kit",
+                "--agent",
+                "all",
+                "--output",
+                str(output),
+                "--verify",
+                "--json",
+            )
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["schema"], "hulun.integration_kit.v1")
+            self.assertTrue(payload["gate"]["passed"], payload["gate"])
+            self.assertGreaterEqual(payload["kit_count"], 15)
+            self.assertEqual(payload["verified_count"], payload["kit_count"])
+            agent_ids = {kit["agent"]["id"] for kit in payload["kits"]}
+            self.assertIn("openai-agents-sdk", agent_ids)
+            self.assertIn("semantic-kernel", agent_ids)
+            self.assertTrue((output / "openai-agents-sdk" / "sample-events.jsonl").exists())
+            self.assertTrue((output / "semantic-kernel" / "sample-otlp.json").exists())
+
+    def test_integration_kit_refuses_overwrite_without_force(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "kit"
+            code, out = self.run_cli("--root", tmp, "integration-kit", "--agent", "custom-agent", "--output", str(output), "--verify")
+            self.assertEqual(code, 0, out)
+
+            with self.assertRaises(SystemExit) as raised:
+                self.run_cli("--root", tmp, "integration-kit", "--agent", "custom-agent", "--output", str(output), "--verify")
+            self.assertIn("--force", str(raised.exception))
+
+            code, out = self.run_cli("--root", tmp, "integration-kit", "--agent", "custom-agent", "--output", str(output), "--force", "--verify")
+            self.assertEqual(code, 0, out)
+
+    def test_integration_kit_rejects_file_output_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "not-a-directory"
+            output.write_text("reserved", encoding="utf-8")
+            with self.assertRaises(SystemExit) as raised:
+                self.run_cli("--root", tmp, "integration-kit", "--agent", "custom-agent", "--output", str(output), "--verify")
+            self.assertIn("not a directory", str(raised.exception))
 
     def test_real_world_benchmark_fails_when_fixture_size_limit_is_exceeded(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

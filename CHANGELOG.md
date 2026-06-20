@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.24.0 - 2026-06-20
+
+- Added `integration-kit` for verified first-run onboarding packages across supported agent runtimes and trace formats.
+- Added `hulun.integration_kit.v1` manifests with generated files, ingest command, sample trace path, and verification outcome.
+- Added `ingest --init-if-missing` so generated kits can import into an empty project without a separate setup step.
+- Wired integration kit verification into `doctor --run-validation`, CI, Release, PR checklist, release policy, schema docs, and security docs.
+- Moved package maturity classifier from Alpha to Beta.
+
 ## 0.23.0 - 2026-06-20
 
 - Expanded `benchmark --suite real-world` from 12 to 16 public-safe cases with LangGraph, LangSmith, Langfuse, and Phoenix/OpenInference workflow coverage.

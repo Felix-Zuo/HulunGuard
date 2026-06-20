@@ -11,6 +11,13 @@ python -m hulun_guard compatibility --json
 
 The JSON report uses schema `hulun.agent_compatibility.v1`.
 
+Generate a runnable first-run kit for any listed agent id:
+
+```powershell
+python -m hulun_guard integration-kit --agent langgraph --verify
+python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify
+```
+
 ## Direct Adapters
 
 These surfaces have explicit ingest formats and fixture coverage:
