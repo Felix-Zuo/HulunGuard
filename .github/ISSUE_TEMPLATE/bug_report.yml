@@ -1,31 +1,69 @@
 name: Bug report
-description: Report incorrect behavior, crashes, or adapter failures.
+description: Report a reproducible defect in scoring, onboarding, adapters, CLI, or docs.
 title: "[Bug]: "
 labels: ["bug"]
 body:
   - type: textarea
-    id: impact
+    id: summary
     attributes:
-      label: Impact
-      description: What broke, and who is affected?
+      label: Summary
+      description: What failed, and what user or agent workflow was affected?
     validations:
       required: true
   - type: textarea
     id: reproduce
     attributes:
       label: Reproduction
-      description: Minimal commands, trace snippet, or adapter steps.
+      description: Smallest public-safe commands, fixture shape, or steps needed to reproduce. Do not include private prompts, credentials, customer data, production logs, or sensitive traces.
+      placeholder: |
+        python -m hulun_guard ...
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
       label: Expected behavior
+      description: What should HulunGuard have reported or generated?
     validations:
       required: true
   - type: textarea
-    id: environment
+    id: actual
     attributes:
-      label: Environment
-      description: OS, Python version, HulunGuard version, adapter/runtime.
+      label: Actual behavior
+      description: Include relevant public-safe command output or error text.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: HulunGuard version
+      placeholder: "0.25.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - scoring
+        - onboarding
+        - adapter
+        - CLI
+        - schemas
+        - security
+        - documentation
+        - packaging
+        - other
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.10, 3.11, 3.12, 3.13, 3.14"
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Windows, macOS, Linux"
 

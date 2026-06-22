@@ -29,8 +29,25 @@ python -m bandit -q -r src
 python -m compileall -q src tests
 python -m pytest -q
 python -m hulun_guard validate
+python -m hulun_guard calibrate
+python -m hulun_guard calibration-drift
+python -m hulun_guard threat-model-check --json
+python -m hulun_guard compatibility --json
+python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify --json
+python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json
+python -m hulun_guard adapter-matrix --json
+python -m hulun_guard schema-check --json
+python -m hulun_guard cleanup --json
 python -m hulun_guard benchmark --events 10000 --max-ms 1000
+python -m hulun_guard benchmark --suite real-world
+python -m build
 ```
+
+Release-specific steps are maintained in `RELEASING.md`.
+
+## Community Standards
+
+All participation is covered by `CODE_OF_CONDUCT.md`. Use the issue forms for bugs, adapter gaps, and feature requests. Reports and examples must stay public-safe: do not post private prompts, credentials, customer data, production logs, or sensitive traces.
 
 ## Scoring Changes
 
@@ -41,4 +58,3 @@ Any change to HulunIndex or conversation scoring must include:
 - An explanation of false-positive and false-negative tradeoffs.
 
 Do not relax validation to make a release pass. Update scenario expectations only when the scoring behavior is intentionally changed and tested.
-

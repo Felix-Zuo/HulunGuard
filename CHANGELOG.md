@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.25.1 - 2026-06-23
+
+- Added `CODE_OF_CONDUCT.md` and GitHub issue-template configuration for a complete open-source community profile.
+- Added bug report, adapter gap, feature request, and generic issue-template paths with explicit private-data boundaries.
+- Updated contributor guidance to point maintainers at the full release gate.
+
 ## 0.25.0 - 2026-06-23
 
 - Added `onboard` for zero-knowledge first-run agent onboarding across supported runtimes.

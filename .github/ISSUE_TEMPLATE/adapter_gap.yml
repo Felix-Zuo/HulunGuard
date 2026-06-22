@@ -1,0 +1,32 @@
+name: Adapter gap
+description: Report a missing or incomplete agent/runtime integration path.
+title: "[Adapter]: "
+labels: ["adapter", "maturity"]
+body:
+  - type: input
+    id: agent
+    attributes:
+      label: Agent or runtime
+      description: Name and version of the agent, IDE, CLI, framework, or runtime.
+      placeholder: "Codex CLI, Claude Code, OpenClaw, LangGraph..."
+    validations:
+      required: true
+  - type: textarea
+    id: trace_shape
+    attributes:
+      label: Public-safe trace shape
+      description: Describe the event fields, lifecycle hooks, or telemetry surface available for this runtime. Do not include private prompts, credentials, customer data, production logs, or sensitive traces.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected monitoring behavior
+      description: Which HulunGuard observations, evidence links, health states, or onboarding commands should be available?
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Link public docs, SDK pages, example traces, or minimal public reproductions.
