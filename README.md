@@ -228,6 +228,8 @@ The hook should show `hulunguard` as eligible, loadable, enabled, and attached t
 - `hulun.py`: no-install CLI entry.
 - `tools/`: Windows wrappers.
 - `tests/`: end-to-end tests.
+- `CODE_OF_CONDUCT.md`: public participation and moderation boundary.
+- `CONTRIBUTING.md`: development and pull request standards.
 - `integrations/openclaw/`: OpenClaw hook.
 - `candidate_skill/`: Codex skill adapter.
 - `docs/`: usage and integration docs.

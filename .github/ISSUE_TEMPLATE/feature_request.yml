@@ -1,0 +1,39 @@
+name: Feature request
+description: Request a product, adapter, onboarding, or workflow improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or agent workflow cannot be handled well today?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Target outcome
+      description: What observable result should exist when this is complete?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - onboarding
+        - adapter
+        - scoring
+        - security
+        - documentation
+        - release
+        - user interface
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence or references
+      description: Public docs, trace formats, command output, or minimal examples. Do not include private data.
