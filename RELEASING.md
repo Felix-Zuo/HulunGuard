@@ -29,9 +29,9 @@ python -m hulun_guard cleanup --json
 python -m hulun_guard benchmark --events 10000 --max-ms 1000
 python -m hulun_guard benchmark --suite real-world
 python -m build
-python scripts/verify_release_artifacts.py
 python scripts/generate_release_metadata.py --verify --json
-python scripts/verify_github_release.py --asset-dir dist --skip-attestation --json
+python scripts/verify_release_artifacts.py
+python -m hulun_guard release-verify --asset-dir dist --skip-attestation --json
 ```
 
 GitHub must pass:
@@ -55,7 +55,7 @@ GitHub must pass:
 9. Confirm build provenance attestations exist for release artifacts.
 10. Confirm `SHA256SUMS` and the CycloneDX SBOM are uploaded with the release.
 11. Confirm release artifact smoke testing passed from a clean virtual environment.
-12. Run `python scripts/verify_github_release.py vX.Y.Z --json` against the published release.
+12. Run `python -m hulun_guard release-verify vX.Y.Z --json` against the published release.
 13. Create or update GitHub issues for unfinished maturity work.
 
 See `docs/SUPPLY_CHAIN.md` for branch protection and release approval gates. See `docs/THREAT_MODEL.md` for the local-first security boundary.

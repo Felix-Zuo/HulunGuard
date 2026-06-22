@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import os
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -8,12 +11,19 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "scripts"
-if str(SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS))
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
-from generate_release_metadata import generate_metadata
-from verify_github_release import ReleaseVerificationError, verify_release
+from hulun_guard.release_metadata import generate_metadata
+from hulun_guard.release_verification import ReleaseVerificationError, verify_release
+
+
+def cli_env() -> dict[str, str]:
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = str(SRC) if not existing else f"{SRC}{os.pathsep}{existing}"
+    return env
 
 
 class GitHubReleaseVerifierTest(unittest.TestCase):
@@ -69,6 +79,77 @@ class GitHubReleaseVerifierTest(unittest.TestCase):
             self.assertEqual(report["checksums"]["count"], 3)
             self.assertEqual(report["sbom"]["spec_version"], "1.6")
             self.assertEqual(report["attestations"], [])
+
+    def test_release_verify_cli_existing_asset_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            version = "9.9.9"
+            dist = self.make_dist(root, version)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "hulun_guard",
+                    "release-verify",
+                    f"v{version}",
+                    "--root",
+                    str(root),
+                    "--asset-dir",
+                    str(dist),
+                    "--skip-attestation",
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                capture_output=True,
+                env=cli_env(),
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["schema"], "hulun.github_release_verification.v1")
+            self.assertTrue(payload["gate"]["passed"])
+            self.assertEqual(payload["checksums"]["count"], 3)
+
+    def test_release_verify_cli_reports_schema_on_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            version = "9.9.9"
+            dist = self.make_dist(root, version)
+            (dist / f"hulun_guard-{version}-sbom.cdx.json").unlink()
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "hulun_guard",
+                    "release-verify",
+                    f"v{version}",
+                    "--root",
+                    str(root),
+                    "--asset-dir",
+                    str(dist),
+                    "--skip-attestation",
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                capture_output=True,
+                env=cli_env(),
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["schema"], "hulun.github_release_verification.v1")
+            self.assertFalse(payload["gate"]["passed"])
+            self.assertEqual(payload["gate"]["failure_count"], 1)
 
     def test_verify_fails_when_checksum_asset_is_tampered(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

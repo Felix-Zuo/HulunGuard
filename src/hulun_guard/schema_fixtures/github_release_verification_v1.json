@@ -1,0 +1,48 @@
+{
+  "schema": "hulun.github_release_verification.v1",
+  "generated_at": "2026-01-01T00:00:00+00:00",
+  "repo": "Felix-Zuo/HulunGuard",
+  "tag": "v0.29.0",
+  "version": "0.29.0",
+  "asset_dir": "/tmp/hulun-release-assets",
+  "downloaded": true,
+  "checksums": {
+    "file": "/tmp/hulun-release-assets/SHA256SUMS",
+    "count": 3,
+    "verified": [
+      "hulun_guard-0.29.0-py3-none-any.whl",
+      "hulun_guard-0.29.0.tar.gz",
+      "hulun_guard-0.29.0-sbom.cdx.json"
+    ]
+  },
+  "sbom": {
+    "file": "/tmp/hulun-release-assets/hulun_guard-0.29.0-sbom.cdx.json",
+    "format": "CycloneDX",
+    "spec_version": "1.6",
+    "component_count": 3
+  },
+  "attestations": [
+    {
+      "asset": "hulun_guard-0.29.0-py3-none-any.whl",
+      "status": "ok"
+    },
+    {
+      "asset": "hulun_guard-0.29.0.tar.gz",
+      "status": "ok"
+    },
+    {
+      "asset": "hulun_guard-0.29.0-sbom.cdx.json",
+      "status": "ok"
+    },
+    {
+      "asset": "SHA256SUMS",
+      "status": "ok"
+    }
+  ],
+  "gate": {
+    "passed": true,
+    "failure_count": 0,
+    "failures": []
+  },
+  "root": "/tmp/hulun"
+}

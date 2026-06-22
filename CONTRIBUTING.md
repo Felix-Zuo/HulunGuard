@@ -41,9 +41,9 @@ python -m hulun_guard cleanup --json
 python -m hulun_guard benchmark --events 10000 --max-ms 1000
 python -m hulun_guard benchmark --suite real-world
 python -m build
-python scripts/verify_release_artifacts.py
 python scripts/generate_release_metadata.py --verify --json
-python scripts/verify_github_release.py --asset-dir dist --skip-attestation --json
+python scripts/verify_release_artifacts.py
+python -m hulun_guard release-verify --asset-dir dist --skip-attestation --json
 ```
 
 Release-specific steps are maintained in `RELEASING.md`.

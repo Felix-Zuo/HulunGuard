@@ -20,7 +20,7 @@ using HulunGuard on real work.
 - Privacy-safe trace ingestion: import generic JSON/JSONL, OpenTelemetry GenAI, OpenInference, OpenHands-like events, SWE-agent-like trajectories, LangGraph stream parts, LangSmith run exports, Langfuse OTEL traces, and Phoenix/OpenInference spans without persisting raw sensitive payloads by default.
 - Python SDK and MCP server: agents can record runtime state directly without shell glue.
 - Built-in validation suite: run synthetic healthy/slop-risk scenarios before release.
-- Product operations: `onboard`, `quickstart`, `doctor`, `compatibility`, `integration-kit`, `adapter-matrix`, `schema-check`, `cleanup`, and `benchmark` commands for onboarding, diagnostics, agent compatibility, first-run integration packages, adapter integration, schema compatibility, retention cleanup, scan performance, and public-safe real-world workflow checks.
+- Product operations: `onboard`, `quickstart`, `doctor`, `compatibility`, `integration-kit`, `adapter-matrix`, `schema-check`, `release-verify`, `cleanup`, and `benchmark` commands for onboarding, diagnostics, agent compatibility, first-run integration packages, adapter integration, schema compatibility, release verification, retention cleanup, scan performance, and public-safe real-world workflow checks.
 - Conversation runtime monitoring: per-conversation events, user challenges, pending tool calls, unresolved failures, unsupported final claims, and monitor sync.
 
 ## Quick Start
@@ -124,6 +124,10 @@ python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000
 python .\hulun.py benchmark --suite real-world
 python -m pytest -q
+python -m build
+python scripts/generate_release_metadata.py --verify --json
+python scripts/verify_release_artifacts.py
+python .\hulun.py release-verify --asset-dir .\dist --skip-attestation --json
 ```
 
 Open the project board:
@@ -228,8 +232,8 @@ The hook should show `hulunguard` as eligible, loadable, enabled, and attached t
 - `hulun.py`: no-install CLI entry.
 - `tools/`: Windows wrappers.
 - `scripts/verify_release_artifacts.py`: clean-environment wheel and sdist smoke test.
-- `scripts/generate_release_metadata.py`: release checksum and CycloneDX SBOM generator.
-- `scripts/verify_github_release.py`: published release checksum, SBOM, and attestation verifier.
+- `scripts/generate_release_metadata.py`: repository wrapper for release checksum and CycloneDX SBOM generation.
+- `scripts/verify_github_release.py`: repository wrapper for `hulun release-verify`.
 - `tests/`: end-to-end tests.
 - `CODE_OF_CONDUCT.md`: public participation and moderation boundary.
 - `CONTRIBUTING.md`: development and pull request standards.
@@ -262,9 +266,10 @@ python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000
 python .\hulun.py benchmark --suite real-world
-python scripts/verify_release_artifacts.py
+python -m build
 python scripts/generate_release_metadata.py --verify --json
-python scripts/verify_github_release.py --asset-dir dist --skip-attestation --json
+python scripts/verify_release_artifacts.py
+python -m hulun_guard release-verify --asset-dir dist --skip-attestation --json
 python .\hulun.py --help
 python .\hulun.py open --help
 python .\hulun.py board --help

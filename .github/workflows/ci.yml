@@ -58,9 +58,9 @@ jobs:
         run: python -m hulun_guard benchmark --suite real-world
       - name: Build package
         run: python -m build
-      - name: Verify release artifacts
-        run: python scripts/verify_release_artifacts.py
       - name: Generate release metadata
         run: python scripts/generate_release_metadata.py --verify --json
+      - name: Verify release artifacts
+        run: python scripts/verify_release_artifacts.py
       - name: Verify GitHub release assets offline
-        run: python scripts/verify_github_release.py --asset-dir dist --skip-attestation --json
+        run: python -m hulun_guard release-verify --asset-dir dist --skip-attestation --json

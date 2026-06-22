@@ -221,6 +221,17 @@ python -m pytest -q
 `adapter-matrix` verifies OpenTelemetry/OpenInference/Langfuse/Phoenix round-trips plus OpenHands-like, SWE-agent-like, LangGraph, and LangSmith stream coverage without committing private traces.
 `schema-check` loads legacy JSON fixtures, normalizes them through the migration layer, and fails if current public schemas are not written. See `docs/SCHEMAS.md`.
 
+## Release Asset Verification
+
+Use `release-verify` after release metadata has been generated:
+
+```powershell
+python .\hulun.py release-verify v0.29.0 --json
+python .\hulun.py release-verify v0.29.0 --asset-dir .\dist --skip-attestation --json
+```
+
+The command checks expected release files, `SHA256SUMS`, CycloneDX SBOM artifact hashes, and GitHub attestations unless `--skip-attestation` is set. It returns `hulun.github_release_verification.v1`.
+
 ## Benchmark Scan Performance
 
 Use `benchmark` before releases or after scoring changes:

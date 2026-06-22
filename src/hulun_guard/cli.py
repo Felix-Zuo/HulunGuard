@@ -49,6 +49,16 @@ from .monitor import (
 )
 from .onboarding import OnboardingError, onboarding_json, run_onboarding
 from .privacy import DEFAULT_RETENTION_DAYS, sanitize_evidence
+from .release_verification import (
+    DEFAULT_REPO as DEFAULT_RELEASE_REPO,
+)
+from .release_verification import (
+    ReleaseVerificationError,
+    failure_report,
+    release_verification_json,
+    tag_from_version,
+    verify_release,
+)
 from .reports import build_board_html, build_dashboard_html, build_verify_markdown
 from .retention import retention_cleanup_json, run_retention_cleanup
 from .risk import scan_state
@@ -678,6 +688,47 @@ def cmd_schema_check(args: argparse.Namespace) -> int:
             detail = ", ".join(f"{key}={value}" for key, value in failure.items())
             print(f"- {detail}")
     return 0 if result["gate"]["passed"] else 2
+
+
+def _optional_path_from_root(root: Path, value: str | None) -> Path | None:
+    if not value:
+        return None
+    path = Path(value)
+    return path if path.is_absolute() else root / path
+
+
+def cmd_release_verify(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    tag = args.tag or tag_from_version(package_version())
+    asset_dir = _optional_path_from_root(root, args.asset_dir)
+    download_dir = _optional_path_from_root(root, args.download_dir)
+    try:
+        result = verify_release(
+            tag=tag,
+            repo=args.repo,
+            asset_dir=asset_dir,
+            download_dir=download_dir,
+            skip_attestation=args.skip_attestation,
+            gh_path=args.gh,
+            root=root,
+        )
+    except ReleaseVerificationError as exc:
+        result = failure_report(repo=args.repo, tag=tag, root=root, error=str(exc), asset_dir=asset_dir or download_dir)
+        if args.json:
+            print(release_verification_json(result), end="")
+        else:
+            print(f"HulunGuard release verification failed: {exc}", file=sys.stderr)
+        return 2
+
+    if args.json:
+        print(release_verification_json(result), end="")
+    else:
+        print(f"HulunGuard release verification passed: {result['tag']}")
+        print(f"Assets: {result['asset_dir']}")
+        print(f"Checksums: {result['checksums']['count']}")
+        print(f"SBOM components: {result['sbom']['component_count']}")
+        print(f"Attestations: {len(result['attestations'])}")
+    return 0
 
 
 def cmd_threat_model_check(args: argparse.Namespace) -> int:
@@ -1440,6 +1491,17 @@ def build_parser() -> argparse.ArgumentParser:
     schema_check.add_argument("--fixture-dir")
     schema_check.add_argument("--json", action="store_true")
     schema_check.set_defaults(func=cmd_schema_check)
+
+    release_verify = sub.add_parser("release-verify", parents=[root_parent], help="Verify release assets, checksums, SBOM, and GitHub attestations.")
+    release_verify.add_argument("tag", nargs="?", help="Release tag to verify. Defaults to v<installed package version>.")
+    release_verify.add_argument("--repo", default=DEFAULT_RELEASE_REPO, help=f"GitHub repository. Defaults to {DEFAULT_RELEASE_REPO}.")
+    release_verify_mode = release_verify.add_mutually_exclusive_group()
+    release_verify_mode.add_argument("--asset-dir", help="Verify release assets already present in this directory.")
+    release_verify_mode.add_argument("--download-dir", help="Download release assets into this directory instead of a temporary directory.")
+    release_verify.add_argument("--skip-attestation", action="store_true", help="Skip gh attestation verification.")
+    release_verify.add_argument("--gh", default="gh", help="GitHub CLI executable path or name.")
+    release_verify.add_argument("--json", action="store_true")
+    release_verify.set_defaults(func=cmd_release_verify)
 
     threat_model_check = sub.add_parser("threat-model-check", parents=[root_parent])
     threat_model_check.add_argument("--json", action="store_true")

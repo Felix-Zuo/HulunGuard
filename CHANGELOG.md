@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.29.0 - 2026-06-23
+
+- Promoted release verification to the installed `hulun release-verify` CLI.
+- Moved release metadata and release verification logic into package modules shared by CLI commands and repository scripts.
+- Added `hulun.github_release_verification.v1` to the public schema compatibility gate and clean-environment artifact smoke test.
+
 ## 0.28.0 - 2026-06-23
 
 - Added a one-command GitHub release verifier for checksums, SBOM artifact hashes, and GitHub attestations.
