@@ -56,6 +56,7 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 - Native service export connectors beyond public-safe hosted fixture shapes.
 - User-facing onboarding that works without repository-specific knowledge.
 - One-command onboarding that verifies supported agent paths before real traces are imported.
+- Trace diagnostics that identify format, importability, privacy mode, and next command before real traces are written.
 
 ### M4: Top-Tier Product
 
@@ -75,4 +76,4 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 ## Current Target
 
-The current target is M2 moving into M3. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, hosted-platform fixture baseline, release provenance baseline, installed release-verification baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, adapter conformance baseline, adapter integration matrix baseline, expanded public-safe real-world benchmark baseline, agent compatibility matrix baseline, verified integration kit baseline, zero-knowledge onboarding baseline, retention cleanup baseline, schema compatibility baseline, and threat-model baseline are implemented. The next gate is deeper native connectors beyond standards and generic bridge paths.
+The current target is M2 moving into M3. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, hosted-platform fixture baseline, release provenance baseline, installed release-verification baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, adapter conformance baseline, adapter integration matrix baseline, expanded public-safe real-world benchmark baseline, agent compatibility matrix baseline, verified integration kit baseline, zero-knowledge onboarding baseline, trace-doctor diagnostic baseline, retention cleanup baseline, schema compatibility baseline, and threat-model baseline are implemented. The next gate is deeper native connectors beyond standards and generic bridge paths.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.30.0 - 2026-06-23
+
+- Added `trace-doctor` for safe pre-import trace diagnostics across supported agent formats.
+- Added `hulun.trace_doctor.v1` to the public schema compatibility gate and release validation surface.
+- Added CI and Release workflow coverage for trace diagnostics before schema compatibility checks.
+
 ## 0.29.0 - 2026-06-23
 
 - Promoted release verification to the installed `hulun release-verify` CLI.

@@ -86,6 +86,7 @@ from .storage import (
     verify_path,
     write_json,
 )
+from .trace_diagnostics import TRACE_FORMATS, diagnose_trace_file, trace_doctor_json
 from .util import hash_file, next_id, normalize_list, sort_ids, status_counts, utc_now
 from .validation import build_validation_markdown, run_validation_suite, validation_json
 
@@ -410,6 +411,41 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_trace_doctor(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    trace_path = Path(args.file)
+    if not trace_path.is_absolute():
+        trace_path = root / trace_path
+    result = diagnose_trace_file(
+        trace_path,
+        source_format=args.format,
+        include_sensitive=args.include_sensitive,
+        retention_days=args.retention_days,
+        max_trace_bytes=args.max_trace_bytes,
+        sample_size=args.sample_size,
+        strict=args.strict,
+    )
+    if args.json:
+        print(trace_doctor_json(result), end="")
+    else:
+        gate = result["gate"]
+        status = "pass" if gate["passed"] else "fail"
+        print(f"HulunGuard trace doctor: {status}")
+        print(f"Detected format: {result['detected_format']}")
+        print(f"Selected format: {result['selected_format']}")
+        print(f"Observations: {result['observation_count']}")
+        if result["warnings"]:
+            print("Warnings:")
+            for warning in result["warnings"]:
+                print(f"- {warning['code']}: {warning['detail']}")
+        if gate["failures"]:
+            print("Failures:")
+            for failure in gate["failures"]:
+                print(f"- {failure['code']}: {failure['detail']}")
+        print(f"Next: {result['next_command']}")
+    return 0 if result["gate"]["passed"] else 2
+
+
 def cmd_export_otel(args: argparse.Namespace) -> int:
     root = project_root(args.root)
     state = load_state(root)
@@ -622,6 +658,40 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         payload["adapter_matrix"] = adapter_matrix
         adapter_matrix_status = "ok" if adapter_matrix["gate"]["passed"] else "error"
         add_check("adapter_matrix", adapter_matrix_status, f"{adapter_matrix['gate']['case_count']} cases.")
+        with tempfile.TemporaryDirectory() as tmp:
+            trace_path = Path(tmp) / "doctor-trace.jsonl"
+            trace_path.write_text(
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "type": "tool_result",
+                                "phase": "verify",
+                                "summary": "pytest passed",
+                                "result": "pass",
+                                "action_key": "pytest",
+                                "refs": ["command:pytest"],
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "type": "final_attempt",
+                                "phase": "final",
+                                "summary": "final answer has evidence",
+                                "result": "pass",
+                                "claims": ["complete and verified"],
+                                "evidence": ["E1"],
+                            }
+                        ),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            trace_doctor = diagnose_trace_file(trace_path, source_format="generic")
+        payload["trace_doctor"] = trace_doctor
+        trace_doctor_status = "ok" if trace_doctor["gate"]["passed"] else "error"
+        add_check("trace_doctor", trace_doctor_status, f"{trace_doctor['observation_count']} observations.")
         calibration = run_trajectory_calibration()
         payload["calibration"] = {key: value for key, value in calibration.items() if key != "trajectories"}
         calibration_status = "ok" if calibration["gate"]["passed"] else "error"
@@ -1641,6 +1711,16 @@ def build_parser() -> argparse.ArgumentParser:
     add_privacy_controls(ingest)
     ingest.add_argument("--json", action="store_true")
     ingest.set_defaults(func=cmd_ingest)
+
+    trace_doctor = sub.add_parser("trace-doctor", parents=[root_parent], help="Diagnose an agent trace before importing it.")
+    trace_doctor.add_argument("--file", required=True, help="JSON or JSONL trace file to diagnose.")
+    trace_doctor.add_argument("--format", choices=TRACE_FORMATS, default="auto")
+    trace_doctor.add_argument("--max-trace-bytes", type=int, default=MAX_TRACE_BYTES, help=f"Reject trace files larger than this many bytes. Defaults to {MAX_TRACE_BYTES}.")
+    trace_doctor.add_argument("--sample-size", type=int, default=3, help="Number of normalized sample observations to include.")
+    trace_doctor.add_argument("--strict", action="store_true", help="Treat quality warnings as gate failures.")
+    add_privacy_controls(trace_doctor)
+    trace_doctor.add_argument("--json", action="store_true")
+    trace_doctor.set_defaults(func=cmd_trace_doctor)
 
     export_otel = sub.add_parser("export-otel", parents=[root_parent])
     export_otel.add_argument("--output", required=True, help="Write OpenTelemetry OTLP JSON to this file.")

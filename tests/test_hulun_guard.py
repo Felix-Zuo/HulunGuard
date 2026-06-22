@@ -1503,6 +1503,100 @@ class HulunGuardCliTest(unittest.TestCase):
             status = json.loads(out)
             self.assertEqual(status["events"], 26)
 
+    def test_trace_doctor_detects_trace_format_without_writing_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "trace.json"
+            trace.write_text(
+                json.dumps(
+                    {
+                        "resourceSpans": [
+                            {
+                                "scopeSpans": [
+                                    {
+                                        "spans": [
+                                            {
+                                                "traceId": "trace-doctor",
+                                                "spanId": "span-doctor",
+                                                "name": "openai.chat",
+                                                "attributes": [
+                                                    {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}},
+                                                    {"key": "gen_ai.request.model", "value": {"stringValue": "gpt-test"}},
+                                                    {"key": "gen_ai.usage.input_tokens", "value": {"intValue": "12"}},
+                                                    {"key": "gen_ai.usage.output_tokens", "value": {"intValue": "3"}},
+                                                ],
+                                                "status": {"code": "STATUS_CODE_OK"},
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            code, out = self.run_cli("--root", tmp, "trace-doctor", "--file", str(trace), "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["schema"], "hulun.trace_doctor.v1")
+            self.assertEqual(payload["detected_format"], "opentelemetry")
+            self.assertEqual(payload["selected_format"], "opentelemetry")
+            self.assertEqual(payload["observation_count"], 1)
+            self.assertTrue(payload["gate"]["passed"], payload["gate"]["failures"])
+            self.assertIn("--format opentelemetry", payload["next_command"])
+            self.assertFalse((root / ".hulun" / "state.json").exists())
+
+    def test_trace_doctor_reports_invalid_json_without_persisting(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "broken.json"
+            trace.write_text("{not-json", encoding="utf-8")
+
+            code, out = self.run_cli("--root", tmp, "trace-doctor", "--file", str(trace), "--json")
+            self.assertEqual(code, 2)
+            payload = json.loads(out)
+            self.assertFalse(payload["gate"]["passed"])
+            self.assertEqual(payload["gate"]["failures"][0]["code"], "json_invalid")
+            self.assertFalse((root / ".hulun" / "state.json").exists())
+
+    def test_trace_doctor_accepts_utf8_bom_jsonl(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "powershell-trace.jsonl"
+            line = json.dumps(
+                {
+                    "type": "tool_result",
+                    "phase": "verify",
+                    "summary": "pytest passed",
+                    "result": "pass",
+                    "action_key": "pytest",
+                    "refs": ["command:pytest"],
+                }
+            )
+            trace.write_bytes(("\ufeff" + line + "\n").encode("utf-8"))
+
+            code, out = self.run_cli("--root", tmp, "trace-doctor", "--file", str(trace), "--format", "generic", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertTrue(payload["gate"]["passed"], payload["gate"]["failures"])
+            self.assertEqual(payload["observation_count"], 1)
+
+    def test_trace_doctor_strict_fails_weak_generic_trace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "generic.jsonl"
+            trace.write_text(json.dumps({"summary": "agent said it is probably done"}) + "\n", encoding="utf-8")
+
+            code, out = self.run_cli("--root", tmp, "trace-doctor", "--file", str(trace), "--format", "generic", "--strict", "--json")
+            self.assertEqual(code, 2)
+            payload = json.loads(out)
+            failure_codes = {item["code"] for item in payload["gate"]["failures"]}
+            self.assertIn("strict_generic_bridge", failure_codes)
+            self.assertIn("strict_missing_phase", failure_codes)
+            self.assertIn("strict_missing_external_refs", failure_codes)
+
     def test_conversation_runtime_tracks_user_challenge_and_pending_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
             old_home = os.environ.get("HULUN_HOME")

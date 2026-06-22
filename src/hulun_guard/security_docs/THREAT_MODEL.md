@@ -102,7 +102,7 @@ This protects against path traversal, symlink escape, and accidental deletion of
 | Scenario | Control |
 | --- | --- |
 | Malicious trace file attempts memory pressure | `MAX_TRACE_BYTES` and `--max-trace-bytes` reject oversized files before parsing. |
-| Malformed trace JSON causes partial persistence | Ingest reads and normalizes observations before saving state; parse failures abort the command. |
+| Malformed trace JSON causes partial persistence | Ingest reads and normalizes observations before saving state; parse failures abort the command. `trace-doctor` can preflight parseability and adapter importability without writing the project ledger. |
 | Trace contains prompts, tool outputs, or credentials | Default redaction withholds raw payload fields and applies secret/email/path/URL sanitizers. |
 | User needs raw local trace text for debugging | `--include-sensitive` is explicit opt-in and writes `privacy.mode=sensitive-opt-in`. |
 | Cleanup path escapes the intended state directory | Cleanup resolves candidate paths under the allowed base and reports safety violations. |
@@ -119,6 +119,7 @@ Use default mode for normal work:
 
 ```powershell
 python -m hulun_guard ingest --file .\trace.jsonl --scan
+python -m hulun_guard trace-doctor --file .\trace.jsonl --json
 python -m hulun_guard observe --type tool_result --summary "pytest passed" --scan
 ```
 
@@ -136,6 +137,7 @@ python -m hulun_guard compatibility --json
 python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify --json
 python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json
 python -m hulun_guard adapter-matrix --json
+python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json
 python -m hulun_guard cleanup --json
 python -m hulun_guard schema-check --json
 ```
@@ -151,6 +153,7 @@ Every release must keep these checks green:
 - `python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify --json`
 - `python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json`
 - `python -m hulun_guard adapter-matrix --json`
+- `python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json`
 - `python -m hulun_guard schema-check --json`
 - `python -m hulun_guard cleanup --json`
 - adapter conformance tests

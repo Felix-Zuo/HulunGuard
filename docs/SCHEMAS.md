@@ -28,6 +28,7 @@ Current public schemas:
 | schema compatibility report | `hulun.schema_compatibility.v1` |
 | threat model check report | `hulun.threat_model_check.v1` |
 | GitHub release verification report | `hulun.github_release_verification.v1` |
+| trace doctor report | `hulun.trace_doctor.v1` |
 
 The OpenTelemetry export file itself follows OTLP JSON. The HulunGuard command report around that export is versioned.
 
@@ -49,6 +50,7 @@ The loader normalizes older project and conversation ledgers into current schema
 - integration kit generated files, ingest commands, sample trace paths, and verification outcomes
 - onboarding generated kit locations, sample verification, sandbox import outcomes, and next-step commands
 - GitHub release verification repository, tag, asset directory, checksum, SBOM, attestation, and gate fields
+- trace doctor file metadata, selected format, observation counts, field coverage, warnings, next command, and gate fields
 
 Unsupported future schema majors fail the compatibility gate instead of being guessed.
 
@@ -77,6 +79,7 @@ Use a minor version bump when a change:
 - changes onboarding report behavior
 - changes adapter import/export report fields
 - changes release verification report fields
+- changes trace doctor report fields
 - changes release gate behavior for schemas
 
 Use a patch version only for documentation, packaging metadata, or implementation fixes that do not change public JSON shape or compatibility behavior.

@@ -1,0 +1,93 @@
+{
+  "schema": "hulun.trace_doctor.v1",
+  "generated_at": "2026-06-23T00:00:00+00:00",
+  "file": {
+    "path": "/tmp/hulun-traces/sample.jsonl",
+    "name": "sample.jsonl",
+    "size_bytes": 512,
+    "max_trace_bytes": 5242880
+  },
+  "detected_format": "generic",
+  "selected_format": "generic",
+  "privacy": {
+    "mode": "redacted-default",
+    "retention_days": 30
+  },
+  "observation_count": 2,
+  "type_counts": {
+    "tool_result": 1,
+    "final_attempt": 1
+  },
+  "result_counts": {
+    "pass": 2
+  },
+  "phase_counts": {
+    "verify": 1,
+    "final": 1
+  },
+  "source_platform_counts": {
+    "generic": 2
+  },
+  "field_coverage": {
+    "phase": {
+      "present": 2,
+      "total": 2,
+      "ratio": 1.0
+    },
+    "action_key": {
+      "present": 1,
+      "total": 2,
+      "ratio": 0.5
+    },
+    "evidence": {
+      "present": 1,
+      "total": 2,
+      "ratio": 0.5
+    },
+    "refs": {
+      "present": 1,
+      "total": 2,
+      "ratio": 0.5
+    },
+    "model": {
+      "present": 0,
+      "total": 2,
+      "ratio": 0.0
+    },
+    "prompt_tokens": {
+      "present": 0,
+      "total": 2,
+      "ratio": 0.0
+    },
+    "completion_tokens": {
+      "present": 0,
+      "total": 2,
+      "ratio": 0.0
+    }
+  },
+  "sample_observations": [
+    {
+      "type": "tool_result",
+      "result": "pass",
+      "phase": "verify",
+      "source_platform": "generic",
+      "summary": "pytest passed",
+      "has_action_key": true,
+      "evidence_count": 0,
+      "ref_count": 1
+    }
+  ],
+  "next_command": "python -m hulun_guard ingest --format generic --file \"/tmp/hulun-traces/sample.jsonl\" --scan --init-if-missing",
+  "warnings": [
+    {
+      "code": "generic_bridge",
+      "detail": "The trace uses the generic bridge; native adapter fields may be unavailable."
+    }
+  ],
+  "gate": {
+    "passed": true,
+    "failure_count": 0,
+    "failures": [],
+    "strict": false
+  }
+}

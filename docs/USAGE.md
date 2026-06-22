@@ -8,7 +8,7 @@ python .\hulun.py quickstart
 python .\hulun.py doctor
 ```
 
-`onboard` generates and verifies a supported agent path. `quickstart` prints a project-specific copy-paste path. `doctor` checks version, state, evidence, checkpoint, and current HulunIndex.
+`onboard` generates and verifies a supported agent path. `quickstart` prints a project-specific copy-paste path. `trace-doctor` diagnoses a trace before import. `doctor` checks version, state, evidence, checkpoint, and current HulunIndex.
 
 ## Open A Desktop HulunGauge
 
@@ -79,6 +79,18 @@ Conversation risk components:
 - `cost_pressure`: high token/cost without nearby execution evidence.
 
 This is the layer to use when you want HulunGuard to judge the agent's live state inside a chat.
+
+## Diagnose A Trace Before Import
+
+Use `trace-doctor` before importing a real agent trace. It checks file size, JSON parseability, detected format, adapter importability, field coverage, privacy mode, and the exact ingest command to run next. It does not write `.hulun/state.json`.
+
+```powershell
+python .\hulun.py trace-doctor --file .\trace.jsonl --json
+python .\hulun.py trace-doctor --file .\otel-trace.json --format opentelemetry --json
+python .\hulun.py trace-doctor --file .\trace.jsonl --strict --json
+```
+
+Use `--strict` when onboarding a connector and you want missing phases, action keys, refs, or generic-bridge usage to fail the gate instead of returning warnings.
 
 ## Import External Agent Traces
 
