@@ -48,6 +48,10 @@ jobs:
         run: python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json
       - name: HulunGuard adapter matrix
         run: python -m hulun_guard adapter-matrix --json
+      - name: HulunGuard trace doctor
+        run: |
+          printf '%s\n' '{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass","action_key":"pytest","refs":["command:pytest"]}' > trace-doctor-sample.jsonl
+          python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json
       - name: HulunGuard schema compatibility
         run: python -m hulun_guard schema-check --json
       - name: HulunGuard retention cleanup dry-run

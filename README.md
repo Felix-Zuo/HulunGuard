@@ -20,7 +20,7 @@ using HulunGuard on real work.
 - Privacy-safe trace ingestion: import generic JSON/JSONL, OpenTelemetry GenAI, OpenInference, OpenHands-like events, SWE-agent-like trajectories, LangGraph stream parts, LangSmith run exports, Langfuse OTEL traces, and Phoenix/OpenInference spans without persisting raw sensitive payloads by default.
 - Python SDK and MCP server: agents can record runtime state directly without shell glue.
 - Built-in validation suite: run synthetic healthy/slop-risk scenarios before release.
-- Product operations: `onboard`, `quickstart`, `doctor`, `compatibility`, `integration-kit`, `adapter-matrix`, `schema-check`, `release-verify`, `cleanup`, and `benchmark` commands for onboarding, diagnostics, agent compatibility, first-run integration packages, adapter integration, schema compatibility, release verification, retention cleanup, scan performance, and public-safe real-world workflow checks.
+- Product operations: `onboard`, `quickstart`, `doctor`, `trace-doctor`, `compatibility`, `integration-kit`, `adapter-matrix`, `schema-check`, `release-verify`, `cleanup`, and `benchmark` commands for onboarding, trace diagnostics, agent compatibility, first-run integration packages, adapter integration, schema compatibility, release verification, retention cleanup, scan performance, and public-safe real-world workflow checks.
 - Conversation runtime monitoring: per-conversation events, user challenges, pending tool calls, unresolved failures, unsupported final claims, and monitor sync.
 
 ## Quick Start
@@ -74,6 +74,7 @@ Conversation monitoring is not magic chat-log access. It becomes live when the a
 Import an external trace:
 
 ```powershell
+python .\hulun.py trace-doctor --file .\trace.jsonl --json
 python .\hulun.py ingest --file .\trace.jsonl --format generic --scan
 python .\hulun.py ingest --file .\otel-trace.json --format opentelemetry --scan
 python .\hulun.py ingest --file .\openinference-trace.json --format openinference --scan
@@ -119,6 +120,8 @@ python .\hulun.py compatibility --json
 python .\hulun.py integration-kit --agent all --output .\.hulun\integration-kits --force --verify --json
 python .\hulun.py onboard --agent all --output .\.hulun\onboarding --force --json
 python .\hulun.py adapter-matrix --json
+'{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass","action_key":"pytest","refs":["command:pytest"]}' | Set-Content -Encoding UTF8 trace-doctor-sample.jsonl
+python .\hulun.py trace-doctor --file trace-doctor-sample.jsonl --format generic --json
 python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000

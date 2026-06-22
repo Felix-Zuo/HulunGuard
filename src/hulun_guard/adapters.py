@@ -344,7 +344,7 @@ def _stable_action_key(text: str, fallback: str) -> str:
 def _read_items(path: Path) -> list[dict[str, Any]]:
     if path.suffix.lower() in {".jsonl", ".ndjson"}:
         items: list[dict[str, Any]] = []
-        for line in path.read_text(encoding="utf-8").splitlines():
+        for line in path.read_text(encoding="utf-8-sig").splitlines():
             if not line.strip():
                 continue
             value = json.loads(line)
@@ -352,7 +352,7 @@ def _read_items(path: Path) -> list[dict[str, Any]]:
                 items.append(value)
         return items
 
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
     if isinstance(payload, list):
         return [item for item in payload if isinstance(item, dict)]
     if isinstance(payload, dict):
@@ -366,7 +366,7 @@ def _read_items(path: Path) -> list[dict[str, Any]]:
 
 def _iter_items(path: Path) -> Iterator[dict[str, Any]]:
     if path.suffix.lower() in {".jsonl", ".ndjson"}:
-        with path.open("r", encoding="utf-8") as handle:
+        with path.open("r", encoding="utf-8-sig") as handle:
             for line in handle:
                 if not line.strip():
                     continue
@@ -410,12 +410,12 @@ def _iter_spans_from_payload(payload: Any) -> Iterator[dict[str, Any]]:
 
 def _iter_telemetry_spans(path: Path) -> Iterator[dict[str, Any]]:
     if path.suffix.lower() in {".jsonl", ".ndjson"}:
-        with path.open("r", encoding="utf-8") as handle:
+        with path.open("r", encoding="utf-8-sig") as handle:
             for line in handle:
                 if line.strip():
                     yield from _iter_spans_from_payload(json.loads(line))
         return
-    yield from _iter_spans_from_payload(json.loads(path.read_text(encoding="utf-8")))
+    yield from _iter_spans_from_payload(json.loads(path.read_text(encoding="utf-8-sig")))
 
 
 def _normalize_phase(value: Any, text: str) -> str | None:

@@ -16,6 +16,8 @@ python .\hulun.py compatibility --json
 python .\hulun.py integration-kit --agent all --output .\.hulun\integration-kits --force --verify --json
 python .\hulun.py onboard --agent all --output .\.hulun\onboarding --force --json
 python .\hulun.py adapter-matrix --json
+'{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass","action_key":"pytest","refs":["command:pytest"]}' | Set-Content -Encoding UTF8 trace-doctor-sample.jsonl
+python .\hulun.py trace-doctor --file trace-doctor-sample.jsonl --format generic --json
 python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000
@@ -32,7 +34,7 @@ python .\hulun.py release-verify --asset-dir .\dist --skip-attestation --json
 1. Update `pyproject.toml`.
 2. Update `src/hulun_guard/__init__.py`.
 3. Update docs for new commands, parameters, or product meaning.
-4. Run tests, validation, calibration, calibration drift review, threat model check, agent compatibility, integration kit verification, onboarding verification, adapter matrix, schema compatibility, and retention cleanup dry-run.
+4. Run tests, validation, calibration, calibration drift review, threat model check, agent compatibility, integration kit verification, onboarding verification, adapter matrix, trace doctor, schema compatibility, and retention cleanup dry-run.
 5. Run scan benchmark, real-world benchmark, doctor, security, build, release metadata, release artifact smoke, and offline release verifier checks.
 6. Commit with a versioned message.
 7. Tag the version.

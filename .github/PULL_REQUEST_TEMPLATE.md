@@ -14,6 +14,8 @@
 - [ ] `python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify --json`
 - [ ] `python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json`
 - [ ] `python -m hulun_guard adapter-matrix --json`
+- [ ] Public-safe `trace-doctor-sample.jsonl` created for trace diagnostics
+- [ ] `python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json`
 - [ ] `python -m hulun_guard schema-check --json`
 - [ ] `python -m hulun_guard cleanup --json`
 - [ ] `python -m hulun_guard benchmark --events 10000 --max-ms 1000`
