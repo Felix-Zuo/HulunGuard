@@ -23,6 +23,7 @@ python .\hulun.py benchmark --suite real-world
 python .\hulun.py doctor --run-validation
 python -m build
 python scripts/verify_release_artifacts.py
+python scripts/generate_release_metadata.py --verify --json
 ```
 
 ## Version Steps
@@ -31,13 +32,14 @@ python scripts/verify_release_artifacts.py
 2. Update `src/hulun_guard/__init__.py`.
 3. Update docs for new commands, parameters, or product meaning.
 4. Run tests, validation, calibration, calibration drift review, threat model check, agent compatibility, integration kit verification, onboarding verification, adapter matrix, schema compatibility, and retention cleanup dry-run.
-5. Run scan benchmark, real-world benchmark, doctor, security, build, and release artifact smoke checks.
+5. Run scan benchmark, real-world benchmark, doctor, security, build, release artifact smoke, and release metadata checks.
 6. Commit with a versioned message.
 7. Tag the version.
 8. Push to `origin/main` with tags.
 9. Confirm the Release workflow publishes artifacts with provenance.
-10. Confirm release artifacts install and run from a clean virtual environment.
-11. Confirm required branch protection rules are active.
+10. Confirm `SHA256SUMS` and CycloneDX SBOM assets are present.
+11. Confirm release artifacts install and run from a clean virtual environment.
+12. Confirm required branch protection rules are active.
 
 ## Current Policy
 

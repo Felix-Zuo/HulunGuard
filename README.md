@@ -228,6 +228,7 @@ The hook should show `hulunguard` as eligible, loadable, enabled, and attached t
 - `hulun.py`: no-install CLI entry.
 - `tools/`: Windows wrappers.
 - `scripts/verify_release_artifacts.py`: clean-environment wheel and sdist smoke test.
+- `scripts/generate_release_metadata.py`: release checksum and CycloneDX SBOM generator.
 - `tests/`: end-to-end tests.
 - `CODE_OF_CONDUCT.md`: public participation and moderation boundary.
 - `CONTRIBUTING.md`: development and pull request standards.
@@ -261,6 +262,7 @@ python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000
 python .\hulun.py benchmark --suite real-world
 python scripts/verify_release_artifacts.py
+python scripts/generate_release_metadata.py --verify --json
 python .\hulun.py --help
 python .\hulun.py open --help
 python .\hulun.py board --help
