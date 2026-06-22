@@ -1,0 +1,232 @@
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import tarfile
+import tempfile
+import venv
+import zipfile
+from pathlib import Path
+from typing import Any
+
+
+class ArtifactSmokeError(RuntimeError):
+    """Raised when a release artifact fails the clean-environment smoke test."""
+
+
+def project_version(root: Path) -> str:
+    pyproject = root / "pyproject.toml"
+    match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject.read_text(encoding="utf-8"), re.MULTILINE)
+    if not match:
+        raise ArtifactSmokeError(f"Cannot find project.version in {pyproject}")
+    return match.group(1)
+
+
+def require_file(path: Path) -> Path:
+    if not path.exists() or not path.is_file():
+        raise ArtifactSmokeError(f"Missing release artifact: {path}")
+    return path
+
+
+def require_archive_members(archive_path: Path, members: set[str], *, archive_type: str) -> None:
+    if archive_type == "wheel":
+        with zipfile.ZipFile(archive_path) as archive:
+            names = set(archive.namelist())
+    elif archive_type == "sdist":
+        with tarfile.open(archive_path, "r:gz") as archive:
+            names = set(archive.getnames())
+    else:
+        raise ArtifactSmokeError(f"Unsupported archive type: {archive_type}")
+
+    missing = sorted(member for member in members if member not in names)
+    if missing:
+        raise ArtifactSmokeError(f"{archive_path.name} is missing archive members: {', '.join(missing)}")
+
+
+def python_executable(venv_dir: Path) -> Path:
+    return venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+
+
+def script_executable(venv_dir: Path, name: str) -> Path:
+    suffix = ".exe" if os.name == "nt" else ""
+    return venv_dir / ("Scripts" if os.name == "nt" else "bin") / f"{name}{suffix}"
+
+
+def clean_env(tmp_root: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env["HULUN_HOME"] = str(tmp_root / "hulun-home")
+    env["PYTHONUTF8"] = "1"
+    return env
+
+
+def run_command(command: list[str], *, cwd: Path, env: dict[str, str]) -> str:
+    result = subprocess.run(command, cwd=cwd, env=env, text=True, encoding="utf-8", errors="replace", capture_output=True, check=False)
+    if result.returncode != 0:
+        rendered = " ".join(command)
+        raise ArtifactSmokeError(
+            f"Command failed with exit code {result.returncode}: {rendered}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+    return result.stdout
+
+
+def run_json_command(command: list[str], *, cwd: Path, env: dict[str, str]) -> dict[str, Any]:
+    output = run_command(command, cwd=cwd, env=env)
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise ArtifactSmokeError(f"Expected JSON from {' '.join(command)}: {exc}\n{output}") from exc
+    if not isinstance(payload, dict):
+        raise ArtifactSmokeError(f"Expected JSON object from {' '.join(command)}")
+    return payload
+
+
+def verify_installed_commands(python_path: Path, hulun_path: Path, *, cwd: Path, env: dict[str, str], version: str) -> list[dict[str, Any]]:
+    commands: list[dict[str, Any]] = []
+
+    module_version = run_command([str(python_path), "-m", "hulun_guard", "--version"], cwd=cwd, env=env).strip()
+    if version not in module_version:
+        raise ArtifactSmokeError(f"Installed module version mismatch: {module_version}, expected {version}")
+    commands.append({"name": "python -m hulun_guard --version", "status": "ok", "detail": module_version})
+
+    script_version = run_command([str(hulun_path), "--version"], cwd=cwd, env=env).strip()
+    if version not in script_version:
+        raise ArtifactSmokeError(f"Installed console script version mismatch: {script_version}, expected {version}")
+    commands.append({"name": "hulun --version", "status": "ok", "detail": script_version})
+
+    doctor = run_json_command([str(hulun_path), "doctor", "--json"], cwd=cwd, env=env)
+    if doctor.get("schema") != "hulun.doctor.v1":
+        raise ArtifactSmokeError("doctor --json returned an unexpected schema")
+    commands.append({"name": "hulun doctor --json", "status": "ok", "detail": doctor.get("result")})
+
+    validation = run_json_command([str(hulun_path), "validate", "--json"], cwd=cwd, env=env)
+    if validation.get("passes") != validation.get("total"):
+        raise ArtifactSmokeError("validate --json did not pass every scenario")
+    commands.append({"name": "hulun validate --json", "status": "ok", "detail": f"{validation.get('passes')} / {validation.get('total')}"})
+
+    schema = run_json_command([str(hulun_path), "schema-check", "--json"], cwd=cwd, env=env)
+    if not schema.get("gate", {}).get("passed"):
+        raise ArtifactSmokeError("schema-check --json failed from the installed wheel")
+    commands.append({"name": "hulun schema-check --json", "status": "ok", "detail": schema.get("fixture_dir")})
+
+    threat_model = run_json_command([str(hulun_path), "threat-model-check", "--json"], cwd=cwd, env=env)
+    if not threat_model.get("gate", {}).get("passed"):
+        raise ArtifactSmokeError("threat-model-check --json failed from the installed wheel")
+    commands.append({"name": "hulun threat-model-check --json", "status": "ok", "detail": threat_model.get("document")})
+
+    compatibility = run_json_command([str(hulun_path), "compatibility", "--json"], cwd=cwd, env=env)
+    if int(compatibility.get("direct_or_standard_count", 0)) < 13:
+        raise ArtifactSmokeError("compatibility --json reported insufficient direct or standard coverage")
+    commands.append({"name": "hulun compatibility --json", "status": "ok", "detail": f"{compatibility.get('entry_count')} agents"})
+
+    onboarding_dir = cwd / "onboarding"
+    onboarding = run_json_command([str(hulun_path), "onboard", "--agent", "langgraph", "--output", str(onboarding_dir), "--json"], cwd=cwd, env=env)
+    if not onboarding.get("gate", {}).get("passed") or onboarding.get("verified_count") != 1:
+        raise ArtifactSmokeError("onboard --agent langgraph failed from the installed wheel")
+    commands.append({"name": "hulun onboard --agent langgraph --json", "status": "ok", "detail": str(onboarding_dir)})
+
+    return commands
+
+
+def verify_artifacts(root: Path, dist_dir: Path, version: str) -> dict[str, Any]:
+    wheel = require_file(dist_dir / f"hulun_guard-{version}-py3-none-any.whl")
+    sdist = require_file(dist_dir / f"hulun_guard-{version}.tar.gz")
+
+    require_archive_members(
+        wheel,
+        {
+            "hulun_guard/__init__.py",
+            "hulun_guard/cli.py",
+            "hulun_guard/schema_fixtures/legacy_state_v0.json",
+            "hulun_guard/security_docs/THREAT_MODEL.md",
+            f"hulun_guard-{version}.dist-info/METADATA",
+            f"hulun_guard-{version}.dist-info/entry_points.txt",
+        },
+        archive_type="wheel",
+    )
+    require_archive_members(
+        sdist,
+        {
+            f"hulun_guard-{version}/pyproject.toml",
+            f"hulun_guard-{version}/README.md",
+            f"hulun_guard-{version}/LICENSE",
+            f"hulun_guard-{version}/src/hulun_guard/cli.py",
+            f"hulun_guard-{version}/tests/test_hulun_guard.py",
+        },
+        archive_type="sdist",
+    )
+
+    with tempfile.TemporaryDirectory(prefix="hulun-artifact-smoke-") as tmp:
+        tmp_root = Path(tmp).resolve()
+        venv_dir = tmp_root / "venv"
+        smoke_root = tmp_root / "smoke-root"
+        smoke_root.mkdir()
+        venv.EnvBuilder(with_pip=True, clear=True).create(venv_dir)
+        python_path = python_executable(venv_dir)
+        hulun_path = script_executable(venv_dir, "hulun")
+        env = clean_env(tmp_root)
+
+        run_command(
+            [str(python_path), "-m", "pip", "install", "--disable-pip-version-check", "--no-deps", str(wheel)],
+            cwd=smoke_root,
+            env=env,
+        )
+        run_command([str(python_path), "-m", "pip", "check"], cwd=smoke_root, env=env)
+        if not hulun_path.exists():
+            raise ArtifactSmokeError(f"Missing console script after install: {hulun_path}")
+        commands = verify_installed_commands(python_path, hulun_path, cwd=smoke_root, env=env, version=version)
+
+    return {
+        "version": version,
+        "dist": str(dist_dir),
+        "wheel": {"path": str(wheel), "size": wheel.stat().st_size},
+        "sdist": {"path": str(sdist), "size": sdist.stat().st_size},
+        "commands": commands,
+        "gate": {"passed": True, "failure_count": 0, "failures": []},
+        "root": str(root),
+    }
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Verify HulunGuard release artifacts in a clean environment.")
+    parser.add_argument("--dist", default="dist", help="Directory containing built wheel and sdist artifacts.")
+    parser.add_argument("--version", help="Expected package version. Defaults to project.version from pyproject.toml.")
+    parser.add_argument("--json", action="store_true", help="Print the verification report as JSON.")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    root = Path.cwd().resolve()
+    version = args.version or project_version(root)
+    dist_dir = Path(args.dist)
+    dist_dir = dist_dir if dist_dir.is_absolute() else root / dist_dir
+
+    try:
+        report = verify_artifacts(root, dist_dir.resolve(), version)
+    except ArtifactSmokeError as exc:
+        if args.json:
+            print(json.dumps({"version": version, "gate": {"passed": False, "failures": [str(exc)]}}, indent=2))
+        else:
+            print(f"HulunGuard release artifact smoke failed: {exc}", file=sys.stderr)
+        return 2
+
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        print(f"HulunGuard release artifact smoke passed: {version}")
+        print(f"Wheel: {report['wheel']['path']}")
+        print(f"Sdist: {report['sdist']['path']}")
+        print(f"Installed command checks: {len(report['commands'])}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

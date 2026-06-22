@@ -41,6 +41,7 @@ python -m hulun_guard cleanup --json
 python -m hulun_guard benchmark --events 10000 --max-ms 1000
 python -m hulun_guard benchmark --suite real-world
 python -m build
+python scripts/verify_release_artifacts.py
 ```
 
 Release-specific steps are maintained in `RELEASING.md`.

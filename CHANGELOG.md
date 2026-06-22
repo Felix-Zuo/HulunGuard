@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.26.0 - 2026-06-23
+
+- Added a clean-environment release artifact smoke test for built wheel and sdist files.
+- Verified installed `hulun` commands, packaged schema fixtures, packaged threat-model docs, compatibility output, and first-run onboarding outside the source checkout.
+- Added the artifact smoke test to CI and Release workflows before publishing assets.
+
 ## 0.25.1 - 2026-06-23
 
 - Added `CODE_OF_CONDUCT.md` and GitHub issue-template configuration for a complete open-source community profile.
