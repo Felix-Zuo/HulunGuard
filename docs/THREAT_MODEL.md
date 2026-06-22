@@ -25,7 +25,7 @@ HulunGuard may store these local records:
 - project objective, criteria, assumptions, steps, risks, decisions, and checkpoints
 - evidence summaries, command references, file references, URLs, hashes, and notes
 - runtime events, phases, claims, evidence IDs, action keys, token counts, cost, latency, model name, and result status
-- risk reports, validation reports, calibration reports, benchmark reports, schema compatibility reports, integration kit manifests, retention cleanup reports, and threat model check reports
+- risk reports, validation reports, calibration reports, benchmark reports, schema compatibility reports, integration kit manifests, onboarding reports, retention cleanup reports, and threat model check reports
 - conversation runtime events, monitor IDs, live scores, and board data
 
 Generated runtime files are local artifacts. Do not commit `.hulun/`, `HULUN_HOME/conversations`, private traces, credentials, customer data, production logs, or private screenshots.
@@ -107,7 +107,7 @@ This protects against path traversal, symlink escape, and accidental deletion of
 | User needs raw local trace text for debugging | `--include-sensitive` is explicit opt-in and writes `privacy.mode=sensitive-opt-in`. |
 | Cleanup path escapes the intended state directory | Cleanup resolves candidate paths under the allowed base and reports safety violations. |
 | Oversized public benchmark fixtures hide release risk | Real-world benchmark limits fixture size with `--max-case-bytes` and `--max-total-bytes`. |
-| Generated onboarding samples accidentally include private data | Integration kits use synthetic public-safe traces and are verified through adapters before release. |
+| Generated onboarding samples accidentally include private data | Integration kits and onboarding samples use synthetic public-safe traces and are verified through adapters before release. |
 | Generated report accidentally enters a release | Release asset policy excludes `.hulun/`, traces, credentials, customer logs, and private screenshots. |
 | Future public JSON schema is guessed incorrectly | `schema-check` rejects unsupported future schema majors. |
 | Adapter writes malformed runtime fields | SDK and MCP validation reject invalid phase/result values without persisting bad events. |
@@ -134,6 +134,7 @@ Before publishing:
 python -m hulun_guard threat-model-check --json
 python -m hulun_guard compatibility --json
 python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify --json
+python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json
 python -m hulun_guard adapter-matrix --json
 python -m hulun_guard cleanup --json
 python -m hulun_guard schema-check --json
@@ -148,6 +149,7 @@ Every release must keep these checks green:
 - `python -m hulun_guard threat-model-check --json`
 - `python -m hulun_guard compatibility --json`
 - `python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify --json`
+- `python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json`
 - `python -m hulun_guard adapter-matrix --json`
 - `python -m hulun_guard schema-check --json`
 - `python -m hulun_guard cleanup --json`

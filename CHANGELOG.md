@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.25.0 - 2026-06-23
+
+- Added `onboard` for zero-knowledge first-run agent onboarding across supported runtimes.
+- Added `hulun.onboarding.v1` reports with generated kit locations, sample verification, sandbox import results, and next-step commands.
+- Added onboarding verification to `doctor --run-validation`, CI, Release, and the PR checklist.
+- Documented onboarding as the preferred first command for mainstream agent setup.
+
 ## 0.24.0 - 2026-06-20
 
 - Added `integration-kit` for verified first-run onboarding packages across supported agent runtimes and trace formats.

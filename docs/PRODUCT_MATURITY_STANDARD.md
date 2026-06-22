@@ -55,6 +55,7 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 - Cross-platform UI and no hidden local assumptions.
 - Native service export connectors beyond public-safe hosted fixture shapes.
 - User-facing onboarding that works without repository-specific knowledge.
+- One-command onboarding that verifies supported agent paths before real traces are imported.
 
 ### M4: Top-Tier Product
 
@@ -68,10 +69,10 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 - No final-gate relaxation without tests and a changelog entry.
 - No adapter can contain a developer machine path.
-- No release without CI, validation, calibration, calibration drift, threat model check, agent compatibility, integration kit verification, adapter matrix, schema compatibility, retention cleanup dry-run, scan benchmark, real-world benchmark, and security scans.
+- No release without CI, validation, calibration, calibration drift, threat model check, agent compatibility, integration kit verification, onboarding verification, adapter matrix, schema compatibility, retention cleanup dry-run, scan benchmark, real-world benchmark, and security scans.
 - No public claim that HulunGuard detects intent or truth; it computes reliability risk.
 - No private conversation logs in the repository.
 
 ## Current Target
 
-The current target is M2 moving into M3. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, hosted-platform fixture baseline, release provenance baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, adapter conformance baseline, adapter integration matrix baseline, expanded public-safe real-world benchmark baseline, agent compatibility matrix baseline, verified integration kit baseline, retention cleanup baseline, schema compatibility baseline, and threat-model baseline are implemented. The next gate is deeper native connectors beyond standards and generic bridge paths.
+The current target is M2 moving into M3. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, hosted-platform fixture baseline, release provenance baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, adapter conformance baseline, adapter integration matrix baseline, expanded public-safe real-world benchmark baseline, agent compatibility matrix baseline, verified integration kit baseline, zero-knowledge onboarding baseline, retention cleanup baseline, schema compatibility baseline, and threat-model baseline are implemented. The next gate is deeper native connectors beyond standards and generic bridge paths.

@@ -991,6 +991,10 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertTrue(doctor["integration_kits"]["gate"]["passed"])
             self.assertGreaterEqual(doctor["integration_kits"]["kit_count"], 15)
             self.assertEqual(doctor["integration_kits"]["verified_count"], doctor["integration_kits"]["kit_count"])
+            self.assertEqual(doctor["onboarding"]["schema"], "hulun.onboarding.v1")
+            self.assertTrue(doctor["onboarding"]["gate"]["passed"])
+            self.assertGreaterEqual(doctor["onboarding"]["agent_count"], 15)
+            self.assertEqual(doctor["onboarding"]["verified_count"], doctor["onboarding"]["agent_count"])
 
             code, out = self.run_cli("--root", tmp, "benchmark", "--events", "200", "--json")
             self.assertEqual(code, 0)
@@ -1162,6 +1166,62 @@ class HulunGuardCliTest(unittest.TestCase):
             output.write_text("reserved", encoding="utf-8")
             with self.assertRaises(SystemExit) as raised:
                 self.run_cli("--root", tmp, "integration-kit", "--agent", "custom-agent", "--output", str(output), "--verify")
+            self.assertIn("not a directory", str(raised.exception))
+
+    def test_onboard_generates_verified_agent_path_without_mutating_project_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "onboarding"
+            code, out = self.run_cli("--root", tmp, "onboard", "--agent", "langgraph", "--output", str(output), "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["schema"], "hulun.onboarding.v1")
+            self.assertTrue(payload["gate"]["passed"], payload["gate"])
+            self.assertEqual(payload["agent_count"], 1)
+            item = payload["agents"][0]
+            self.assertEqual(item["agent"]["id"], "langgraph")
+            self.assertTrue(item["verification"]["passed"])
+            self.assertEqual(item["sandbox_import"]["imported"], item["verification"]["observation_count"])
+            self.assertEqual(item["sandbox_import"]["risk"]["band"], "green")
+            self.assertIn("--format langgraph", item["next_steps"]["real_trace_command"])
+            self.assertIn("--init-if-missing", item["next_steps"]["real_trace_command"])
+            self.assertTrue((output / "langgraph" / "hulun_integration.json").exists())
+            self.assertFalse((root / ".hulun" / "state.json").exists())
+
+    def test_onboard_verifies_all_supported_agents(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "onboarding"
+            code, out = self.run_cli("--root", tmp, "onboard", "--agent", "all", "--output", str(output), "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["schema"], "hulun.onboarding.v1")
+            self.assertTrue(payload["gate"]["passed"], payload["gate"])
+            self.assertGreaterEqual(payload["agent_count"], 15)
+            self.assertEqual(payload["verified_count"], payload["agent_count"])
+            self.assertGreaterEqual(payload["sandbox_imported_count"], payload["agent_count"])
+            agent_ids = {item["agent"]["id"] for item in payload["agents"]}
+            self.assertIn("openai-agents-sdk", agent_ids)
+            self.assertIn("semantic-kernel", agent_ids)
+
+    def test_onboard_refuses_overwrite_without_force(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "onboarding"
+            code, out = self.run_cli("--root", tmp, "onboard", "--agent", "custom-agent", "--output", str(output), "--json")
+            self.assertEqual(code, 0, out)
+
+            with self.assertRaises(SystemExit) as raised:
+                self.run_cli("--root", tmp, "onboard", "--agent", "custom-agent", "--output", str(output), "--json")
+            self.assertIn("--force", str(raised.exception))
+
+            code, out = self.run_cli("--root", tmp, "onboard", "--agent", "custom-agent", "--output", str(output), "--force", "--json")
+            self.assertEqual(code, 0, out)
+
+    def test_onboard_rejects_file_output_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "not-a-directory"
+            output.write_text("reserved", encoding="utf-8")
+            with self.assertRaises(SystemExit) as raised:
+                self.run_cli("--root", tmp, "onboard", "--agent", "custom-agent", "--output", str(output), "--json")
             self.assertIn("not a directory", str(raised.exception))
 
     def test_real_world_benchmark_fails_when_fixture_size_limit_is_exceeded(self) -> None:

@@ -24,6 +24,7 @@ Current public schemas:
 | adapter integration matrix report | `hulun.adapter_matrix.v1` |
 | agent compatibility report | `hulun.agent_compatibility.v1` |
 | integration kit report | `hulun.integration_kit.v1` |
+| onboarding report | `hulun.onboarding.v1` |
 | schema compatibility report | `hulun.schema_compatibility.v1` |
 | threat model check report | `hulun.threat_model_check.v1` |
 
@@ -45,6 +46,7 @@ The loader normalizes older project and conversation ledgers into current schema
 - adapter matrix support tiers, public-safe fixture policy, case outcomes, and gate failures
 - agent compatibility categories, tiers, source URIs, ingest formats, and commands
 - integration kit generated files, ingest commands, sample trace paths, and verification outcomes
+- onboarding generated kit locations, sample verification, sandbox import outcomes, and next-step commands
 
 Unsupported future schema majors fail the compatibility gate instead of being guessed.
 
@@ -70,6 +72,7 @@ Use a minor version bump when a change:
 - changes threat model check behavior
 - changes adapter matrix report behavior
 - changes integration kit report behavior
+- changes onboarding report behavior
 - changes adapter import/export report fields
 - changes release gate behavior for schemas
 

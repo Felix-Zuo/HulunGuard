@@ -2,6 +2,13 @@
 
 Integration kits are first-run onboarding packages for agent runtimes and trace formats. They turn the compatibility matrix into files a user can run immediately.
 
+For the simplest first-run check, use `onboard`. It generates the kit, verifies the sample trace, imports it in an isolated sandbox, and prints the real next command:
+
+```powershell
+python -m hulun_guard onboard --agent langgraph
+python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json
+```
+
 Generate one kit:
 
 ```powershell
