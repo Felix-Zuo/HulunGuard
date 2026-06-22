@@ -157,5 +157,6 @@ Every release must keep these checks green:
 - redaction and sensitive-mode tests
 - path-boundary cleanup tests
 - release asset and provenance checks
+- checksum, SBOM, and published-release verifier checks
 
 Changes that alter local storage, adapter imports, redaction, retention, cleanup, export behavior, public JSON fields, or release asset policy require a minor version bump before 1.0.

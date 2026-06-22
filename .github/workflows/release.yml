@@ -59,6 +59,8 @@ jobs:
         run: python scripts/verify_release_artifacts.py
       - name: Generate release metadata
         run: python scripts/generate_release_metadata.py --verify --json
+      - name: Verify GitHub release assets offline
+        run: python scripts/verify_github_release.py --asset-dir dist --skip-attestation --json
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v6
         with:
