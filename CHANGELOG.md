@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.28.0 - 2026-06-23
+
+- Added a one-command GitHub release verifier for checksums, SBOM artifact hashes, and GitHub attestations.
+- Added offline release-verifier coverage to CI and Release workflows.
+- Added tests for release verifier success, tamper detection, and missing-asset failure paths.
+
 ## 0.27.0 - 2026-06-23
 
 - Added release metadata generation for `SHA256SUMS` and CycloneDX 1.6 SBOM assets.
