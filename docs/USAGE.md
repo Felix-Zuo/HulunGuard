@@ -3,11 +3,12 @@
 ## Start Fast
 
 ```powershell
+python .\hulun.py onboard --agent langgraph
 python .\hulun.py quickstart
 python .\hulun.py doctor
 ```
 
-`quickstart` prints a project-specific copy-paste path. `doctor` checks version, state, evidence, checkpoint, and current HulunIndex.
+`onboard` generates and verifies a supported agent path. `quickstart` prints a project-specific copy-paste path. `doctor` checks version, state, evidence, checkpoint, and current HulunIndex.
 
 ## Open A Desktop HulunGauge
 
@@ -138,6 +139,13 @@ The matrix covers OpenHands, SWE-agent, LangGraph, LangSmith, Langfuse, Phoenix,
 
 ## Generate Integration Kits
 
+Use `onboard` when a user wants HulunGuard to generate a kit, verify the sample trace, import the sample in an isolated sandbox, and return the real next command:
+
+```powershell
+python .\hulun.py onboard --agent langgraph
+python .\hulun.py onboard --agent all --output .\.hulun\onboarding --force --json
+```
+
 Use `integration-kit` when a user needs a runnable first-run package for a specific agent or trace format:
 
 ```powershell
@@ -146,7 +154,7 @@ python .\hulun.py integration-kit --agent openai-agents-sdk --verify
 python .\hulun.py integration-kit --agent all --output .\.hulun\integration-kits --force --verify
 ```
 
-Each kit includes a synthetic sample trace, `README.md`, PowerShell and POSIX shell runners, and `hulun_integration.json`. The generated runners use `ingest --init-if-missing` so a fresh project can import the sample without a separate initialization step. The `--verify` flag parses the generated sample trace through the selected adapter without persisting it to the project ledger.
+Each kit includes a synthetic sample trace, `README.md`, PowerShell and POSIX shell runners, and `hulun_integration.json`. The generated runners use `ingest --init-if-missing` so a fresh project can import the sample without a separate initialization step. The `--verify` flag parses the generated sample trace through the selected adapter without persisting it to the project ledger. `onboard` wraps this with an isolated sandbox import and a `hulun.onboarding.v1` report.
 
 Existing generated files are not overwritten unless `--force` is used.
 
@@ -194,6 +202,7 @@ python .\hulun.py calibration-drift
 python .\hulun.py threat-model-check --json
 python .\hulun.py compatibility --json
 python .\hulun.py integration-kit --agent all --output .\.hulun\integration-kits --force --verify --json
+python .\hulun.py onboard --agent all --output .\.hulun\onboarding --force --json
 python .\hulun.py adapter-matrix --json
 python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
@@ -208,6 +217,7 @@ python -m pytest -q
 `threat-model-check` verifies that the public threat model exists, is linked from release/security docs, and that trace import keeps a bounded default file-size limit.
 `compatibility` reports direct, standards-based, and bridge-based paths for mainstream agent frameworks.
 `integration-kit` generates first-run onboarding packages and verifies their sample traces through the matching ingest adapters.
+`onboard` verifies generated kits with an isolated sandbox import and returns next-step commands for real traces.
 `adapter-matrix` verifies OpenTelemetry/OpenInference/Langfuse/Phoenix round-trips plus OpenHands-like, SWE-agent-like, LangGraph, and LangSmith stream coverage without committing private traces.
 `schema-check` loads legacy JSON fixtures, normalizes them through the migration layer, and fails if current public schemas are not written. See `docs/SCHEMAS.md`.
 

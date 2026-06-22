@@ -47,6 +47,7 @@ from .monitor import (
     load_monitor,
     update_monitor,
 )
+from .onboarding import OnboardingError, onboarding_json, run_onboarding
 from .privacy import DEFAULT_RETENTION_DAYS, sanitize_evidence
 from .reports import build_board_html, build_dashboard_html, build_verify_markdown
 from .retention import retention_cleanup_json, run_retention_cleanup
@@ -602,6 +603,11 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         payload["integration_kits"] = integration_kits
         integration_status = "ok" if integration_kits["gate"]["passed"] else "error"
         add_check("integration_kits", integration_status, f"{integration_kits['kit_count']} kits.")
+        with tempfile.TemporaryDirectory() as tmp:
+            onboarding = run_onboarding("all", Path(tmp), force=True)
+        payload["onboarding"] = onboarding
+        onboarding_status = "ok" if onboarding["gate"]["passed"] else "error"
+        add_check("onboarding", onboarding_status, f"{onboarding['agent_count']} agents.")
         adapter_matrix = run_adapter_matrix()
         payload["adapter_matrix"] = adapter_matrix
         adapter_matrix_status = "ok" if adapter_matrix["gate"]["passed"] else "error"
@@ -839,6 +845,35 @@ def cmd_integration_kit(args: argparse.Namespace) -> int:
             verification = kit["verification"]
             suffix = f", {verification['observation_count']} sample observations" if verification["passed"] else ""
             print(f"- {kit['agent']['name']}: {kit['agent']['ingest_format']} -> {kit['kit_dir']}{suffix}")
+    return 0 if result["gate"]["passed"] else 2
+
+
+def cmd_onboard(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    if args.output:
+        output_dir = Path(args.output)
+        if not output_dir.is_absolute():
+            output_dir = root / output_dir
+    else:
+        output_dir = hulun_dir(root) / "onboarding"
+    try:
+        result = run_onboarding(args.agent, output_dir, force=args.force)
+    except OnboardingError as exc:
+        raise SystemExit(str(exc)) from None
+
+    if args.json:
+        print(onboarding_json(result), end="")
+    else:
+        print(f"HulunGuard onboarding: {'pass' if result['gate']['passed'] else 'fail'}")
+        print(f"Agents: {result['agent_count']}")
+        print(f"Output: {result['output_dir']}")
+        for item in result["agents"]:
+            sandbox = item["sandbox_import"]
+            print(
+                f"- {item['agent']['name']}: verified {item['verification']['observation_count']} observations, "
+                f"sandbox imported {sandbox['imported']}, {sandbox['risk']['band']}"
+            )
+            print(f"  Next: {item['next_steps']['real_trace_command']}")
     return 0 if result["gate"]["passed"] else 2
 
 
@@ -1438,6 +1473,13 @@ def build_parser() -> argparse.ArgumentParser:
     integration_kit.add_argument("--verify", action="store_true", help="Parse generated sample traces through the matching ingest adapter.")
     integration_kit.add_argument("--json", action="store_true")
     integration_kit.set_defaults(func=cmd_integration_kit)
+
+    onboard = sub.add_parser("onboard", parents=[root_parent], help="Generate and verify a first-run agent onboarding path.")
+    onboard.add_argument("--agent", choices=["all", *supported_agent_ids()], required=True, help="Supported agent id or all.")
+    onboard.add_argument("--output", help="Output directory. Defaults to .hulun/onboarding.")
+    onboard.add_argument("--force", action="store_true", help="Overwrite HulunGuard-generated onboarding kit files.")
+    onboard.add_argument("--json", action="store_true")
+    onboard.set_defaults(func=cmd_onboard)
 
     conversation = sub.add_parser("conversation")
     conversation_sub = conversation.add_subparsers(dest="conversation_command", required=True)

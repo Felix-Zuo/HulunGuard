@@ -28,6 +28,7 @@ EXPORT_OPENTELEMETRY_SCHEMA = "hulun.export.opentelemetry.v1"
 ADAPTER_MATRIX_SCHEMA = "hulun.adapter_matrix.v1"
 AGENT_COMPATIBILITY_SCHEMA = "hulun.agent_compatibility.v1"
 INTEGRATION_KIT_SCHEMA = "hulun.integration_kit.v1"
+ONBOARDING_SCHEMA = "hulun.onboarding.v1"
 CALIBRATION_DRIFT_ERROR_SCHEMA = "hulun.calibration_drift_error.v1"
 SCHEMA_COMPATIBILITY_SCHEMA = "hulun.schema_compatibility.v1"
 MONITOR_SCHEMA = "hulun.monitor.v1"
@@ -118,6 +119,11 @@ SUPPORTED_PUBLIC_SCHEMAS: dict[str, dict[str, Any]] = {
         "current": INTEGRATION_KIT_SCHEMA,
         "supported": [INTEGRATION_KIT_SCHEMA],
         "promise": "Integration kit reports preserve requested agent, generated files, ingest command, sample trace path, and verification outcome.",
+    },
+    "onboarding": {
+        "current": ONBOARDING_SCHEMA,
+        "supported": [ONBOARDING_SCHEMA],
+        "promise": "Onboarding reports preserve requested agent, generated kit location, sample verification, sandbox import outcome, and next-step commands.",
     },
     "calibration_drift_error": {
         "current": CALIBRATION_DRIFT_ERROR_SCHEMA,

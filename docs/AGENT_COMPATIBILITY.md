@@ -14,6 +14,8 @@ The JSON report uses schema `hulun.agent_compatibility.v1`.
 Generate a runnable first-run kit for any listed agent id:
 
 ```powershell
+python -m hulun_guard onboard --agent langgraph
+python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json
 python -m hulun_guard integration-kit --agent langgraph --verify
 python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify
 ```
