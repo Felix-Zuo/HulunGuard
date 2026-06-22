@@ -55,6 +55,8 @@ jobs:
         run: python -m hulun_guard benchmark --suite real-world
       - name: Build package
         run: python -m build
+      - name: Verify release artifacts
+        run: python scripts/verify_release_artifacts.py
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v6
         with:
