@@ -87,7 +87,15 @@ def run_json_command(command: list[str], *, cwd: Path, env: dict[str, str]) -> d
     return payload
 
 
-def verify_installed_commands(python_path: Path, hulun_path: Path, *, cwd: Path, env: dict[str, str], version: str) -> list[dict[str, Any]]:
+def verify_installed_commands(
+    python_path: Path,
+    hulun_path: Path,
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    version: str,
+    release_asset_dir: Path,
+) -> list[dict[str, Any]]:
     commands: list[dict[str, Any]] = []
 
     module_version = run_command([str(python_path), "-m", "hulun_guard", "--version"], cwd=cwd, env=env).strip()
@@ -131,18 +139,27 @@ def verify_installed_commands(python_path: Path, hulun_path: Path, *, cwd: Path,
         raise ArtifactSmokeError("onboard --agent langgraph failed from the installed wheel")
     commands.append({"name": "hulun onboard --agent langgraph --json", "status": "ok", "detail": str(onboarding_dir)})
 
+    release_verify = run_json_command([str(hulun_path), "release-verify", "--asset-dir", str(release_asset_dir), "--skip-attestation", "--json"], cwd=cwd, env=env)
+    if release_verify.get("schema") != "hulun.github_release_verification.v1" or not release_verify.get("gate", {}).get("passed"):
+        raise ArtifactSmokeError("release-verify --asset-dir failed from the installed wheel")
+    commands.append({"name": "hulun release-verify --asset-dir --json", "status": "ok", "detail": release_verify.get("tag")})
+
     return commands
 
 
 def verify_artifacts(root: Path, dist_dir: Path, version: str) -> dict[str, Any]:
     wheel = require_file(dist_dir / f"hulun_guard-{version}-py3-none-any.whl")
     sdist = require_file(dist_dir / f"hulun_guard-{version}.tar.gz")
+    sbom = require_file(dist_dir / f"hulun_guard-{version}-sbom.cdx.json")
+    checksums = require_file(dist_dir / "SHA256SUMS")
 
     require_archive_members(
         wheel,
         {
             "hulun_guard/__init__.py",
             "hulun_guard/cli.py",
+            "hulun_guard/release_metadata.py",
+            "hulun_guard/release_verification.py",
             "hulun_guard/schema_fixtures/legacy_state_v0.json",
             "hulun_guard/security_docs/THREAT_MODEL.md",
             f"hulun_guard-{version}.dist-info/METADATA",
@@ -157,6 +174,8 @@ def verify_artifacts(root: Path, dist_dir: Path, version: str) -> dict[str, Any]
             f"hulun_guard-{version}/README.md",
             f"hulun_guard-{version}/LICENSE",
             f"hulun_guard-{version}/src/hulun_guard/cli.py",
+            f"hulun_guard-{version}/src/hulun_guard/release_metadata.py",
+            f"hulun_guard-{version}/src/hulun_guard/release_verification.py",
             f"hulun_guard-{version}/tests/test_hulun_guard.py",
         },
         archive_type="sdist",
@@ -180,13 +199,23 @@ def verify_artifacts(root: Path, dist_dir: Path, version: str) -> dict[str, Any]
         run_command([str(python_path), "-m", "pip", "check"], cwd=smoke_root, env=env)
         if not hulun_path.exists():
             raise ArtifactSmokeError(f"Missing console script after install: {hulun_path}")
-        commands = verify_installed_commands(python_path, hulun_path, cwd=smoke_root, env=env, version=version)
+        dist_link = tmp_root / "dist"
+        dist_link.mkdir()
+        for artifact in dist_dir.iterdir():
+            if artifact.is_file():
+                target = dist_link / artifact.name
+                target.write_bytes(artifact.read_bytes())
+        commands = verify_installed_commands(python_path, hulun_path, cwd=smoke_root, env=env, version=version, release_asset_dir=dist_link)
 
     return {
         "version": version,
         "dist": str(dist_dir),
         "wheel": {"path": str(wheel), "size": wheel.stat().st_size},
         "sdist": {"path": str(sdist), "size": sdist.stat().st_size},
+        "metadata": {
+            "sbom": {"path": str(sbom), "size": sbom.stat().st_size},
+            "checksums": {"path": str(checksums), "size": checksums.stat().st_size},
+        },
         "commands": commands,
         "gate": {"passed": True, "failure_count": 0, "failures": []},
         "root": str(root),
@@ -194,8 +223,8 @@ def verify_artifacts(root: Path, dist_dir: Path, version: str) -> dict[str, Any]
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Verify HulunGuard release artifacts in a clean environment.")
-    parser.add_argument("--dist", default="dist", help="Directory containing built wheel and sdist artifacts.")
+    parser = argparse.ArgumentParser(description="Verify HulunGuard release artifacts and installed CLI behavior in a clean environment.")
+    parser.add_argument("--dist", default="dist", help="Directory containing built wheel, sdist, SBOM, and SHA256SUMS artifacts.")
     parser.add_argument("--version", help="Expected package version. Defaults to project.version from pyproject.toml.")
     parser.add_argument("--json", action="store_true", help="Print the verification report as JSON.")
     return parser

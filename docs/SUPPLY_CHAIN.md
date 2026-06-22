@@ -34,16 +34,16 @@ Consumers can verify checksums after downloading a release:
 sha256sum -c SHA256SUMS
 ```
 
-HulunGuard also includes a repository-side verifier that downloads the release, checks `SHA256SUMS`, validates the SBOM artifact hashes, and verifies GitHub attestations:
+HulunGuard includes an installed release verifier that downloads the release, checks `SHA256SUMS`, validates the SBOM artifact hashes, and verifies GitHub attestations:
 
 ```bash
-python scripts/verify_github_release.py v0.28.0 --json
+python -m hulun_guard release-verify v0.29.0 --json
 ```
 
 For offline verification of already downloaded assets:
 
 ```bash
-python scripts/verify_github_release.py v0.28.0 --asset-dir ./release-assets --skip-attestation --json
+python -m hulun_guard release-verify v0.29.0 --asset-dir ./release-assets --skip-attestation --json
 ```
 
 Consumers can verify build provenance with GitHub's attestation verification flow:
@@ -86,7 +86,7 @@ Before pushing a tag:
 5. GitHub CI, Security, Scorecard, and Release workflows pass.
 6. Release assets have provenance attestations.
 7. Release assets include `SHA256SUMS` and a CycloneDX SBOM.
-8. The published tag passes `python scripts/verify_github_release.py <tag> --json`.
+8. The published tag passes `python -m hulun_guard release-verify <tag> --json`.
 9. Open maturity issues are updated or closed with evidence.
 
 ## Release Asset Policy

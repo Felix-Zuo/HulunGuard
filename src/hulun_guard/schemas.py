@@ -33,6 +33,7 @@ CALIBRATION_DRIFT_ERROR_SCHEMA = "hulun.calibration_drift_error.v1"
 SCHEMA_COMPATIBILITY_SCHEMA = "hulun.schema_compatibility.v1"
 MONITOR_SCHEMA = "hulun.monitor.v1"
 THREAT_MODEL_CHECK_SCHEMA = "hulun.threat_model_check.v1"
+GITHUB_RELEASE_VERIFICATION_SCHEMA = "hulun.github_release_verification.v1"
 DEFAULT_SCHEMA_FIXTURE_DIR = Path(__file__).with_name("schema_fixtures")
 RISK_WEIGHTS = {
     "evidence_gap": 20,
@@ -140,6 +141,11 @@ SUPPORTED_PUBLIC_SCHEMAS: dict[str, dict[str, Any]] = {
         "current": THREAT_MODEL_CHECK_SCHEMA,
         "supported": [THREAT_MODEL_CHECK_SCHEMA],
         "promise": "Threat model check reports preserve documented boundary checks, link checks, and gate failures.",
+    },
+    "github_release_verification": {
+        "current": GITHUB_RELEASE_VERIFICATION_SCHEMA,
+        "supported": [GITHUB_RELEASE_VERIFICATION_SCHEMA],
+        "promise": "GitHub release verification reports preserve repository, tag, asset directory, checksum, SBOM, attestation, and gate fields.",
     },
 }
 
@@ -489,6 +495,8 @@ def infer_fixture_kind(path: Path, payload: dict[str, Any]) -> str:
         ("conversation_risk", "conversation_risk"),
         ("real_world_benchmark", "real_world_benchmark"),
         ("calibration_drift", "calibration_drift"),
+        ("github_release_verification", "github_release_verification"),
+        ("release_verification", "github_release_verification"),
         ("adapter_matrix", "adapter_matrix"),
         ("adapter_export", "export_opentelemetry"),
         ("opentelemetry", "export_opentelemetry"),

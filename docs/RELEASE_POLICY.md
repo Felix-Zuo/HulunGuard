@@ -22,9 +22,9 @@ python .\hulun.py benchmark --events 10000
 python .\hulun.py benchmark --suite real-world
 python .\hulun.py doctor --run-validation
 python -m build
-python scripts/verify_release_artifacts.py
 python scripts/generate_release_metadata.py --verify --json
-python scripts/verify_github_release.py --asset-dir dist --skip-attestation --json
+python scripts/verify_release_artifacts.py
+python .\hulun.py release-verify --asset-dir .\dist --skip-attestation --json
 ```
 
 ## Version Steps
@@ -33,7 +33,7 @@ python scripts/verify_github_release.py --asset-dir dist --skip-attestation --js
 2. Update `src/hulun_guard/__init__.py`.
 3. Update docs for new commands, parameters, or product meaning.
 4. Run tests, validation, calibration, calibration drift review, threat model check, agent compatibility, integration kit verification, onboarding verification, adapter matrix, schema compatibility, and retention cleanup dry-run.
-5. Run scan benchmark, real-world benchmark, doctor, security, build, release artifact smoke, release metadata, and offline release verifier checks.
+5. Run scan benchmark, real-world benchmark, doctor, security, build, release metadata, release artifact smoke, and offline release verifier checks.
 6. Commit with a versioned message.
 7. Tag the version.
 8. Push to `origin/main` with tags.
