@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.27.0 - 2026-06-23
+
+- Added release metadata generation for `SHA256SUMS` and CycloneDX 1.6 SBOM assets.
+- Added release metadata verification to CI and Release workflows before asset upload.
+- Documented checksum, SBOM, and GitHub artifact attestation verification for release consumers.
+
 ## 0.26.0 - 2026-06-23
 
 - Added a clean-environment release artifact smoke test for built wheel and sdist files.

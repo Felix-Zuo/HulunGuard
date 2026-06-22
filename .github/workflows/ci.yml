@@ -60,3 +60,5 @@ jobs:
         run: python -m build
       - name: Verify release artifacts
         run: python scripts/verify_release_artifacts.py
+      - name: Generate release metadata
+        run: python scripts/generate_release_metadata.py --verify --json

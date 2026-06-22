@@ -11,7 +11,8 @@ The workflow:
 - Builds wheel and sdist from the tagged commit.
 - Uploads `dist/*` as workflow artifacts.
 - Generates GitHub build provenance attestations for `dist/*` with `actions/attest`.
-- Uploads the same files to the GitHub Release.
+- Generates `SHA256SUMS` and a CycloneDX 1.6 SBOM for the release artifacts.
+- Uploads the same files and release metadata to the GitHub Release.
 
 Required workflow permissions:
 
@@ -20,7 +21,27 @@ Required workflow permissions:
 - `attestations: write` for artifact attestations.
 - `artifact-metadata: write` for artifact metadata records.
 
-Consumers can verify published artifacts with GitHub's attestation verification flow.
+Published releases include:
+
+- `hulun_guard-<version>-py3-none-any.whl`
+- `hulun_guard-<version>.tar.gz`
+- `hulun_guard-<version>-sbom.cdx.json`
+- `SHA256SUMS`
+
+Consumers can verify checksums after downloading a release:
+
+```bash
+sha256sum -c SHA256SUMS
+```
+
+Consumers can verify build provenance with GitHub's attestation verification flow:
+
+```bash
+gh attestation verify hulun_guard-<version>-py3-none-any.whl -R Felix-Zuo/HulunGuard
+gh attestation verify hulun_guard-<version>.tar.gz -R Felix-Zuo/HulunGuard
+```
+
+The SBOM follows CycloneDX JSON 1.6 and records the package, release artifacts, SHA-256 hashes, license, public repository, documentation, and release references.
 
 ## Branch Protection Checklist
 
@@ -52,7 +73,8 @@ Before pushing a tag:
 4. The release tag points at the reviewed commit.
 5. GitHub CI, Security, Scorecard, and Release workflows pass.
 6. Release assets have provenance attestations.
-7. Open maturity issues are updated or closed with evidence.
+7. Release assets include `SHA256SUMS` and a CycloneDX SBOM.
+8. Open maturity issues are updated or closed with evidence.
 
 ## Release Asset Policy
 
