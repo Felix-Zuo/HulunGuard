@@ -37,6 +37,8 @@ The adapter conformance test covers:
 - Python `HulunGuardClient.enqueue_payload` plus `flush_queue`
 - MCP `hulun_batch_ingest_payload` plus `hulun_batch_flush`
 - `ingest --format generic`
+- HTTP collector `/ingest/generic`
+- HTTP collector `/v1/traces`
 - `ingest --format opentelemetry`
 - `ingest --format openinference`
 - `ingest --format openhands`
@@ -53,6 +55,8 @@ Trace-file adapters must reject files above the configured `--max-trace-bytes` l
 
 Runtime payload adapters must reject JSON-serialized payloads above the configured `--max-payload-bytes` limit before queueing events. The default limit is 5 MiB. Queue metadata stores a source name and payload fingerprint, not the raw host path or raw private payload.
 
+HTTP collector adapters must use JSON or JSONL, must queue through the same durable batch path, must reject oversized payloads before queueing, and must refuse non-loopback binds unless explicitly started with `--allow-remote --token`.
+
 Integration coverage is defined in `docs/ADAPTER_MATRIX.md`. The conformance test proves each adapter can write the shared contract; `adapter-matrix` proves supported trace families survive realistic import, export, redaction, and workflow-path checks.
 
 ## Support Tiers
@@ -60,6 +64,7 @@ Integration coverage is defined in `docs/ADAPTER_MATRIX.md`. The conformance tes
 | Tier | Surfaces | Gate |
 | --- | --- | --- |
 | integration-tested | OpenTelemetry, OpenInference, OpenHands-like, SWE-agent-like, OpenAI Agents SDK | `python -m hulun_guard adapter-matrix --json` |
+| collector-smoke-tested | OTLP/HTTP JSON and generic HTTP adapter payload path | `python -m hulun_guard collector smoke --json` |
 | hosted-fixture-tested | LangGraph, LangSmith, Langfuse, Phoenix | Synthetic public-safe hosted platform fixture shapes |
 | roundtrip-tested | OpenTelemetry, OpenInference, Langfuse, Phoenix | Import to persisted events to OTLP export to OTLP re-import |
 | conformance | CLI, Python SDK, MCP, generic JSON | `tests/test_adapter_conformance.py` |

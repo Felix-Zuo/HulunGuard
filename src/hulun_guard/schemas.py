@@ -36,6 +36,7 @@ THREAT_MODEL_CHECK_SCHEMA = "hulun.threat_model_check.v1"
 GITHUB_RELEASE_VERIFICATION_SCHEMA = "hulun.github_release_verification.v1"
 TRACE_DOCTOR_SCHEMA = "hulun.trace_doctor.v1"
 BATCH_INGEST_SCHEMA = "hulun.batch_ingest.v1"
+COLLECTOR_SCHEMA = "hulun.collector.v1"
 DEFAULT_SCHEMA_FIXTURE_DIR = Path(__file__).with_name("schema_fixtures")
 RISK_WEIGHTS = {
     "evidence_gap": 20,
@@ -158,6 +159,11 @@ SUPPORTED_PUBLIC_SCHEMAS: dict[str, dict[str, Any]] = {
         "current": BATCH_INGEST_SCHEMA,
         "supported": [BATCH_INGEST_SCHEMA],
         "promise": "Batched ingestion reports preserve operation, queue status, imported counts, event ids, and dead-letter counts.",
+    },
+    "collector": {
+        "current": COLLECTOR_SCHEMA,
+        "supported": [COLLECTOR_SCHEMA],
+        "promise": "Collector reports preserve health, status, ingest, smoke, endpoint, queue, auth, limit, and gate fields.",
     },
 }
 
@@ -511,6 +517,8 @@ def infer_fixture_kind(path: Path, payload: dict[str, Any]) -> str:
         ("release_verification", "github_release_verification"),
         ("trace_doctor", "trace_doctor"),
         ("trace_diagnostic", "trace_doctor"),
+        ("collector", "collector"),
+        ("http_collector", "collector"),
         ("batch_ingest", "batch_ingest"),
         ("batched_ingest", "batch_ingest"),
         ("ingest_queue", "batch_ingest"),

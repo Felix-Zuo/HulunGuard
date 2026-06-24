@@ -23,6 +23,7 @@ Every release must pass:
 - Built-in HulunGuard validation scenarios.
 - Threat model static check.
 - Integration kit verification gate.
+- Local HTTP collector smoke gate.
 - Schema compatibility fixture gate.
 - Benchmark gate for expected scan latency.
 - Retention cleanup dry-run gate.

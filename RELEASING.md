@@ -24,6 +24,7 @@ python -m hulun_guard compatibility --json
 python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify --json
 python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json
 python -m hulun_guard adapter-matrix --json
+python -m hulun_guard collector smoke --json
 '{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass","action_key":"pytest","refs":["command:pytest"]}' | Set-Content -Encoding UTF8 trace-doctor-sample.jsonl
 python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json
 python -m hulun_guard schema-check --json

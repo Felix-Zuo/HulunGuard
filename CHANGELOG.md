@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.34.0 - 2026-06-25
+
+- Added `collector serve`, a loopback-first local HTTP collector for live OTLP/HTTP JSON traces and adapter runtime payloads.
+- Added `collector smoke --json`, `hulun.collector.v1`, schema fixture coverage, CI/Release gates, and clean-environment artifact smoke coverage.
+- Added collector safety controls for payload size caps, JSON-only ingestion, optional token auth, and non-loopback bind refusal unless explicitly enabled with a token.
+
 ## 0.33.0 - 2026-06-25
 
 - Added in-memory runtime payload ingestion through adapter APIs, SDK `enqueue_payload`, and MCP `hulun_batch_ingest_payload`.

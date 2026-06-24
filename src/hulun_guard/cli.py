@@ -26,6 +26,15 @@ from .calibration import (
     compare_calibration_drift,
     run_trajectory_calibration,
 )
+from .collector import (
+    DEFAULT_COLLECTOR_HOST,
+    DEFAULT_COLLECTOR_PORT,
+    CollectorConfig,
+    CollectorError,
+    build_collector_server,
+    collector_json,
+    collector_smoke,
+)
 from .compatibility import agent_compatibility_json, compatibility_report
 from .constants import DASHBOARD_FILE, RISK_REPORT_FILE, VALID_EVENT_PHASES, VALID_STATUSES
 from .conversation import (
@@ -544,6 +553,56 @@ def cmd_batch_flush(args: argparse.Namespace) -> int:
         risk = payload["risk"]
         return 2 if risk["blocked"] and args.fail_on_threshold else 0
     return 0
+
+
+def _collector_config_from_args(args: argparse.Namespace) -> CollectorConfig:
+    return CollectorConfig(
+        root=args.root,
+        host=args.host,
+        port=args.port,
+        token=args.token,
+        allow_remote=args.allow_remote,
+        max_payload_bytes=args.max_payload_bytes,
+        source_platform=args.source_platform,
+        include_sensitive=args.include_sensitive,
+        retention_days=args.retention_days,
+    )
+
+
+def cmd_collector_serve(args: argparse.Namespace) -> int:
+    config = _collector_config_from_args(args)
+    try:
+        server = build_collector_server(config)
+    except CollectorError as exc:
+        raise SystemExit(str(exc)) from None
+    host, port = server.server_address[:2]
+    url_host = host_for_browser_url(str(host))
+    print(f"HulunGuard collector listening on http://{url_host}:{port}")
+    print("POST /v1/traces for OTLP/HTTP JSON. POST /ingest or /ingest/<format> for adapter payloads.")
+    print("GET /healthz for liveness. GET /status for queue state.")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("Collector stopped.")
+    finally:
+        server.server_close()
+    return 0
+
+
+def cmd_collector_smoke(args: argparse.Namespace) -> int:
+    try:
+        payload = collector_smoke(args.root, token=args.token, max_payload_bytes=args.max_payload_bytes)
+    except CollectorError as exc:
+        raise SystemExit(str(exc)) from None
+    if args.json:
+        print(collector_json(payload), end="")
+    else:
+        gate = payload["gate"]
+        print(f"Collector smoke: {'PASS' if gate['passed'] else 'FAIL'}")
+        print(f"Pending queue: {payload['queue']['pending']}")
+        if gate["failures"]:
+            print(f"Failures: {gate['failures']}")
+    return 0 if payload["gate"]["passed"] else 2
 
 
 def cmd_trace_doctor(args: argparse.Namespace) -> int:
@@ -1916,6 +1975,25 @@ def build_parser() -> argparse.ArgumentParser:
     add_privacy_controls(batch_flush)
     batch_flush.add_argument("--json", action="store_true")
     batch_flush.set_defaults(func=cmd_batch_flush)
+
+    collector = sub.add_parser("collector", parents=[root_parent], help="Run a local HTTP collector for live agent traces.")
+    collector_sub = collector.add_subparsers(dest="collector_command", required=True)
+
+    collector_serve = collector_sub.add_parser("serve", parents=[root_parent], help="Serve a local OTLP/HTTP JSON and adapter-payload collector.")
+    collector_serve.add_argument("--host", default=DEFAULT_COLLECTOR_HOST, help=f"Bind host. Defaults to {DEFAULT_COLLECTOR_HOST}.")
+    collector_serve.add_argument("--port", type=int, default=DEFAULT_COLLECTOR_PORT, help=f"Bind port. Defaults to {DEFAULT_COLLECTOR_PORT}.")
+    collector_serve.add_argument("--token", help="Require Authorization: Bearer <token> or X-Hulun-Token for POST and /status.")
+    collector_serve.add_argument("--allow-remote", action="store_true", help="Allow a non-loopback bind. Requires --token.")
+    collector_serve.add_argument("--max-payload-bytes", type=int, default=MAX_TRACE_BYTES, help=f"Reject payloads larger than this many bytes. Defaults to {MAX_TRACE_BYTES}.")
+    collector_serve.add_argument("--source-platform", help="Override source platform on queued observations.")
+    add_privacy_controls(collector_serve)
+    collector_serve.set_defaults(func=cmd_collector_serve)
+
+    collector_smoke_cmd = collector_sub.add_parser("smoke", parents=[root_parent], help="Start a temporary collector, POST one OTLP JSON span, and verify the queue.")
+    collector_smoke_cmd.add_argument("--token", help="Exercise collector smoke with a required bearer token.")
+    collector_smoke_cmd.add_argument("--max-payload-bytes", type=int, default=MAX_TRACE_BYTES, help=f"Reject payloads larger than this many bytes. Defaults to {MAX_TRACE_BYTES}.")
+    collector_smoke_cmd.add_argument("--json", action="store_true")
+    collector_smoke_cmd.set_defaults(func=cmd_collector_smoke)
 
     ingest = sub.add_parser("ingest", parents=[root_parent])
     ingest.add_argument("--file", required=True, help="JSON or JSONL trace file to import.")

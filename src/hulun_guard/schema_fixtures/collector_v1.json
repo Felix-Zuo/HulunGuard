@@ -1,0 +1,55 @@
+{
+  "schema": "hulun.collector.v1",
+  "generated_at": "2026-06-25T00:00:00Z",
+  "operation": "smoke",
+  "root": "fixture",
+  "endpoint": "/v1/traces",
+  "response_status": 202,
+  "response": {
+    "schema": "hulun.collector.v1",
+    "operation": "ingest",
+    "endpoint": "/v1/traces",
+    "format": "opentelemetry",
+    "accepted": 1,
+    "queued": 1,
+    "record_ids": ["Qfixture"],
+    "queue": {
+      "path": ".hulun/ingest_queue.jsonl",
+      "pending": 1,
+      "bytes": 512,
+      "oldest_queued_at": "2026-06-25T00:00:00Z",
+      "newest_queued_at": "2026-06-25T00:00:00Z",
+      "parse_error_count": 0
+    },
+    "dead_letter": {
+      "path": ".hulun/ingest_dead_letter.jsonl",
+      "records": 0
+    },
+    "batch_schema": "hulun.batch_ingest.v1"
+  },
+  "queue_before": {
+    "path": ".hulun/ingest_queue.jsonl",
+    "pending": 0,
+    "bytes": 0,
+    "oldest_queued_at": null,
+    "newest_queued_at": null,
+    "parse_error_count": 0
+  },
+  "queue": {
+    "path": ".hulun/ingest_queue.jsonl",
+    "pending": 1,
+    "bytes": 512,
+    "oldest_queued_at": "2026-06-25T00:00:00Z",
+    "newest_queued_at": "2026-06-25T00:00:00Z",
+    "parse_error_count": 0
+  },
+  "dead_letter": {
+    "path": ".hulun/ingest_dead_letter.jsonl",
+    "records": 0
+  },
+  "gate": {
+    "passed": true,
+    "failure_count": 0,
+    "failures": []
+  }
+}

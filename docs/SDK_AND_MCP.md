@@ -5,6 +5,7 @@ HulunGuard exposes stable adapter surfaces for agents that should record runtime
 - Python SDK: import `HulunGuardClient` and write events directly.
 - MCP stdio server: run `hulun-mcp` or `python -m hulun_guard.mcp` from any MCP-capable host.
 - CLI stdin bridge: pipe JSON/JSONL payloads to `hulun batch ingest-stdin`.
+- Local HTTP collector: POST OTLP/HTTP JSON or adapter payloads to `hulun collector serve`.
 
 All surfaces use the same event schema, privacy redaction defaults, and risk engine.
 
@@ -156,6 +157,28 @@ Available tools:
 MCP responses include both human-readable text content and `structuredContent`.
 
 The server implements the MCP Tools interface for protocol version `2025-11-25`.
+
+## HTTP Collector
+
+Start a local collector when the host runtime can emit HTTP traces:
+
+```powershell
+python -m hulun_guard collector serve
+```
+
+Default endpoint:
+
+```text
+http://127.0.0.1:4318/v1/traces
+```
+
+The collector accepts OTLP/HTTP JSON at `/v1/traces` and adapter payloads at `/ingest` or `/ingest/<format>`. It writes to `.hulun/ingest_queue.jsonl`; use `hulun batch flush --scan` to import queued observations into the project ledger.
+
+Run the non-blocking smoke check in CI or release gates:
+
+```powershell
+python -m hulun_guard collector smoke --json
+```
 
 ## Privacy Defaults
 
