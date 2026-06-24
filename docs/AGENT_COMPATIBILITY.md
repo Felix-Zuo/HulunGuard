@@ -72,6 +72,8 @@ python -m hulun_guard ingest --format generic --file events.jsonl --scan
 '{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass"}' | python -m hulun_guard batch ingest-stdin --format generic
 python -m hulun_guard collector serve
 python -m hulun_guard collector serve --flush-interval-seconds 5 --scan-on-flush --init-if-missing
+python -m hulun_guard collector status --require-status-file --json
+python -m hulun_guard collector service-template --output .hulun/collector-service --force --json
 ```
 
 For host runtimes that already hold events or spans in memory, use `HulunGuardClient.enqueue_payload(...)`, MCP `hulun_batch_ingest_payload`, `batch ingest-stdin`, or `collector serve`, and then flush the durable queue. This is the preferred path for live stream integrations where writing a trace file first would add latency or operational friction.

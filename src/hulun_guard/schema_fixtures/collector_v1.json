@@ -38,10 +38,10 @@
   },
   "queue": {
     "path": ".hulun/ingest_queue.jsonl",
-    "pending": 1,
-    "bytes": 512,
-    "oldest_queued_at": "2026-06-25T00:00:00Z",
-    "newest_queued_at": "2026-06-25T00:00:00Z",
+    "pending": 0,
+    "bytes": 0,
+    "oldest_queued_at": null,
+    "newest_queued_at": null,
     "parse_error_count": 0
   },
   "dead_letter": {
@@ -57,35 +57,20 @@
     "pending_before": 1,
     "imported": 1,
     "scanned": true,
-    "batch": {
-      "schema": "hulun.batch_ingest.v1",
-      "operation": "flush",
-      "imported": 1,
-      "queue": {
-        "path": ".hulun/ingest_queue.jsonl",
-        "pending": 0,
-        "bytes": 0,
-        "oldest_queued_at": null,
-        "newest_queued_at": null,
-        "parse_error_count": 0
-      },
-      "dead_letter": {
-        "path": ".hulun/ingest_dead_letter.jsonl",
-        "records": 0
-      }
-    },
-    "risk": {
-      "schema": "hulun.risk.v1",
-      "score": 8,
-      "slop_index": 8,
-      "band": "green",
-      "threshold": 66,
-      "blocked": false,
-      "required_action": "continue",
-      "components": {},
-      "weights": {},
-      "reasons": []
-    },
+    "gate": {
+      "passed": true,
+      "failure_count": 0,
+      "failures": []
+    }
+  },
+  "operations_status": {
+    "schema": "hulun.collector.v1",
+    "generated_at": "2026-06-25T00:00:00Z",
+    "operation": "operations_status",
+    "root": "fixture",
+    "status_file": ".hulun/collector_status.json",
+    "status_file_exists": true,
+    "status_age_seconds": 1.2,
     "queue": {
       "path": ".hulun/ingest_queue.jsonl",
       "pending": 0,
@@ -98,6 +83,40 @@
       "path": ".hulun/ingest_dead_letter.jsonl",
       "records": 0
     },
+    "runtime": {
+      "managed": true,
+      "started_at": "2026-06-25T00:00:00Z",
+      "last_flush_at": "2026-06-25T00:00:01Z",
+      "last_error": null
+    },
+    "risk": {
+      "exists": true,
+      "score": 8,
+      "band": "green",
+      "blocked": false,
+      "generated_at": "2026-06-25T00:00:01Z"
+    },
+    "warnings": [],
+    "gate": {
+      "passed": true,
+      "failure_count": 0,
+      "failures": []
+    }
+  },
+  "service_template": {
+    "schema": "hulun.collector.v1",
+    "generated_at": "2026-06-25T00:00:00Z",
+    "operation": "service_template",
+    "root": "fixture",
+    "output": ".hulun/collector-service",
+    "command": ["python", "-m", "hulun_guard", "--root", "fixture", "collector", "serve", "--flush-interval-seconds", "5", "--flush-limit", "500", "--scan-on-flush", "--init-if-missing"],
+    "targets": ["systemd", "launchd", "windows-task"],
+    "files": [
+      {"target": "systemd", "path": ".hulun/collector-service/hulun-collector.service"},
+      {"target": "launchd", "path": ".hulun/collector-service/dev.hulunguard.collector.plist"},
+      {"target": "windows-task", "path": ".hulun/collector-service/Register-HulunCollectorTask.ps1"},
+      {"target": "readme", "path": ".hulun/collector-service/README.md"}
+    ],
     "gate": {
       "passed": true,
       "failure_count": 0,

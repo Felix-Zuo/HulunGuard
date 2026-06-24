@@ -21,6 +21,8 @@ Smoke-test the installed collector without leaving a long-running server:
 ```powershell
 python -m hulun_guard --root . collector smoke --json
 python -m hulun_guard --root . collector smoke --managed --scan --init-if-missing --json
+python -m hulun_guard --root . collector status --require-status-file --json
+python -m hulun_guard --root . collector service-template --force --json
 python -m hulun_guard batch status --json
 python -m hulun_guard batch flush --scan --init-if-missing --json
 ```
@@ -71,6 +73,41 @@ Managed mode:
 - reports flush failures in `/status` and the status file without stopping HTTP ingestion
 
 Use `GET /status` to inspect queue state and managed runtime counters.
+
+## Operations Status
+
+Use `collector status` when an operator, service watchdog, or CI job needs to inspect collector health without opening the HTTP server:
+
+```powershell
+python -m hulun_guard collector status --json
+python -m hulun_guard collector status --require-status-file --fail-on-stale --stale-after-seconds 60 --json
+```
+
+The command reads local files only:
+
+- `.hulun/ingest_queue.jsonl`
+- `.hulun/ingest_dead_letter.jsonl`
+- `.hulun/collector_status.json`
+- `.hulun/risk.json`
+
+It reports queue parse errors, dead letters, stale managed status, managed runtime `last_error`, and the latest HulunIndex summary. Missing status files are warnings by default; use `--require-status-file` for service health checks.
+
+## Service Templates
+
+Generate reviewed service templates for long-running managed mode:
+
+```powershell
+python -m hulun_guard collector service-template --force --json
+```
+
+Generated targets:
+
+- `hulun-collector.service` for systemd
+- `dev.hulunguard.collector.plist` for launchd
+- `Register-HulunCollectorTask.ps1` for Windows Scheduled Task
+- `README.md` with the generated command and review notes
+
+Templates are written to `.hulun/collector-service` by default. They do not install anything and do not include authentication tokens. Review paths, users, permissions, and host policy before installing them.
 
 ## OTLP JSON
 

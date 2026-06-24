@@ -34,6 +34,8 @@ from .collector import (
     CollectorRuntimeState,
     build_collector_server,
     collector_json,
+    collector_operations_status,
+    collector_service_templates,
     collector_smoke,
     collector_status_path,
     start_collector_manager,
@@ -630,6 +632,75 @@ def cmd_collector_smoke(args: argparse.Namespace) -> int:
         print(f"Pending queue: {payload['queue']['pending']}")
         if gate["failures"]:
             print(f"Failures: {gate['failures']}")
+    return 0 if payload["gate"]["passed"] else 2
+
+
+def cmd_collector_status(args: argparse.Namespace) -> int:
+    payload = collector_operations_status(
+        args.root,
+        stale_after_seconds=args.stale_after_seconds,
+        require_status_file=args.require_status_file,
+        fail_on_stale=args.fail_on_stale,
+    )
+    if args.json:
+        print(collector_json(payload), end="")
+    else:
+        gate = payload["gate"]
+        status_label = "PASS" if gate["passed"] else "FAIL"
+        if gate["passed"] and payload.get("warnings"):
+            status_label = "WARN"
+        print(f"Collector operations status: {status_label}")
+        print(f"Pending queue: {payload['queue']['pending']}")
+        print(f"Dead letters: {payload['dead_letter']['records']}")
+        status_file = payload["status_file"]
+        print(f"Status file: {'present' if status_file['exists'] else 'absent'} ({status_file['path']})")
+        if status_file["age_seconds"] is not None:
+            print(f"Status age: {status_file['age_seconds']}s")
+        risk = payload["risk"]
+        if risk["exists"] and risk["score"] is not None:
+            print(f"HulunIndex: {risk['score']} / 100 ({risk['band']})")
+        for warning in payload.get("warnings", []):
+            print(f"Warning: {warning}")
+        for failure in gate["failures"]:
+            print(f"Failure: {failure}")
+    return 0 if payload["gate"]["passed"] else 2
+
+
+def cmd_collector_service_template(args: argparse.Namespace) -> int:
+    try:
+        payload = collector_service_templates(
+            args.root,
+            output=args.output,
+            target=args.target,
+            python_executable=args.python,
+            host=args.host,
+            port=args.port,
+            flush_interval_seconds=args.flush_interval_seconds,
+            flush_limit=args.flush_limit,
+            scan_on_flush=args.scan_on_flush,
+            init_if_missing=args.init_if_missing,
+            force=args.force,
+        )
+    except CollectorError as exc:
+        payload = {
+            "schema": "hulun.collector.v1",
+            "generated_at": utc_now(),
+            "operation": "service_template",
+            "root": str(project_root(args.root)),
+            "gate": {"passed": False, "failure_count": 1, "failures": [str(exc)]},
+        }
+        if args.json:
+            print(collector_json(payload), end="")
+        else:
+            print("Collector service templates: FAIL")
+            print(f"Failure: {exc}")
+        return 2
+    if args.json:
+        print(collector_json(payload), end="")
+    else:
+        print(f"Collector service templates: {payload['output_dir']}")
+        for item in payload["files"]:
+            print(f"- {item['target']}: {item['path']}")
     return 0 if payload["gate"]["passed"] else 2
 
 
@@ -2035,6 +2106,27 @@ def build_parser() -> argparse.ArgumentParser:
     collector_smoke_cmd.add_argument("--init-if-missing", action="store_true", help="With --managed, initialize a minimal ledger before flush if needed.")
     collector_smoke_cmd.add_argument("--json", action="store_true")
     collector_smoke_cmd.set_defaults(func=cmd_collector_smoke)
+
+    collector_status_cmd = collector_sub.add_parser("status", parents=[root_parent], help="Inspect offline collector operations health from local queue, status, and risk files.")
+    collector_status_cmd.add_argument("--stale-after-seconds", type=int, default=60, help="Mark the managed status file stale after this many seconds. Defaults to 60.")
+    collector_status_cmd.add_argument("--require-status-file", action="store_true", help="Fail when .hulun/collector_status.json is missing.")
+    collector_status_cmd.add_argument("--fail-on-stale", action="store_true", help="Fail when the managed status file is older than --stale-after-seconds.")
+    collector_status_cmd.add_argument("--json", action="store_true")
+    collector_status_cmd.set_defaults(func=cmd_collector_status)
+
+    collector_template_cmd = collector_sub.add_parser("service-template", parents=[root_parent], help="Generate reviewed service templates for long-running managed collector operation.")
+    collector_template_cmd.add_argument("--target", choices=["all", "systemd", "launchd", "windows-task"], default="all")
+    collector_template_cmd.add_argument("--output", help="Directory for generated templates. Defaults to .hulun/collector-service.")
+    collector_template_cmd.add_argument("--python", default="python", help="Python executable used in generated templates.")
+    collector_template_cmd.add_argument("--host", default=DEFAULT_COLLECTOR_HOST, help=f"Collector bind host in generated templates. Defaults to {DEFAULT_COLLECTOR_HOST}.")
+    collector_template_cmd.add_argument("--port", type=int, default=DEFAULT_COLLECTOR_PORT, help=f"Collector bind port in generated templates. Defaults to {DEFAULT_COLLECTOR_PORT}.")
+    collector_template_cmd.add_argument("--flush-interval-seconds", type=int, default=5, help="Managed flush interval in generated templates. Defaults to 5.")
+    collector_template_cmd.add_argument("--flush-limit", type=int, default=BATCH_FLUSH_LIMIT, help=f"Managed flush limit in generated templates. Defaults to {BATCH_FLUSH_LIMIT}.")
+    collector_template_cmd.add_argument("--scan-on-flush", action=argparse.BooleanOptionalAction, default=True, help="Include managed scan-on-flush in generated templates. Enabled by default.")
+    collector_template_cmd.add_argument("--init-if-missing", action=argparse.BooleanOptionalAction, default=True, help="Include init-if-missing in generated templates. Enabled by default.")
+    collector_template_cmd.add_argument("--force", action="store_true", help="Overwrite HulunGuard-generated collector service templates.")
+    collector_template_cmd.add_argument("--json", action="store_true")
+    collector_template_cmd.set_defaults(func=cmd_collector_service_template)
 
     ingest = sub.add_parser("ingest", parents=[root_parent])
     ingest.add_argument("--file", required=True, help="JSON or JSONL trace file to import.")

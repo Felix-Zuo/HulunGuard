@@ -50,6 +50,8 @@ jobs:
           tmp="$(mktemp -d)"
           python -m hulun_guard --root "$tmp" collector smoke --json
           python -m hulun_guard --root "$tmp" collector smoke --managed --scan --init-if-missing --json
+          python -m hulun_guard --root "$tmp" collector status --require-status-file --json
+          python -m hulun_guard --root "$tmp" collector service-template --output "$tmp/service-templates" --force --json
       - name: HulunGuard batched ingestion smoke
         run: |
           tmp="$(mktemp -d)"

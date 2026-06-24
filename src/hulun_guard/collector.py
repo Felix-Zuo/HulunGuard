@@ -3,9 +3,12 @@ from __future__ import annotations
 import hmac
 import http.client
 import json
+import shlex
 import tempfile
 import threading
+import time
 from dataclasses import dataclass, field
+from html import escape as xml_escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from ipaddress import ip_address
 from pathlib import Path
@@ -24,6 +27,9 @@ from .util import utc_now
 DEFAULT_COLLECTOR_HOST = "127.0.0.1"
 DEFAULT_COLLECTOR_PORT = 4318
 COLLECTOR_STATUS_FILE = "collector_status.json"
+COLLECTOR_SERVICE_TEMPLATE_DIR = "collector-service"
+SERVICE_TEMPLATE_TARGETS = ("systemd", "launchd", "windows-task")
+OVERSIZE_DRAIN_HARD_LIMIT_BYTES = 8 * 1024 * 1024
 TRACE_PAYLOAD_FORMATS = (
     "auto",
     "generic",
@@ -183,6 +189,7 @@ def _read_request_payload(handler: BaseHTTPRequestHandler, *, max_payload_bytes:
         raise CollectorHTTPError(400, "empty_payload", "Request body must not be empty.")
     limit = max(1, int(max_payload_bytes))
     if length > limit:
+        _drain_oversized_body(handler, length=length, limit=limit)
         raise CollectorHTTPError(413, "payload_too_large", f"Payload is too large: {length} bytes, limit is {limit} bytes.")
     raw = handler.rfile.read(length)
     if len(raw) > limit:
@@ -195,6 +202,18 @@ def _read_request_payload(handler: BaseHTTPRequestHandler, *, max_payload_bytes:
         return parse_trace_text(text)
     except SystemExit as exc:
         raise CollectorHTTPError(400, "invalid_json", str(exc)) from exc
+
+
+def _drain_oversized_body(handler: BaseHTTPRequestHandler, *, length: int, limit: int) -> None:
+    drain_cap = min(max(limit + 65536, 1024 * 1024), OVERSIZE_DRAIN_HARD_LIMIT_BYTES)
+    if length > drain_cap:
+        return
+    remaining = length
+    while remaining > 0:
+        chunk = handler.rfile.read(min(65536, remaining))
+        if not chunk:
+            break
+        remaining -= len(chunk)
 
 
 def _health_payload(config: CollectorConfig) -> dict[str, Any]:
@@ -268,6 +287,315 @@ def write_collector_status(config: CollectorConfig, runtime_state: CollectorRunt
     path = collector_status_path(config.root)
     write_json(path, collector_status(config, runtime_state))
     return path
+
+
+def _read_json_payload(path: Path) -> tuple[dict[str, Any] | None, str | None]:
+    if not path.exists():
+        return None, None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        return None, str(exc)
+    if not isinstance(data, dict):
+        return None, "JSON payload must be an object."
+    return data, None
+
+
+def _file_age_seconds(path: Path) -> float | None:
+    if not path.exists():
+        return None
+    try:
+        return max(0.0, time.time() - path.stat().st_mtime)
+    except OSError:
+        return None
+
+
+def _round_age(value: float | None) -> float | None:
+    return None if value is None else round(value, 3)
+
+
+def collector_operations_status(
+    root: str | Path | None = None,
+    *,
+    stale_after_seconds: int = 60,
+    require_status_file: bool = False,
+    fail_on_stale: bool = False,
+) -> dict[str, Any]:
+    root_path = _resolved_root(root)
+    status_file = collector_status_path(root_path)
+    status_payload, status_parse_error = _read_json_payload(status_file)
+    status_age = _file_age_seconds(status_file)
+    stale_limit = max(1, int(stale_after_seconds))
+    status_stale = bool(status_file.exists() and status_age is not None and status_age > stale_limit)
+
+    risk_file = risk_path(root_path)
+    risk_payload, risk_parse_error = _read_json_payload(risk_file)
+    queue = queue_status(root_path)
+    managed = status_payload.get("managed") if isinstance(status_payload, dict) else None
+    runtime = managed.get("runtime") if isinstance(managed, dict) else None
+    last_error = runtime.get("last_error") if isinstance(runtime, dict) else None
+
+    failures: list[str] = []
+    warnings: list[str] = []
+    if int(queue["queue"].get("parse_error_count") or 0) > 0:
+        failures.append(f"Queue has parse errors: {queue['queue']['parse_error_count']}.")
+    if int(queue["dead_letter"].get("records") or 0) > 0:
+        failures.append(f"Dead-letter records exist: {queue['dead_letter']['records']}.")
+    if require_status_file and not status_file.exists():
+        failures.append(f"Collector status file is missing: {status_file}.")
+    if status_parse_error:
+        failures.append(f"Collector status file is not valid JSON: {status_parse_error}.")
+    if risk_parse_error:
+        failures.append(f"Risk file is not valid JSON: {risk_parse_error}.")
+    if status_stale:
+        message = f"Collector status file is stale: {_round_age(status_age)}s > {stale_limit}s."
+        if fail_on_stale:
+            failures.append(message)
+        else:
+            warnings.append(message)
+    if last_error:
+        failures.append(f"Managed collector reported last_error: {last_error}.")
+    if risk_payload and risk_payload.get("blocked"):
+        warnings.append(f"HulunIndex is blocked: {risk_payload.get('score')} >= {risk_payload.get('threshold')}.")
+    if not status_file.exists() and not require_status_file:
+        warnings.append("Collector status file is absent; run managed collector mode to publish runtime counters.")
+
+    return {
+        "schema": COLLECTOR_SCHEMA,
+        "generated_at": utc_now(),
+        "operation": "operations_status",
+        "root": str(root_path),
+        "queue": queue["queue"],
+        "dead_letter": queue["dead_letter"],
+        "status_file": {
+            "path": str(status_file),
+            "exists": status_file.exists(),
+            "age_seconds": _round_age(status_age),
+            "stale_after_seconds": stale_limit,
+            "stale": status_stale,
+            "parse_error": status_parse_error,
+        },
+        "managed": managed,
+        "risk": {
+            "path": str(risk_file),
+            "exists": risk_file.exists(),
+            "parse_error": risk_parse_error,
+            "score": risk_payload.get("score") if risk_payload else None,
+            "slop_index": risk_payload.get("slop_index") if risk_payload else None,
+            "band": risk_payload.get("band") if risk_payload else None,
+            "blocked": risk_payload.get("blocked") if risk_payload else None,
+            "required_action": risk_payload.get("required_action") if risk_payload else None,
+        },
+        "warnings": warnings,
+        "gate": {"passed": not failures, "failure_count": len(failures), "failures": failures},
+    }
+
+
+def _collector_service_command(
+    *,
+    python_executable: str,
+    root_path: Path,
+    host: str,
+    port: int,
+    flush_interval_seconds: int,
+    flush_limit: int,
+    scan_on_flush: bool,
+    init_if_missing: bool,
+) -> list[str]:
+    command = [
+        python_executable,
+        "-m",
+        "hulun_guard",
+        "--root",
+        str(root_path),
+        "collector",
+        "serve",
+        "--host",
+        host,
+        "--port",
+        str(int(port)),
+        "--flush-interval-seconds",
+        str(int(flush_interval_seconds)),
+        "--flush-limit",
+        str(int(flush_limit)),
+    ]
+    if scan_on_flush:
+        command.append("--scan-on-flush")
+    if init_if_missing:
+        command.append("--init-if-missing")
+    return command
+
+
+def _ps_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _cmd_arg(value: str) -> str:
+    if not value or any(ch.isspace() or ch in value for ch in '"&()[]{}^=;!%\',`'):
+        return '"' + value.replace('"', '\\"') + '"'
+    return value
+
+
+def _write_template(path: Path, text: str, *, force: bool) -> None:
+    if path.exists() and not force:
+        raise CollectorError(f"Refusing to overwrite existing collector service template: {path}. Use --force.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def _systemd_template(command: list[str], root_path: Path) -> str:
+    return "\n".join(
+        [
+            "[Unit]",
+            "Description=HulunGuard Collector",
+            "After=network.target",
+            "",
+            "[Service]",
+            "Type=simple",
+            f"WorkingDirectory={shlex.quote(str(root_path))}",
+            f"ExecStart={shlex.join(command)}",
+            "Restart=on-failure",
+            "RestartSec=5",
+            "NoNewPrivileges=true",
+            "PrivateTmp=true",
+            "",
+            "[Install]",
+            "WantedBy=default.target",
+            "",
+        ]
+    )
+
+
+def _launchd_template(command: list[str], root_path: Path) -> str:
+    arguments = "\n".join(f"    <string>{xml_escape(value)}</string>" for value in command)
+    return "\n".join(
+        [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+            '<plist version="1.0">',
+            "<dict>",
+            "  <key>Label</key>",
+            "  <string>dev.hulunguard.collector</string>",
+            "  <key>WorkingDirectory</key>",
+            f"  <string>{xml_escape(str(root_path))}</string>",
+            "  <key>ProgramArguments</key>",
+            "  <array>",
+            arguments,
+            "  </array>",
+            "  <key>RunAtLoad</key>",
+            "  <true/>",
+            "  <key>KeepAlive</key>",
+            "  <true/>",
+            "</dict>",
+            "</plist>",
+            "",
+        ]
+    )
+
+
+def _windows_task_template(command: list[str], root_path: Path) -> str:
+    execute = command[0]
+    arguments = " ".join(_cmd_arg(value) for value in command[1:])
+    return "\n".join(
+        [
+            "$TaskName = 'HulunGuard Collector'",
+            f"$Action = New-ScheduledTaskAction -Execute {_ps_literal(execute)} -Argument {_ps_literal(arguments)} -WorkingDirectory {_ps_literal(str(root_path))}",
+            "$Trigger = New-ScheduledTaskTrigger -AtLogOn",
+            "$Settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -StartWhenAvailable",
+            "Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Description 'Run the local HulunGuard collector in managed mode.'",
+            "",
+        ]
+    )
+
+
+def _service_template_readme(command: list[str], targets: list[str]) -> str:
+    return "\n".join(
+        [
+            "# HulunGuard Collector Service Templates",
+            "",
+            "These files are generated templates. Review paths, users, permissions, and host policy before installing them.",
+            "",
+            "Generated command:",
+            "",
+            "```text",
+            shlex.join(command),
+            "```",
+            "",
+            "Targets:",
+            *[f"- {target}" for target in targets],
+            "",
+            "The templates do not include authentication tokens. Keep the collector bound to loopback unless the host environment provides a private network boundary and a local token.",
+            "",
+        ]
+    )
+
+
+def collector_service_templates(
+    root: str | Path | None = None,
+    *,
+    output: str | Path | None = None,
+    target: str = "all",
+    python_executable: str = "python",
+    host: str = DEFAULT_COLLECTOR_HOST,
+    port: int = DEFAULT_COLLECTOR_PORT,
+    flush_interval_seconds: int = 5,
+    flush_limit: int = BATCH_FLUSH_LIMIT,
+    scan_on_flush: bool = True,
+    init_if_missing: bool = True,
+    force: bool = False,
+) -> dict[str, Any]:
+    root_path = _resolved_root(root)
+    if int(flush_interval_seconds) < 1:
+        raise CollectorError("collector service templates require --flush-interval-seconds >= 1.")
+    if int(flush_limit) < 1:
+        raise CollectorError("collector service templates require --flush-limit >= 1.")
+    if not _is_loopback_host(host):
+        raise CollectorError("collector service templates only generate loopback-bound commands because templates do not embed tokens.")
+    targets = list(SERVICE_TEMPLATE_TARGETS) if target == "all" else [target]
+    unknown = [value for value in targets if value not in SERVICE_TEMPLATE_TARGETS]
+    if unknown:
+        raise CollectorError(f"Unsupported collector service template target: {', '.join(unknown)}.")
+
+    output_dir = Path(output) if output else hulun_dir(root_path) / COLLECTOR_SERVICE_TEMPLATE_DIR
+    if not output_dir.is_absolute():
+        output_dir = root_path / output_dir
+    output_dir = output_dir.resolve()
+    command = _collector_service_command(
+        python_executable=python_executable,
+        root_path=root_path,
+        host=host,
+        port=port,
+        flush_interval_seconds=flush_interval_seconds,
+        flush_limit=flush_limit,
+        scan_on_flush=scan_on_flush,
+        init_if_missing=init_if_missing,
+    )
+    writers = {
+        "systemd": ("hulun-collector.service", _systemd_template(command, root_path)),
+        "launchd": ("dev.hulunguard.collector.plist", _launchd_template(command, root_path)),
+        "windows-task": ("Register-HulunCollectorTask.ps1", _windows_task_template(command, root_path)),
+    }
+    files: list[dict[str, str]] = []
+    for template_target in targets:
+        name, text = writers[template_target]
+        path = output_dir / name
+        _write_template(path, text, force=force)
+        files.append({"target": template_target, "path": str(path)})
+    readme_path = output_dir / "README.md"
+    _write_template(readme_path, _service_template_readme(command, targets), force=force)
+    files.append({"target": "readme", "path": str(readme_path)})
+    return {
+        "schema": COLLECTOR_SCHEMA,
+        "generated_at": utc_now(),
+        "operation": "service_template",
+        "root": str(root_path),
+        "output_dir": str(output_dir),
+        "target": target,
+        "targets": targets,
+        "command": command,
+        "files": files,
+        "gate": {"passed": True, "failure_count": 0, "failures": []},
+    }
 
 
 def _risk_markdown(risk: dict[str, Any]) -> str:
@@ -453,7 +781,7 @@ def start_collector_manager(config: CollectorConfig, runtime_state: CollectorRun
 
 def make_collector_handler(config: CollectorConfig, runtime_state: CollectorRuntimeState | None = None) -> type[BaseHTTPRequestHandler]:
     class HulunCollectorHandler(BaseHTTPRequestHandler):
-        server_version = "HulunGuardCollector/0.35"
+        server_version = "HulunGuardCollector/0.36"
 
         def log_message(self, format: str, *args: Any) -> None:
             return
@@ -526,7 +854,7 @@ def _smoke_payload() -> dict[str, Any]:
             {
                 "scopeSpans": [
                     {
-                        "scope": {"name": "hulun_guard.collector.smoke", "version": "0.34"},
+                        "scope": {"name": "hulun_guard.collector.smoke", "version": "0.36"},
                         "spans": [
                             {
                                 "traceId": "11111111111111111111111111111111",
