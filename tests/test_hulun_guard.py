@@ -497,6 +497,125 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertNotIn("alice@example.com", joined)
             self.assertNotIn("secret123", joined)
 
+    def test_ingest_openai_agents_trace_export_without_payload_leakage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "openai-agents-trace.json"
+            private_email = "alice" + "@" + "example.com"
+            private_marker = "private-marker-123"
+            private_value = "opaque-value-123"
+            sensitive_payload = f"prompt includes {private_marker} and {private_email}"
+            trace.write_text(
+                json.dumps(
+                    {
+                        "data": [
+                            {
+                                "object": "trace",
+                                "id": "trace_openai_agents",
+                                "workflow_name": "OpenAI Agents workflow",
+                                "group_id": "sample",
+                                "metadata": {"source": "test"},
+                            },
+                            {
+                                "object": "trace.span",
+                                "id": "span_generation",
+                                "trace_id": "trace_openai_agents",
+                                "parent_id": None,
+                                "started_at": "2026-01-01T00:00:00+00:00",
+                                "ended_at": "2026-01-01T00:00:00.500000+00:00",
+                                "span_data": {
+                                    "type": "generation",
+                                    "input": [{"role": "user", "content": sensitive_payload}],
+                                    "output": [{"role": "assistant", "content": f"answer includes {private_email}"}],
+                                    "model": "gpt-test",
+                                    "usage": {"input_tokens": 321, "output_tokens": 45},
+                                },
+                                "error": None,
+                            },
+                            {
+                                "object": "trace.span",
+                                "id": "span_guardrail",
+                                "trace_id": "trace_openai_agents",
+                                "parent_id": "span_generation",
+                                "started_at": "2026-01-01T00:00:01+00:00",
+                                "ended_at": "2026-01-01T00:00:01.100000+00:00",
+                                "span_data": {"type": "guardrail", "name": "sample_guardrail", "triggered": True},
+                                "error": {"message": f"guardrail failed for {private_email}", "data": {"marker": private_value}},
+                                "metadata": {
+                                    "hulun.event.summary": f"guardrail failed for {private_email}",
+                                    "hulun.event.result": "fail",
+                                    "hulun.event.phase": "verify",
+                                    "hulun.evidence.ids": ["E-openai"],
+                                },
+                            },
+                            {
+                                "object": "trace.span",
+                                "id": "span_function",
+                                "trace_id": "trace_openai_agents",
+                                "parent_id": "span_guardrail",
+                                "started_at": "2026-01-01T00:00:02+00:00",
+                                "ended_at": "2026-01-01T00:00:02.250000+00:00",
+                                "span_data": {
+                                    "type": "function",
+                                    "name": "pytest",
+                                    "input": {"command": "pytest", "marker": private_value},
+                                    "output": {"status": "failed"},
+                                },
+                                "error": {"message": f"tool failed for {private_email}", "data": {"marker": private_value}},
+                                "metadata": {
+                                    "hulun.event.summary": f"pytest failed for {private_email}",
+                                    "hulun.event.result": "fail",
+                                    "hulun.event.phase": "verify",
+                                    "hulun.action_key": "openai-check",
+                                    "hulun.evidence.ids": ["E-openai"],
+                                    "hulun.refs": ["https://trace.example/openai?id=abc&debug=opaque"],
+                                },
+                            },
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "init",
+                    "--objective",
+                    "import OpenAI Agents trace safely",
+                    "--criterion",
+                    "OpenAI Agents spans map to observations",
+                )[0],
+                0,
+            )
+
+            code, out = self.run_cli("--root", tmp, "ingest", "--file", str(trace), "--format", "openai-agents", "--include-events", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            events = payload["events"]
+            joined = json.dumps(events, ensure_ascii=False)
+            self.assertEqual(payload["imported"], 3)
+            self.assertEqual(events[0]["type"], "llm_call")
+            self.assertEqual(events[0]["source_platform"], "openai-agents")
+            self.assertEqual(events[0]["prompt_tokens"], 321)
+            self.assertEqual(events[0]["completion_tokens"], 45)
+            self.assertEqual(events[0]["latency_ms"], 500)
+            self.assertEqual(events[0]["model"], "gpt-test")
+            self.assertEqual(events[0]["refs"], ["openai-agents:trace:trace_openai_agents", "openai-agents:span:span_generation"])
+            self.assertEqual(events[1]["type"], "verification")
+            self.assertEqual(events[1]["result"], "fail")
+            self.assertEqual(events[1]["phase"], "verify")
+            self.assertEqual(events[2]["type"], "tool_result")
+            self.assertEqual(events[2]["result"], "fail")
+            self.assertEqual(events[2]["phase"], "verify")
+            self.assertEqual(events[2]["action_key"], "openai-check")
+            self.assertIn("E-openai", events[2]["evidence"])
+            self.assertIn("https://trace.example/openai", events[2]["refs"])
+            self.assertNotIn(sensitive_payload, joined)
+            self.assertNotIn(private_marker, joined)
+            self.assertNotIn(private_email, joined)
+            self.assertNotIn(private_value, joined)
+
     def test_ingest_openinference_spans_without_payload_leakage(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -986,7 +1105,7 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertNotIn("trajectories", doctor["calibration"])
             self.assertTrue(doctor["threat_model"]["gate"]["passed"])
             self.assertEqual(doctor["agent_compatibility"]["schema"], "hulun.agent_compatibility.v1")
-            self.assertGreaterEqual(doctor["agent_compatibility"]["direct_or_standard_count"], 13)
+            self.assertGreaterEqual(doctor["agent_compatibility"]["direct_or_standard_count"], 14)
             self.assertEqual(doctor["integration_kits"]["schema"], "hulun.integration_kit.v1")
             self.assertTrue(doctor["integration_kits"]["gate"]["passed"])
             self.assertGreaterEqual(doctor["integration_kits"]["kit_count"], 15)
@@ -1038,7 +1157,7 @@ class HulunGuardCliTest(unittest.TestCase):
         payload = json.loads(out)
         self.assertEqual(payload["schema"], "hulun.agent_compatibility.v1")
         self.assertGreaterEqual(payload["entry_count"], 15)
-        self.assertGreaterEqual(payload["direct_or_standard_count"], 13)
+        self.assertGreaterEqual(payload["direct_or_standard_count"], 14)
         agents = {item["id"]: item for item in payload["agents"]}
         for required in [
             "openhands",
@@ -1062,7 +1181,8 @@ class HulunGuardCliTest(unittest.TestCase):
         self.assertEqual(agents["openhands"]["ingest_format"], "openhands")
         self.assertEqual(agents["langgraph"]["ingest_format"], "langgraph")
         self.assertEqual(agents["autogen"]["ingest_format"], "opentelemetry")
-        self.assertEqual(agents["openai-agents-sdk"]["ingest_format"], "generic")
+        self.assertEqual(agents["openai-agents-sdk"]["category"], "direct-adapter")
+        self.assertEqual(agents["openai-agents-sdk"]["ingest_format"], "openai-agents")
 
     def test_integration_kit_generates_verified_agent_package(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1144,7 +1264,7 @@ class HulunGuardCliTest(unittest.TestCase):
             agent_ids = {kit["agent"]["id"] for kit in payload["kits"]}
             self.assertIn("openai-agents-sdk", agent_ids)
             self.assertIn("semantic-kernel", agent_ids)
-            self.assertTrue((output / "openai-agents-sdk" / "sample-events.jsonl").exists())
+            self.assertTrue((output / "openai-agents-sdk" / "sample-openai-agents-trace.json").exists())
             self.assertTrue((output / "semantic-kernel" / "sample-otlp.json").exists())
 
     def test_integration_kit_refuses_overwrite_without_force(self) -> None:
@@ -1546,6 +1666,38 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertEqual(payload["observation_count"], 1)
             self.assertTrue(payload["gate"]["passed"], payload["gate"]["failures"])
             self.assertIn("--format opentelemetry", payload["next_command"])
+            self.assertFalse((root / ".hulun" / "state.json").exists())
+
+    def test_trace_doctor_detects_openai_agents_trace_export(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "openai-agents-trace.json"
+            trace.write_text(
+                json.dumps(
+                    {
+                        "data": [
+                            {"object": "trace", "id": "trace_openai", "workflow_name": "workflow"},
+                            {
+                                "object": "trace.span",
+                                "id": "span_openai",
+                                "trace_id": "trace_openai",
+                                "span_data": {"type": "generation", "model": "gpt-test", "usage": {"input_tokens": 10, "output_tokens": 2}},
+                                "error": None,
+                            },
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            code, out = self.run_cli("--root", tmp, "trace-doctor", "--file", str(trace), "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["detected_format"], "openai-agents")
+            self.assertEqual(payload["selected_format"], "openai-agents")
+            self.assertEqual(payload["observation_count"], 1)
+            self.assertTrue(payload["gate"]["passed"], payload["gate"]["failures"])
+            self.assertIn("--format openai-agents", payload["next_command"])
             self.assertFalse((root / ".hulun" / "state.json").exists())
 
     def test_trace_doctor_reports_invalid_json_without_persisting(self) -> None:

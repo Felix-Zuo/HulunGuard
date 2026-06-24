@@ -39,6 +39,7 @@ The adapter conformance test covers:
 - `ingest --format langsmith`
 - `ingest --format langfuse`
 - `ingest --format phoenix`
+- `ingest --format openai-agents`
 
 Each surface must be able to record the contract event, redact sensitive payloads by default, write `.hulun/risk.json` when scan is requested, and reject malformed SDK/MCP payloads without silently persisting a bad event.
 
@@ -50,7 +51,7 @@ Integration coverage is defined in `docs/ADAPTER_MATRIX.md`. The conformance tes
 
 | Tier | Surfaces | Gate |
 | --- | --- | --- |
-| integration-tested | OpenTelemetry, OpenInference, OpenHands-like, SWE-agent-like | `python -m hulun_guard adapter-matrix --json` |
+| integration-tested | OpenTelemetry, OpenInference, OpenHands-like, SWE-agent-like, OpenAI Agents SDK | `python -m hulun_guard adapter-matrix --json` |
 | hosted-fixture-tested | LangGraph, LangSmith, Langfuse, Phoenix | Synthetic public-safe hosted platform fixture shapes |
 | roundtrip-tested | OpenTelemetry, OpenInference, Langfuse, Phoenix | Import to persisted events to OTLP export to OTLP re-import |
 | conformance | CLI, Python SDK, MCP, generic JSON | `tests/test_adapter_conformance.py` |
@@ -74,6 +75,22 @@ OpenTelemetry and OpenInference imports recognize these Hulun-compatible attribu
 | `hulun.latency_ms` | `latency_ms` |
 
 Generic GenAI fields such as `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.request.model`, `llm.token_count.prompt`, `llm.token_count.completion`, and `llm.model_name` are also mapped when present.
+
+## OpenAI Agents SDK Fields
+
+OpenAI Agents SDK imports recognize exported `trace.span` payloads with these fields:
+
+| Field | Maps to |
+| --- | --- |
+| `span_data.type` | runtime event type inference |
+| `span_data.name` or `span_data.data.sdk_span_type` | summary and phase inference |
+| `span_data.model` | `model` |
+| `span_data.usage.input_tokens` | `prompt_tokens` |
+| `span_data.usage.output_tokens` | `completion_tokens` |
+| `started_at` and `ended_at` | `latency_ms` |
+| `error` | failed result and recovery signal |
+| `id` and `trace_id` | refs and fallback action key |
+| `metadata.hulun.*` | explicit HulunGuard event fields when provided |
 
 ## Privacy Contract
 

@@ -418,6 +418,33 @@ def _iter_telemetry_spans(path: Path) -> Iterator[dict[str, Any]]:
     yield from _iter_spans_from_payload(json.loads(path.read_text(encoding="utf-8-sig")))
 
 
+def _iter_openai_agents_payload(payload: Any) -> Iterator[dict[str, Any]]:
+    if isinstance(payload, list):
+        for item in payload:
+            yield from _iter_openai_agents_payload(item)
+        return
+    if not isinstance(payload, dict):
+        return
+    span_data = payload.get("span_data")
+    if payload.get("object") == "trace.span" or (isinstance(span_data, dict) and (payload.get("trace_id") or payload.get("id"))):
+        yield payload
+        return
+    for key in ("data", "items", "spans", "events", "trace", "traces"):
+        value = payload.get(key)
+        if isinstance(value, (dict, list)):
+            yield from _iter_openai_agents_payload(value)
+
+
+def _iter_openai_agents_spans(path: Path) -> Iterator[dict[str, Any]]:
+    if path.suffix.lower() in {".jsonl", ".ndjson"}:
+        with path.open("r", encoding="utf-8-sig") as handle:
+            for line in handle:
+                if line.strip():
+                    yield from _iter_openai_agents_payload(json.loads(line))
+        return
+    yield from _iter_openai_agents_payload(json.loads(path.read_text(encoding="utf-8-sig")))
+
+
 def _normalize_phase(value: Any, text: str) -> str | None:
     phase = _as_text(value).strip().lower().replace("-", "_")
     aliases = {
@@ -618,6 +645,187 @@ def normalize_langsmith(item: dict[str, Any], *, include_sensitive: bool = False
     }
 
 
+def _openai_agents_span_data(item: dict[str, Any]) -> dict[str, Any]:
+    span_data = item.get("span_data")
+    return span_data if isinstance(span_data, dict) else {}
+
+
+def _openai_agents_data(span_data: dict[str, Any]) -> dict[str, Any]:
+    data = span_data.get("data")
+    return data if isinstance(data, dict) else {}
+
+
+def _openai_agents_sources(item: dict[str, Any], span_data: dict[str, Any]) -> list[dict[str, Any]]:
+    data = _openai_agents_data(span_data)
+    metadata = item.get("metadata")
+    span_metadata = span_data.get("metadata")
+    sources: list[dict[str, Any]] = []
+    for value in (metadata, span_metadata, data, span_data, item):
+        if isinstance(value, dict):
+            sources.append(value)
+    return sources
+
+
+def _first_source_value(sources: list[dict[str, Any]], keys: list[str]) -> Any:
+    for source in sources:
+        for key in keys:
+            value = source.get(key)
+            if value not in (None, ""):
+                return value
+    return None
+
+
+def _openai_agents_span_type(span_data: dict[str, Any]) -> str:
+    raw = _as_text(span_data.get("type")).strip().lower()
+    data = _openai_agents_data(span_data)
+    sdk_span_type = _as_text(data.get("sdk_span_type")).strip().lower()
+    if raw == "custom" and sdk_span_type:
+        return sdk_span_type
+    return raw or sdk_span_type or "span"
+
+
+def _openai_agents_error_text(item: dict[str, Any]) -> str:
+    error = item.get("error")
+    if not error:
+        return ""
+    if isinstance(error, dict):
+        return _first_text(error, ["message", "type", "code", "data"]) or _as_text(error)
+    return _as_text(error)
+
+
+def _openai_agents_duration_ms(item: dict[str, Any]) -> int | None:
+    start = parse_time(item.get("started_at"))
+    end = parse_time(item.get("ended_at"))
+    if start is None or end is None or end < start:
+        return None
+    return int((end - start).total_seconds() * 1000)
+
+
+def _openai_agents_event_type(span_type: str, result: str, sources: list[dict[str, Any]]) -> str:
+    explicit_type = _as_text(_first_source_value(sources, ["hulun.event.type", "hulun.type", "event_type"])).strip()
+    if explicit_type:
+        return explicit_type
+    if span_type == "guardrail":
+        return "verification"
+    if span_type == "handoff":
+        return "handoff"
+    if result == "fail":
+        return "agent_error" if span_type in {"agent", "task", "turn"} else "tool_result"
+    if span_type in {"generation", "response"}:
+        return "llm_call"
+    if span_type in {"function", "mcp_list_tools", "mcp_tools", "tool"}:
+        return "tool_result"
+    if span_type in {"agent", "task", "turn"}:
+        return "command"
+    return "observation"
+
+
+def _openai_agents_summary(
+    item: dict[str, Any],
+    span_data: dict[str, Any],
+    span_type: str,
+    error_text: str,
+    sources: list[dict[str, Any]],
+    *,
+    include_sensitive: bool,
+) -> str:
+    explicit = _first_source_value(sources, ["hulun.event.summary", "hulun.summary", "summary"])
+    if explicit not in (None, ""):
+        return redact_text(explicit, include_sensitive=include_sensitive)
+    if error_text:
+        return redact_text(error_text, include_sensitive=include_sensitive)
+    if include_sensitive:
+        raw = _first_source_value(sources, ["input", "output", "response", "arguments", "result"])
+        if raw not in (None, ""):
+            return redact_text(raw, include_sensitive=True)
+    name = _as_text(_first_source_value(sources, ["name", "workflow_name"]) or span_type).strip()
+    model = _as_text(_first_source_value(sources, ["model"])).strip()
+    parts = ["OpenAI Agents SDK span", span_type]
+    if name:
+        parts.append(f"name={redact_text(name, include_sensitive=include_sensitive)}")
+    if model:
+        parts.append(f"model={redact_text(model, include_sensitive=include_sensitive)}")
+    trace_id = _as_text(item.get("trace_id")).strip()
+    if trace_id:
+        parts.append(f"trace={redact_text(trace_id, include_sensitive=include_sensitive)}")
+    return "; ".join(parts)
+
+
+def normalize_openai_agents(item: dict[str, Any], *, include_sensitive: bool = False) -> Observation:
+    span_data = _openai_agents_span_data(item)
+    span_type = _openai_agents_span_type(span_data)
+    data = _openai_agents_data(span_data)
+    sources = _openai_agents_sources(item, span_data)
+    error_text = _openai_agents_error_text(item)
+    explicit_result = _explicit_result(_first_source_value(sources, ["hulun.event.result", "hulun.result", "result"]))
+    triggered = bool(_first_source_value(sources, ["triggered", "guardrail_triggered"]))
+    summary_seed = " ".join(
+        [
+            _as_text(_first_source_value(sources, ["name", "summary", "workflow_name"])),
+            _as_text(error_text),
+            _as_text(_first_source_value(sources, ["output", "result"])),
+        ]
+    )
+    if explicit_result:
+        result = explicit_result
+    elif error_text or (span_type == "guardrail" and triggered):
+        result = "fail"
+    else:
+        result = _result_from_text(summary_seed, default="pass")
+
+    event_type = _openai_agents_event_type(span_type, result, sources)
+    summary = _openai_agents_summary(item, span_data, span_type, error_text, sources, include_sensitive=include_sensitive)
+    usage = _first_source_value(sources, ["usage"])
+    usage = usage if isinstance(usage, dict) else {}
+    trace_id = _as_text(item.get("trace_id")).strip()
+    span_id = _as_text(item.get("id") or item.get("span_id")).strip()
+    refs = _list_from_value(_first_source_value(sources, ["hulun.refs", "hulun.event.refs", "refs", "ref"]))
+    if trace_id:
+        refs.append(f"openai-agents:trace:{trace_id}")
+    if span_id:
+        refs.append(f"openai-agents:span:{span_id}")
+
+    claims = _list_from_value(_first_source_value(sources, ["hulun.claims", "hulun.event.claims", "claims", "claim"]))
+    evidence = _list_from_value(_first_source_value(sources, ["hulun.evidence.ids", "hulun.event.evidence", "evidence"]))
+    action_key = _explicit_action_key(_first_source_value(sources, ["hulun.action_key", "hulun.event.action_key", "action_key"]), include_sensitive=include_sensitive)
+    if not action_key and span_id:
+        action_key = f"openai-agents:{redact_text(span_id, include_sensitive=include_sensitive)}"
+    if not action_key:
+        action_key = fingerprint_text(f"{trace_id}:{span_type}:{summary}", prefix="openai-agents")
+
+    prompt_tokens = _coerce_int(_first_source_value(sources, ["prompt_tokens", "input_tokens"])) or _coerce_int(usage.get("input_tokens") or usage.get("prompt_tokens"))
+    completion_tokens = _coerce_int(_first_source_value(sources, ["completion_tokens", "output_tokens"])) or _coerce_int(
+        usage.get("output_tokens") or usage.get("completion_tokens")
+    )
+    phase_text = " ".join([span_type, summary, _as_text(data.get("sdk_span_type"))])
+    phase = _normalize_phase(_first_source_value(sources, ["hulun.event.phase", "hulun.phase", "phase"]), phase_text)
+    if not phase:
+        if result == "fail":
+            phase = "recover"
+        elif event_type == "verification":
+            phase = "verify"
+        elif event_type in {"llm_call", "handoff", "command"}:
+            phase = "orchestrate"
+
+    return {
+        "type": event_type,
+        "summary": summary,
+        "result": result,
+        "phase": phase,
+        "claims": redact_list(claims, include_sensitive=include_sensitive),
+        "evidence": [str(eid).strip() for eid in evidence if str(eid).strip()],
+        "refs": redact_refs(refs, include_sensitive=include_sensitive),
+        "resolved": None,
+        "source_platform": "openai-agents",
+        "action_key": action_key,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "cost": _coerce_float(_first_source_value(sources, ["hulun.cost", "cost"])),
+        "latency_ms": _coerce_int(_first_source_value(sources, ["hulun.latency_ms", "latency_ms"])) or _openai_agents_duration_ms(item),
+        "model": _as_text(_first_source_value(sources, ["model", "gen_ai.request.model"])).strip() or None,
+    }
+
+
 def validate_trace_file(path: str | Path, *, max_trace_bytes: int = MAX_TRACE_BYTES) -> Path:
     trace_path = Path(path)
     if not trace_path.exists():
@@ -653,6 +861,8 @@ def iter_observations(
             fmt = "langgraph"
         elif "langsmith" in lowered:
             fmt = "langsmith"
+        elif "openai" in lowered and "agent" in lowered:
+            fmt = "openai-agents"
         elif "langfuse" in lowered:
             fmt = "langfuse"
         elif "phoenix" in lowered:
@@ -678,12 +888,17 @@ def iter_observations(
         "langsmith": normalize_langsmith,
         "langfuse": normalize_langfuse,
         "phoenix": normalize_phoenix,
+        "openai-agents": normalize_openai_agents,
     }
     if fmt not in normalizers:
         raise SystemExit(f"Unsupported trace format: {source_format}")
     normalizer = normalizers[fmt]
     if fmt in {"opentelemetry", "openinference", "langfuse", "phoenix"}:
         for span in _iter_telemetry_spans(trace_path):
+            yield normalizer(span, include_sensitive=include_sensitive)
+        return
+    if fmt == "openai-agents":
+        for span in _iter_openai_agents_spans(trace_path):
             yield normalizer(span, include_sensitive=include_sensitive)
         return
     for item in _iter_items(trace_path):

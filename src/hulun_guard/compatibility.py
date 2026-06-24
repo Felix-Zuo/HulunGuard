@@ -141,12 +141,12 @@ AGENT_COMPATIBILITY: tuple[dict[str, Any], ...] = (
     {
         "id": "openai-agents-sdk",
         "name": "OpenAI Agents SDK",
-        "category": "bridge",
-        "tier": "generic-bridge",
-        "ingest_format": "generic",
-        "command": "python -m hulun_guard ingest --format generic --file openai-agents-events.jsonl --scan",
+        "category": "direct-adapter",
+        "tier": "integration-tested",
+        "ingest_format": "openai-agents",
+        "command": "python -m hulun_guard ingest --format openai-agents --file openai-agents-trace.json --scan",
         "source_uri": "https://openai.github.io/openai-agents-python/tracing/",
-        "guarantee": "OpenAI Agents SDK traces can be bridged through generic JSON/JSONL events or through a tracing processor that emits OTLP JSON.",
+        "guarantee": "OpenAI Agents SDK trace/span exports are fixture-tested through the native openai-agents adapter.",
     },
     {
         "id": "custom-agent",

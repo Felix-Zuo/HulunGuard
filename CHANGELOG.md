@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.31.0 - 2026-06-24
+
+- Added the `openai-agents` trace adapter for OpenAI Agents SDK trace/span export payloads.
+- Promoted OpenAI Agents SDK from generic bridge support to an integration-tested direct adapter in compatibility, trace doctor, onboarding, and integration kits.
+- Added OpenAI Agents SDK coverage to `adapter-matrix` and documented the native field mapping and release gate.
+
 ## 0.30.0 - 2026-06-23
 
 - Added `trace-doctor` for safe pre-import trace diagnostics across supported agent formats.

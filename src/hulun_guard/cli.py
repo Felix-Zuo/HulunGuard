@@ -642,7 +642,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         add_check("threat_model", threat_model_status, f"{len(threat_model['checks'])} checks.")
         compatibility = compatibility_report()
         payload["agent_compatibility"] = compatibility
-        compatibility_status = "ok" if compatibility["direct_or_standard_count"] >= 13 else "error"
+        compatibility_status = "ok" if compatibility["direct_or_standard_count"] >= 14 else "error"
         add_check("agent_compatibility", compatibility_status, f"{compatibility['entry_count']} entries.")
         with tempfile.TemporaryDirectory() as tmp:
             integration_kits = generate_integration_kits("all", Path(tmp), force=True, verify=True)
@@ -1693,7 +1693,19 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--file", required=True, help="JSON or JSONL trace file to import.")
     ingest.add_argument(
         "--format",
-        choices=["auto", "generic", "opentelemetry", "openinference", "openhands", "swe-agent", "langgraph", "langsmith", "langfuse", "phoenix"],
+        choices=[
+            "auto",
+            "generic",
+            "opentelemetry",
+            "openinference",
+            "openhands",
+            "swe-agent",
+            "langgraph",
+            "langsmith",
+            "langfuse",
+            "phoenix",
+            "openai-agents",
+        ],
         default="auto",
     )
     ingest.add_argument("--max-trace-bytes", type=int, default=MAX_TRACE_BYTES, help=f"Reject trace files larger than this many bytes. Defaults to {MAX_TRACE_BYTES}.")

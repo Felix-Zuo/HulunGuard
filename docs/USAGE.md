@@ -106,6 +106,7 @@ python .\hulun.py ingest --file .\langgraph-stream.json --format langgraph --sca
 python .\hulun.py ingest --file .\langsmith-runs.json --format langsmith --scan
 python .\hulun.py ingest --file .\langfuse-otel.json --format langfuse --scan
 python .\hulun.py ingest --file .\phoenix-openinference.json --format phoenix --scan
+python .\hulun.py ingest --file .\openai-agents-trace.json --format openai-agents --scan
 ```
 
 For first-run onboarding in an empty project, allow ingest to create a minimal ledger:
@@ -125,6 +126,7 @@ Supported formats:
 - `langsmith`: maps run exports into LLM calls, tool results, sources, commands, and agent errors.
 - `langfuse`: maps Langfuse OTEL traces through the OpenTelemetry adapter while preserving `source_platform=langfuse`.
 - `phoenix`: maps Phoenix/OpenInference spans through the OpenInference adapter while preserving `source_platform=phoenix`.
+- `openai-agents`: maps OpenAI Agents SDK trace/span exports into LLM calls, tool results, handoffs, guardrails, commands, and agent errors.
 - `auto`: guesses from the filename.
 
 Adapter compatibility guarantees are documented in `docs/ADAPTER_CONFORMANCE.md`. Integration-tested adapter tiers are documented in `docs/ADAPTER_MATRIX.md`.

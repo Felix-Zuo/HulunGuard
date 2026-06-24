@@ -13,6 +13,7 @@ Generate one kit:
 
 ```powershell
 python -m hulun_guard integration-kit --agent langgraph --verify
+python -m hulun_guard integration-kit --agent openai-agents-sdk --verify
 ```
 
 Generate and verify every supported kit:
