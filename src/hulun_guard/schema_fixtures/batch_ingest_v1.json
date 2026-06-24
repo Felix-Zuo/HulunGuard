@@ -1,0 +1,23 @@
+{
+  "schema": "hulun.batch_ingest.v1",
+  "generated_at": "2026-06-24T00:00:00+00:00",
+  "operation": "flush",
+  "root": "/tmp/hulun",
+  "requested_limit": 500,
+  "imported": 2,
+  "first_event_id": "EV2",
+  "last_event_id": "EV3",
+  "dead_lettered": 0,
+  "queue": {
+    "path": "/tmp/hulun/.hulun/ingest_queue.jsonl",
+    "pending": 0,
+    "bytes": 0,
+    "oldest_queued_at": null,
+    "newest_queued_at": null,
+    "parse_error_count": 0
+  },
+  "dead_letter": {
+    "path": "/tmp/hulun/.hulun/ingest_dead_letter.jsonl",
+    "records": 0
+  }
+}

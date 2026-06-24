@@ -45,6 +45,12 @@ jobs:
         run: python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json
       - name: HulunGuard adapter matrix
         run: python -m hulun_guard adapter-matrix --json
+      - name: HulunGuard batched ingestion smoke
+        run: |
+          tmp="$(mktemp -d)"
+          python -m hulun_guard --root "$tmp" batch enqueue --type tool_result --phase verify --summary "batch smoke passed" --result pass --json
+          python -m hulun_guard --root "$tmp" batch status --json
+          python -m hulun_guard --root "$tmp" batch flush --scan --init-if-missing --json
       - name: HulunGuard trace doctor
         run: |
           printf '%s\n' '{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass","action_key":"pytest","refs":["command:pytest"]}' > trace-doctor-sample.jsonl

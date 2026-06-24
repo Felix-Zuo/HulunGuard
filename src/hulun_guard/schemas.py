@@ -35,6 +35,7 @@ MONITOR_SCHEMA = "hulun.monitor.v1"
 THREAT_MODEL_CHECK_SCHEMA = "hulun.threat_model_check.v1"
 GITHUB_RELEASE_VERIFICATION_SCHEMA = "hulun.github_release_verification.v1"
 TRACE_DOCTOR_SCHEMA = "hulun.trace_doctor.v1"
+BATCH_INGEST_SCHEMA = "hulun.batch_ingest.v1"
 DEFAULT_SCHEMA_FIXTURE_DIR = Path(__file__).with_name("schema_fixtures")
 RISK_WEIGHTS = {
     "evidence_gap": 20,
@@ -152,6 +153,11 @@ SUPPORTED_PUBLIC_SCHEMAS: dict[str, dict[str, Any]] = {
         "current": TRACE_DOCTOR_SCHEMA,
         "supported": [TRACE_DOCTOR_SCHEMA],
         "promise": "Trace doctor reports preserve file, detected format, selected format, observation counts, field coverage, warnings, next command, and gate fields.",
+    },
+    "batch_ingest": {
+        "current": BATCH_INGEST_SCHEMA,
+        "supported": [BATCH_INGEST_SCHEMA],
+        "promise": "Batched ingestion reports preserve operation, queue status, imported counts, event ids, and dead-letter counts.",
     },
 }
 
@@ -505,6 +511,9 @@ def infer_fixture_kind(path: Path, payload: dict[str, Any]) -> str:
         ("release_verification", "github_release_verification"),
         ("trace_doctor", "trace_doctor"),
         ("trace_diagnostic", "trace_doctor"),
+        ("batch_ingest", "batch_ingest"),
+        ("batched_ingest", "batch_ingest"),
+        ("ingest_queue", "batch_ingest"),
         ("adapter_matrix", "adapter_matrix"),
         ("adapter_export", "export_opentelemetry"),
         ("opentelemetry", "export_opentelemetry"),

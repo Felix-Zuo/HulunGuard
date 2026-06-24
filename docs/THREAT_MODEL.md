@@ -111,6 +111,7 @@ This protects against path traversal, symlink escape, and accidental deletion of
 | Generated report accidentally enters a release | Release asset policy excludes `.hulun/`, traces, credentials, customer logs, and private screenshots. |
 | Future public JSON schema is guessed incorrectly | `schema-check` rejects unsupported future schema majors. |
 | Adapter writes malformed runtime fields | SDK and MCP validation reject invalid phase/result values without persisting bad events. |
+| Batched ingestion queue contains malformed records | `batch flush` moves malformed queue records to `.hulun/ingest_dead_letter.jsonl` and continues flushing valid records. |
 | Desktop monitor leaks to a remote service | Monitor state is local JSON/HTML; remote exposure only occurs if the user or host publishes it. |
 
 ## Safe Usage Modes
@@ -121,6 +122,8 @@ Use default mode for normal work:
 python -m hulun_guard ingest --file .\trace.jsonl --scan
 python -m hulun_guard trace-doctor --file .\trace.jsonl --json
 python -m hulun_guard observe --type tool_result --summary "pytest passed" --scan
+python -m hulun_guard batch enqueue --type tool_result --summary "pytest passed"
+python -m hulun_guard batch flush --scan
 ```
 
 Use sensitive mode only in a trusted local working copy:

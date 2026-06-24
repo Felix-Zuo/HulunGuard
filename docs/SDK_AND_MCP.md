@@ -31,10 +31,31 @@ observed = client.observe(
 print(observed["risk"]["slop_index"])
 ```
 
+For high-frequency emitters, queue first and flush in bounded batches:
+
+```python
+client.enqueue(
+    event_type="tool_result",
+    phase="verify",
+    summary="pytest passed",
+    result="pass",
+    source_platform="my-agent",
+)
+
+print(client.queue_status()["queue"]["pending"])
+
+flushed = client.flush_queue(limit=500, scan=True)
+print(flushed["risk"]["slop_index"])
+```
+
 ### Project Methods
 
 - `init(objective, criteria=None, constraints=None, assumptions=None, threshold=66, force=False)`: create `.hulun/state.json`.
 - `observe(event_type, summary, ..., scan=False)`: record a project observation.
+- `enqueue(event_type, summary, ...)`: append one normalized observation to the durable local batch queue.
+- `enqueue_trace_file(file, source_format="auto", source_platform=None, max_trace_bytes=None)`: parse a supported trace file and queue normalized observations.
+- `queue_status()`: report pending queue records, queue bytes, parse errors, and dead letters.
+- `flush_queue(limit=500, scan=False, init_if_missing=False, ...)`: move queued observations into the project ledger and optionally recompute risk.
 - `scan(threshold=None, final_attempt=False, checkpoint_stale_minutes=45)`: recompute project HulunIndex.
 - `load_state()`: return the current project ledger.
 
@@ -100,6 +121,9 @@ Available tools:
 - `hulun_project_init`: initialize a project ledger.
 - `hulun_observe`: record a project observation and optionally scan.
 - `hulun_scan`: scan the project ledger.
+- `hulun_batch_enqueue`: append one observation to the durable batch queue.
+- `hulun_batch_status`: inspect pending queue records and dead letters.
+- `hulun_batch_flush`: flush queued observations into the project ledger and optionally scan.
 - `hulun_conversation_start`: start a live conversation monitor.
 - `hulun_conversation_event`: record a live conversation event.
 - `hulun_conversation_scan`: scan a live conversation.

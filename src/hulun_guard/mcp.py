@@ -101,6 +101,55 @@ class HulunMCPServer:
                 ),
             },
             {
+                "name": "hulun_batch_enqueue",
+                "title": "Queue HulunGuard Observation",
+                "description": "Append one runtime observation to the durable batch queue without opening the project ledger.",
+                "inputSchema": _schema(
+                    {
+                        "type": _string("Event type, such as tool_result, llm_call, final_attempt, evidence, or summary."),
+                        "summary": _string("Short observation summary. Sensitive text is redacted unless the server was started with --include-sensitive."),
+                        "result": _string("pass, fail, or unknown."),
+                        "phase": _string("explore, plan, implement, verify, recover, summarize, final, or orchestrate."),
+                        "claims": _string_array("Completion or verification claims made by the agent."),
+                        "evidence": _string_array("Evidence ids that support this observation."),
+                        "refs": _string_array("Paths, URLs, trace ids, or command references."),
+                        "resolved": _boolean("Whether this event resolves a previous failure or pending action."),
+                        "source_platform": _string("Adapter source, such as codex, langgraph, openhands, swe-agent, or mcp."),
+                        "action_key": _string("Stable action fingerprint for retry-loop detection."),
+                        "prompt_tokens": _integer("Prompt token count."),
+                        "completion_tokens": _integer("Completion token count."),
+                        "cost": _number("Model cost in the caller's currency unit."),
+                        "latency_ms": _integer("Latency in milliseconds."),
+                        "model": _string("Model name."),
+                    },
+                    ["type", "summary"],
+                ),
+            },
+            {
+                "name": "hulun_batch_status",
+                "title": "Inspect HulunGuard Batch Queue",
+                "description": "Report pending queue records, queue bytes, parse errors, and dead letters.",
+                "inputSchema": _schema({}),
+            },
+            {
+                "name": "hulun_batch_flush",
+                "title": "Flush HulunGuard Batch Queue",
+                "description": "Move queued observations into the project ledger in a bounded batch and optionally rescan the HulunIndex.",
+                "inputSchema": _schema(
+                    {
+                        "limit": _integer("Maximum queued observations to flush."),
+                        "scan": _boolean("Recalculate project HulunIndex after flushing."),
+                        "threshold": _integer("Optional blocking threshold."),
+                        "final_attempt": _boolean("Whether the scan is gating a final answer."),
+                        "checkpoint_stale_minutes": _integer("Minutes before checkpoint evidence is considered stale."),
+                        "init_if_missing": _boolean("Create a minimal project ledger before flushing if no state exists."),
+                        "init_objective": _string("Objective used with init_if_missing."),
+                        "init_criterion": _string("Criterion used with init_if_missing."),
+                        "init_threshold": _integer("Risk threshold used with init_if_missing."),
+                    }
+                ),
+            },
+            {
                 "name": "hulun_conversation_start",
                 "title": "Start HulunGuard Conversation",
                 "description": "Start a live conversation runtime monitor.",
@@ -224,6 +273,41 @@ class HulunMCPServer:
                 threshold=arguments.get("threshold"),
                 final_attempt=bool(arguments.get("final_attempt")),
                 checkpoint_stale_minutes=int(arguments.get("checkpoint_stale_minutes") or 45),
+            )
+            return self._tool_result(payload)
+        if name == "hulun_batch_enqueue":
+            payload = self.client.enqueue(
+                event_type=str(arguments["type"]),
+                summary=str(arguments["summary"]),
+                result=str(arguments.get("result") or "pass"),
+                phase=arguments.get("phase"),
+                claims=arguments.get("claims"),
+                evidence=arguments.get("evidence"),
+                refs=arguments.get("refs"),
+                resolved=arguments.get("resolved"),
+                source_platform=arguments.get("source_platform") or "mcp",
+                action_key=arguments.get("action_key"),
+                prompt_tokens=arguments.get("prompt_tokens"),
+                completion_tokens=arguments.get("completion_tokens"),
+                cost=arguments.get("cost"),
+                latency_ms=arguments.get("latency_ms"),
+                model=arguments.get("model"),
+            )
+            return self._tool_result(payload)
+        if name == "hulun_batch_status":
+            payload = self.client.queue_status()
+            return self._tool_result(payload)
+        if name == "hulun_batch_flush":
+            payload = self.client.flush_queue(
+                limit=int(arguments.get("limit") or 500),
+                scan=bool(arguments.get("scan")),
+                threshold=arguments.get("threshold"),
+                final_attempt=bool(arguments.get("final_attempt")),
+                checkpoint_stale_minutes=int(arguments.get("checkpoint_stale_minutes") or 45),
+                init_if_missing=bool(arguments.get("init_if_missing")),
+                init_objective=arguments.get("init_objective"),
+                init_criterion=arguments.get("init_criterion"),
+                init_threshold=int(arguments.get("init_threshold") or 66),
             )
             return self._tool_result(payload)
         if name == "hulun_conversation_start":
