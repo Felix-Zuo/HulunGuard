@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.0 - 2026-06-25
+
+- Added `collector alert-rules` to generate reviewed Prometheus alerting rule files for collector health and HulunIndex risk signals.
+- Added overwrite safety, configurable queue/staleness/risk thresholds, and generated deployment notes for alert-rule output.
+- Extended collector tests, CI, release gates, installed-wheel smoke checks, docs, and schema fixture coverage for alert-rule generation.
+
 ## 0.37.0 - 2026-06-25
 
 - Added Prometheus metrics export through `collector metrics` and `GET /metrics`.

@@ -181,6 +181,60 @@ class CollectorTest(unittest.TestCase):
             self.assertIn("# HELP hulun_collector_up", out)
             self.assertIn("hulun_collector_up 1", out)
 
+    def test_collector_alert_rules_generates_prometheus_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "alert-rules"
+            code, out = self.run_cli(
+                "--root",
+                tmp,
+                "collector",
+                "alert-rules",
+                "--output",
+                str(output_dir),
+                "--queue-pending-threshold",
+                "42",
+                "--status-stale-seconds",
+                "90",
+                "--risk-red-threshold",
+                "70",
+                "--force",
+                "--json",
+            )
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["operation"], "alert_rules")
+            self.assertEqual(payload["format"], "prometheus-rule-yaml")
+            self.assertEqual(payload["thresholds"]["queue_pending"], 42)
+            self.assertEqual(payload["thresholds"]["status_stale_seconds"], 90)
+            self.assertEqual(payload["thresholds"]["risk_red"], 70)
+            self.assertTrue(payload["gate"]["passed"])
+            rule_file = output_dir / "hulunguard-collector.rules.yml"
+            readme_file = output_dir / "README.md"
+            self.assertTrue(rule_file.exists())
+            self.assertTrue(readme_file.exists())
+            rule_text = rule_file.read_text(encoding="utf-8")
+            self.assertIn("groups:", rule_text)
+            self.assertIn('name: "hulunguard-collector"', rule_text)
+            self.assertIn('alert: "HulunCollectorGateFailing"', rule_text)
+            self.assertIn('alert: "HulunCollectorQueueBacklog"', rule_text)
+            self.assertIn('expr: "hulun_collector_queue_pending > 42"', rule_text)
+            self.assertIn('expr: "hulun_collector_status_file_stale == 1 or hulun_collector_status_file_age_seconds > 90"', rule_text)
+            self.assertIn('expr: "hulun_collector_risk_score >= 70"', rule_text)
+            self.assertNotIn(str(Path(tmp)), rule_text)
+            self.assertIn("promtool check rules", readme_file.read_text(encoding="utf-8"))
+
+    def test_collector_alert_rules_refuses_overwrite_without_force(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.run_cli("--root", tmp, "collector", "alert-rules", "--json")
+            self.assertEqual(code, 0, out)
+
+            code, out = self.run_cli("--root", tmp, "collector", "alert-rules", "--json")
+            self.assertEqual(code, 2, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["operation"], "alert_rules")
+            self.assertFalse(payload["gate"]["passed"])
+            self.assertIn("Refusing to overwrite", payload["gate"]["failures"][0])
+
     def test_collector_service_template_generates_cross_platform_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             output_dir = Path(tmp) / "service-templates"

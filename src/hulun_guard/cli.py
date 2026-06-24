@@ -33,6 +33,7 @@ from .collector import (
     CollectorError,
     CollectorRuntimeState,
     build_collector_server,
+    collector_alert_rules,
     collector_json,
     collector_metrics_report,
     collector_operations_status,
@@ -678,6 +679,42 @@ def cmd_collector_metrics(args: argparse.Namespace) -> int:
         print(collector_json(payload), end="")
     else:
         print(payload["text"], end="")
+    return 0 if payload["gate"]["passed"] else 2
+
+
+def cmd_collector_alert_rules(args: argparse.Namespace) -> int:
+    try:
+        payload = collector_alert_rules(
+            args.root,
+            output=args.output,
+            group_name=args.group_name,
+            queue_pending_threshold=args.queue_pending_threshold,
+            status_stale_seconds=args.status_stale_seconds,
+            risk_red_threshold=args.risk_red_threshold,
+            dead_letter_threshold=args.dead_letter_threshold,
+            include_warning_alerts=args.include_warning_alerts,
+            force=args.force,
+        )
+    except CollectorError as exc:
+        payload = {
+            "schema": "hulun.collector.v1",
+            "generated_at": utc_now(),
+            "operation": "alert_rules",
+            "root": str(project_root(args.root)),
+            "gate": {"passed": False, "failure_count": 1, "failures": [str(exc)]},
+        }
+        if args.json:
+            print(collector_json(payload), end="")
+        else:
+            print("Collector alert rules: FAIL")
+            print(f"Failure: {exc}")
+        return 2
+    if args.json:
+        print(collector_json(payload), end="")
+    else:
+        print(f"Collector alert rules: {payload['output_dir']}")
+        for item in payload["files"]:
+            print(f"- {item['target']}: {item['path']}")
     return 0 if payload["gate"]["passed"] else 2
 
 
@@ -2135,6 +2172,18 @@ def build_parser() -> argparse.ArgumentParser:
     collector_metrics_cmd.add_argument("--fail-on-stale", action="store_true", help="Fail when the managed status file is older than --stale-after-seconds.")
     collector_metrics_cmd.add_argument("--json", action="store_true")
     collector_metrics_cmd.set_defaults(func=cmd_collector_metrics)
+
+    collector_alert_rules_cmd = collector_sub.add_parser("alert-rules", parents=[root_parent], help="Generate Prometheus alert rules for collector operations metrics.")
+    collector_alert_rules_cmd.add_argument("--output", help="Directory for generated alert rules. Defaults to .hulun/collector-alerts.")
+    collector_alert_rules_cmd.add_argument("--group-name", default="hulunguard-collector", help="Prometheus rule group name. Defaults to hulunguard-collector.")
+    collector_alert_rules_cmd.add_argument("--queue-pending-threshold", type=int, default=100, help="Alert when pending collector observations exceed this count. Defaults to 100.")
+    collector_alert_rules_cmd.add_argument("--status-stale-seconds", type=int, default=120, help="Alert when managed collector status is older than this many seconds. Defaults to 120.")
+    collector_alert_rules_cmd.add_argument("--risk-red-threshold", type=int, default=66, help="Alert when HulunIndex risk score is at least this value. Defaults to 66.")
+    collector_alert_rules_cmd.add_argument("--dead-letter-threshold", type=int, default=0, help="Alert when dead-letter records exceed this count. Defaults to 0.")
+    collector_alert_rules_cmd.add_argument("--include-warning-alerts", action=argparse.BooleanOptionalAction, default=True, help="Include advisory collector warning alerts. Enabled by default.")
+    collector_alert_rules_cmd.add_argument("--force", action="store_true", help="Overwrite HulunGuard-generated collector alert rule files.")
+    collector_alert_rules_cmd.add_argument("--json", action="store_true")
+    collector_alert_rules_cmd.set_defaults(func=cmd_collector_alert_rules)
 
     collector_template_cmd = collector_sub.add_parser("service-template", parents=[root_parent], help="Generate reviewed service templates for long-running managed collector operation.")
     collector_template_cmd.add_argument("--target", choices=["all", "systemd", "launchd", "windows-task"], default="all")

@@ -123,6 +123,49 @@
       "failures": []
     }
   },
+  "alert_rules": {
+    "schema": "hulun.collector.v1",
+    "generated_at": "2026-06-25T00:00:00Z",
+    "operation": "alert_rules",
+    "root": "fixture",
+    "format": "prometheus-rule-yaml",
+    "output_dir": ".hulun/collector-alerts",
+    "group_name": "hulunguard-collector",
+    "rule_count": 2,
+    "thresholds": {
+      "queue_pending": 100,
+      "status_stale_seconds": 120,
+      "risk_red": 66,
+      "dead_letter_records": 0
+    },
+    "include_warning_alerts": true,
+    "rules": [
+      {
+        "alert": "HulunCollectorGateFailing",
+        "expr": "hulun_collector_up == 0",
+        "for": "1m",
+        "labels": {"hulun_component": "collector", "severity": "critical"},
+        "annotations": {"summary": "HulunGuard collector operations gate is failing", "description": "The collector status gate reports one or more failed runtime, queue, status, or risk checks."}
+      },
+      {
+        "alert": "HulunIndexRed",
+        "expr": "hulun_collector_risk_score >= 66",
+        "for": "5m",
+        "labels": {"hulun_component": "collector", "severity": "warning"},
+        "annotations": {"summary": "HulunGuard risk score is red", "description": "The latest HulunIndex risk score is at or above the configured red-band threshold."}
+      }
+    ],
+    "text": "groups:\n  - name: \"hulunguard-collector\"\n    rules:\n      - alert: \"HulunCollectorGateFailing\"\n        expr: \"hulun_collector_up == 0\"\n",
+    "files": [
+      {"target": "prometheus_rules", "path": ".hulun/collector-alerts/hulunguard-collector.rules.yml"},
+      {"target": "readme", "path": ".hulun/collector-alerts/README.md"}
+    ],
+    "gate": {
+      "passed": true,
+      "failure_count": 0,
+      "failures": []
+    }
+  },
   "service_template": {
     "schema": "hulun.collector.v1",
     "generated_at": "2026-06-25T00:00:00Z",

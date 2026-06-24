@@ -28,6 +28,8 @@ DEFAULT_COLLECTOR_HOST = "127.0.0.1"
 DEFAULT_COLLECTOR_PORT = 4318
 COLLECTOR_STATUS_FILE = "collector_status.json"
 COLLECTOR_SERVICE_TEMPLATE_DIR = "collector-service"
+COLLECTOR_ALERT_RULE_DIR = "collector-alerts"
+COLLECTOR_ALERT_RULE_FILE = "hulunguard-collector.rules.yml"
 SERVICE_TEMPLATE_TARGETS = ("systemd", "launchd", "windows-task")
 OVERSIZE_DRAIN_HARD_LIMIT_BYTES = 8 * 1024 * 1024
 TRACE_PAYLOAD_FORMATS = (
@@ -509,6 +511,245 @@ def collector_metrics_report(
         "text": collector_metrics_text(metrics),
         "status": status,
         "gate": status["gate"],
+    }
+
+
+def _yaml_scalar(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int | float):
+        return str(value)
+    if value is None:
+        return "null"
+    return json.dumps(str(value), ensure_ascii=False)
+
+
+def _alert_rules_yaml(group_name: str, rules: list[dict[str, Any]]) -> str:
+    lines = ["groups:", f"  - name: {_yaml_scalar(group_name)}", "    rules:"]
+    for rule in rules:
+        lines.append(f"      - alert: {_yaml_scalar(rule['alert'])}")
+        lines.append(f"        expr: {_yaml_scalar(rule['expr'])}")
+        lines.append(f"        for: {_yaml_scalar(rule['for'])}")
+        labels = rule.get("labels") if isinstance(rule.get("labels"), dict) else {}
+        if labels:
+            lines.append("        labels:")
+            for key, value in sorted(labels.items()):
+                lines.append(f"          {key}: {_yaml_scalar(value)}")
+        annotations = rule.get("annotations") if isinstance(rule.get("annotations"), dict) else {}
+        if annotations:
+            lines.append("        annotations:")
+            for key, value in sorted(annotations.items()):
+                lines.append(f"          {key}: {_yaml_scalar(value)}")
+    return "\n".join(lines) + "\n"
+
+
+def _collector_alert_rule(
+    *,
+    alert: str,
+    expr: str,
+    duration: str,
+    severity: str,
+    summary: str,
+    description: str,
+) -> dict[str, Any]:
+    return {
+        "alert": alert,
+        "expr": expr,
+        "for": duration,
+        "labels": {"hulun_component": "collector", "severity": severity},
+        "annotations": {"description": description, "summary": summary},
+    }
+
+
+def _collector_alert_rules(
+    *,
+    queue_pending_threshold: int,
+    status_stale_seconds: int,
+    risk_red_threshold: int,
+    dead_letter_threshold: int,
+    include_warning_alerts: bool,
+) -> list[dict[str, Any]]:
+    rules = [
+        _collector_alert_rule(
+            alert="HulunCollectorGateFailing",
+            expr="hulun_collector_up == 0",
+            duration="1m",
+            severity="critical",
+            summary="HulunGuard collector operations gate is failing",
+            description="The collector status gate reports one or more failed runtime, queue, status, or risk checks.",
+        ),
+        _collector_alert_rule(
+            alert="HulunCollectorRuntimeError",
+            expr="hulun_collector_managed_last_error == 1",
+            duration="1m",
+            severity="critical",
+            summary="HulunGuard managed collector recorded a runtime error",
+            description="The managed flush loop recorded an error during its latest collector cycle.",
+        ),
+        _collector_alert_rule(
+            alert="HulunCollectorStatusMissing",
+            expr="hulun_collector_status_file_present == 0",
+            duration="2m",
+            severity="warning",
+            summary="HulunGuard collector status file is missing",
+            description="Managed collector status is absent, so external monitors may not see fresh runtime counters.",
+        ),
+        _collector_alert_rule(
+            alert="HulunCollectorStatusStale",
+            expr=f"hulun_collector_status_file_stale == 1 or hulun_collector_status_file_age_seconds > {int(status_stale_seconds)}",
+            duration="2m",
+            severity="warning",
+            summary="HulunGuard collector status is stale",
+            description="Managed collector status has not refreshed within the configured freshness window.",
+        ),
+        _collector_alert_rule(
+            alert="HulunCollectorDeadLetters",
+            expr=f"hulun_collector_dead_letter_records > {int(dead_letter_threshold)}",
+            duration="1m",
+            severity="warning",
+            summary="HulunGuard collector has dead-lettered records",
+            description="One or more queued collector records could not be imported and require operator review.",
+        ),
+        _collector_alert_rule(
+            alert="HulunCollectorQueueBacklog",
+            expr=f"hulun_collector_queue_pending > {int(queue_pending_threshold)}",
+            duration="5m",
+            severity="warning",
+            summary="HulunGuard collector queue backlog is growing",
+            description="Pending collector observations exceed the configured queue threshold.",
+        ),
+        _collector_alert_rule(
+            alert="HulunIndexBlocked",
+            expr="hulun_collector_risk_blocked == 1",
+            duration="1m",
+            severity="critical",
+            summary="HulunGuard blocked the current agent state",
+            description="The latest HulunIndex risk report requires intervention before the monitored agent continues.",
+        ),
+        _collector_alert_rule(
+            alert="HulunIndexRed",
+            expr=f"hulun_collector_risk_score >= {int(risk_red_threshold)}",
+            duration="5m",
+            severity="warning",
+            summary="HulunGuard risk score is red",
+            description="The latest HulunIndex risk score is at or above the configured red-band threshold.",
+        ),
+    ]
+    if include_warning_alerts:
+        rules.append(
+            _collector_alert_rule(
+                alert="HulunCollectorWarnings",
+                expr="hulun_collector_warnings > 0",
+                duration="5m",
+                severity="info",
+                summary="HulunGuard collector has advisory warnings",
+                description="The collector status report includes non-fatal warnings that may affect operations visibility.",
+            )
+        )
+    return rules
+
+
+def _alert_rules_readme(rule_file: str, group_name: str, rule_count: int) -> str:
+    return "\n".join(
+        [
+            "# HulunGuard Collector Alert Rules",
+            "",
+            "This directory contains generated Prometheus alerting rules for HulunGuard collector metrics.",
+            "",
+            "Files:",
+            f"- `{rule_file}`: Prometheus rule group `{group_name}` with {rule_count} alerts.",
+            "",
+            "Check the rules before deployment:",
+            "",
+            "```text",
+            f"promtool check rules {rule_file}",
+            "```",
+            "",
+            "The generator writes files only. It does not install Prometheus rules, change Alertmanager routing, or embed local paths or authentication tokens.",
+            "",
+        ]
+    )
+
+
+def _ensure_alert_rule_paths_writable(paths: list[Path], *, force: bool) -> None:
+    if force:
+        return
+    existing = [str(path) for path in paths if path.exists()]
+    if existing:
+        raise CollectorError(f"Refusing to overwrite existing collector alert rule files: {', '.join(existing)}. Use --force.")
+
+
+def _write_alert_rule_file(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def collector_alert_rules(
+    root: str | Path | None = None,
+    *,
+    output: str | Path | None = None,
+    group_name: str = "hulunguard-collector",
+    queue_pending_threshold: int = 100,
+    status_stale_seconds: int = 120,
+    risk_red_threshold: int = 66,
+    dead_letter_threshold: int = 0,
+    include_warning_alerts: bool = True,
+    force: bool = False,
+) -> dict[str, Any]:
+    root_path = _resolved_root(root)
+    group_name = str(group_name or "").strip()
+    if not group_name:
+        raise CollectorError("collector alert rules require a non-empty --group-name.")
+    if int(queue_pending_threshold) < 0:
+        raise CollectorError("collector alert rules require --queue-pending-threshold >= 0.")
+    if int(status_stale_seconds) < 1:
+        raise CollectorError("collector alert rules require --status-stale-seconds >= 1.")
+    if int(risk_red_threshold) < 1 or int(risk_red_threshold) > 100:
+        raise CollectorError("collector alert rules require --risk-red-threshold between 1 and 100.")
+    if int(dead_letter_threshold) < 0:
+        raise CollectorError("collector alert rules require --dead-letter-threshold >= 0.")
+
+    output_dir = Path(output) if output else hulun_dir(root_path) / COLLECTOR_ALERT_RULE_DIR
+    if not output_dir.is_absolute():
+        output_dir = root_path / output_dir
+    output_dir = output_dir.resolve()
+    rule_path = output_dir / COLLECTOR_ALERT_RULE_FILE
+    readme_path = output_dir / "README.md"
+    rules = _collector_alert_rules(
+        queue_pending_threshold=int(queue_pending_threshold),
+        status_stale_seconds=int(status_stale_seconds),
+        risk_red_threshold=int(risk_red_threshold),
+        dead_letter_threshold=int(dead_letter_threshold),
+        include_warning_alerts=include_warning_alerts,
+    )
+    rule_text = _alert_rules_yaml(group_name, rules)
+    readme_text = _alert_rules_readme(COLLECTOR_ALERT_RULE_FILE, group_name, len(rules))
+    _ensure_alert_rule_paths_writable([rule_path, readme_path], force=force)
+    _write_alert_rule_file(rule_path, rule_text)
+    _write_alert_rule_file(readme_path, readme_text)
+    return {
+        "schema": COLLECTOR_SCHEMA,
+        "generated_at": utc_now(),
+        "operation": "alert_rules",
+        "root": str(root_path),
+        "format": "prometheus-rule-yaml",
+        "output_dir": str(output_dir),
+        "group_name": group_name,
+        "rule_count": len(rules),
+        "thresholds": {
+            "queue_pending": int(queue_pending_threshold),
+            "status_stale_seconds": int(status_stale_seconds),
+            "risk_red": int(risk_red_threshold),
+            "dead_letter_records": int(dead_letter_threshold),
+        },
+        "include_warning_alerts": include_warning_alerts,
+        "rules": rules,
+        "text": rule_text,
+        "files": [
+            {"target": "prometheus_rules", "path": str(rule_path)},
+            {"target": "readme", "path": str(readme_path)},
+        ],
+        "gate": {"passed": True, "failure_count": 0, "failures": []},
     }
 
 

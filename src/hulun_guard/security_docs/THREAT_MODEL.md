@@ -68,7 +68,7 @@ Runtime payloads submitted through `hulun collector serve` use the same default 
 
 Managed collector mode is opt-in through `--flush-interval-seconds`. It uses the existing batch flush path to move queued observations into `.hulun/state.json`, optionally initializes a minimal project ledger with `--init-if-missing`, writes `.hulun/collector_status.json`, and recomputes `.hulun/risk.json` only when `--scan-on-flush` is enabled. Flush or scan failures are reported in status output and do not stop HTTP ingestion.
 
-`collector status` reads local queue, dead-letter, managed status, and risk files without starting the HTTP server. `collector metrics` and `GET /metrics` expose numeric health and risk gauges without local filesystem paths as Prometheus labels. `collector service-template` only writes reviewed systemd, launchd, and Windows Scheduled Task template files; it does not install services, change host startup policy, or embed authentication tokens.
+`collector status` reads local queue, dead-letter, managed status, and risk files without starting the HTTP server. `collector metrics` and `GET /metrics` expose numeric health and risk gauges without local filesystem paths as Prometheus labels. `collector alert-rules` only writes Prometheus rule files for those metrics; it does not install Prometheus configuration, restart services, change Alertmanager routing, or embed authentication tokens. `collector service-template` only writes reviewed systemd, launchd, and Windows Scheduled Task template files; it does not install services, change host startup policy, or embed authentication tokens.
 
 ## Sensitive Data
 
@@ -127,6 +127,7 @@ This protects against path traversal, symlink escape, and accidental deletion of
 | Host pipes an oversized runtime payload | `batch ingest-stdin`, SDK `enqueue_payload`, and MCP `hulun_batch_ingest_payload` reject oversized JSON payloads before queue persistence. |
 | Local HTTP collector is accidentally exposed | Default bind is loopback-only; non-loopback bind requires `--allow-remote --token`; POST, `/status`, and `/metrics` require the token when configured. |
 | Metrics export leaks local filesystem paths | Prometheus metrics expose numeric gauges and bounded labels only; local paths stay in JSON status fields, not metrics labels. |
+| Alert-rule generation changes monitoring infrastructure | `collector alert-rules` writes reviewed rule files only; operators must validate and install them explicitly. |
 | OTLP producer sends protobuf or binary payloads | Collector rejects protobuf and `application/octet-stream`; configure the producer for OTLP/HTTP JSON. |
 | Managed collector writes project state unexpectedly | Managed flush is off by default and requires explicit `--flush-interval-seconds`; scan is separate through `--scan-on-flush`. |
 | Service template generation changes host startup state | `collector service-template` writes files only; operators must review and install them explicitly. |
@@ -146,6 +147,7 @@ python -m hulun_guard collector smoke --json
 python -m hulun_guard collector smoke --managed --scan --init-if-missing --json
 python -m hulun_guard collector status --require-status-file --json
 python -m hulun_guard collector metrics --require-status-file
+python -m hulun_guard collector alert-rules --output .hulun/collector-alerts --force --json
 python -m hulun_guard collector service-template --output .hulun/collector-service --force --json
 python -m hulun_guard batch flush --scan
 ```
@@ -168,6 +170,7 @@ python -m hulun_guard collector smoke --json
 python -m hulun_guard collector smoke --managed --scan --init-if-missing --json
 python -m hulun_guard collector status --require-status-file --json
 python -m hulun_guard collector metrics --require-status-file
+python -m hulun_guard collector alert-rules --output .hulun/collector-alerts --force --json
 python -m hulun_guard collector service-template --output .hulun/collector-service --force --json
 python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json
 python -m hulun_guard cleanup --json
@@ -189,6 +192,7 @@ Every release must keep these checks green:
 - `python -m hulun_guard collector smoke --managed --scan --init-if-missing --json`
 - `python -m hulun_guard collector status --require-status-file --json`
 - `python -m hulun_guard collector metrics --require-status-file`
+- `python -m hulun_guard collector alert-rules --output .hulun/collector-alerts --force --json`
 - `python -m hulun_guard collector service-template --output .hulun/collector-service --force --json`
 - `'{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass"}' | python -m hulun_guard batch ingest-stdin --format generic --json`
 - `python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json`
