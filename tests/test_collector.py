@@ -130,6 +130,43 @@ class CollectorTest(unittest.TestCase):
             self.assertEqual(payload["managed_flush"]["imported"], 2)
             self.assertEqual(queue_status(tmp)["queue"]["pending"], 0)
 
+    def test_collector_status_reports_offline_operations_health(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.run_cli("--root", tmp, "collector", "smoke", "--managed", "--scan", "--init-if-missing", "--json")
+            self.assertEqual(code, 0, out)
+
+            code, out = self.run_cli("--root", tmp, "collector", "status", "--require-status-file", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["operation"], "operations_status")
+            self.assertTrue(payload["gate"]["passed"])
+            self.assertTrue(payload["status_file"]["exists"])
+            self.assertEqual(payload["queue"]["pending"], 0)
+            self.assertEqual(payload["dead_letter"]["records"], 0)
+            self.assertTrue(payload["risk"]["exists"])
+            self.assertEqual(payload["risk"]["band"], "yellow")
+
+    def test_collector_service_template_generates_cross_platform_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "service-templates"
+            code, out = self.run_cli("--root", tmp, "collector", "service-template", "--output", str(output_dir), "--force", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["operation"], "service_template")
+            self.assertTrue(payload["gate"]["passed"])
+            targets = {item["target"] for item in payload["files"]}
+            self.assertEqual(targets, {"systemd", "launchd", "windows-task", "readme"})
+            for item in payload["files"]:
+                self.assertTrue(Path(item["path"]).exists(), item)
+            self.assertIn("collector serve", (output_dir / "README.md").read_text(encoding="utf-8"))
+            self.assertIn("--scan-on-flush", " ".join(payload["command"]))
+
+    def test_collector_service_template_rejects_remote_host_without_token(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.run_cli("--root", tmp, "collector", "service-template", "--host", "0.0.0.0", "--json")
+            self.assertNotEqual(code, 0, out)
+            self.assertIn("loopback-bound", out)
+
     def test_otlp_endpoint_queues_span(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             server, thread, base_url = self.start_server(CollectorConfig(root=tmp, port=0))

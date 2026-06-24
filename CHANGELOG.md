@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.36.0 - 2026-06-25
+
+- Added `collector status` for offline collector operations health across queue, status file, runtime error, and last-risk signals.
+- Added `collector service-template` to generate systemd, launchd, and Windows Scheduled Task templates for long-running managed collector operation.
+- Extended collector tests, CI, release gates, and installed-wheel smoke checks for collector operations paths.
+
 ## 0.35.0 - 2026-06-25
 
 - Added managed collector flush mode so `collector serve` can periodically flush queued live observations and optionally recompute HulunIndex.

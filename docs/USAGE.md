@@ -186,6 +186,8 @@ Machine-check the collector path without leaving a server running:
 ```powershell
 python .\hulun.py collector smoke --json
 python .\hulun.py collector smoke --managed --scan --init-if-missing --json
+python .\hulun.py collector status --require-status-file --json
+python .\hulun.py collector service-template --output .\.hulun\collector-service --force --json
 python .\hulun.py batch status --json
 python .\hulun.py batch flush --scan --init-if-missing --json
 ```
@@ -196,7 +198,7 @@ Supported POST routes:
 - `/ingest`: auto-detected JSON or JSONL runtime payload.
 - `/ingest/<format>`: explicit adapter payload, such as `generic`, `langgraph`, `langsmith`, `langfuse`, `phoenix`, or `openai-agents`.
 
-The collector writes to the same durable queue as `batch`. Queue-only mode does not update `.hulun/state.json` on every request; run `batch flush --scan` to import queued observations and recompute risk. Managed mode enables a periodic flush loop, writes `.hulun/collector_status.json`, and can update `.hulun/risk.json` automatically after successful flushes.
+The collector writes to the same durable queue as `batch`. Queue-only mode does not update `.hulun/state.json` on every request; run `batch flush --scan` to import queued observations and recompute risk. Managed mode enables a periodic flush loop, writes `.hulun/collector_status.json`, and can update `.hulun/risk.json` automatically after successful flushes. Use `collector status` for offline service checks, and `collector service-template` to generate reviewed systemd, launchd, and Windows Scheduled Task templates for managed mode.
 
 Security defaults:
 
@@ -288,6 +290,8 @@ python .\hulun.py onboard --agent all --output .\.hulun\onboarding --force --jso
 python .\hulun.py adapter-matrix --json
 python .\hulun.py collector smoke --json
 python .\hulun.py collector smoke --managed --scan --init-if-missing --json
+python .\hulun.py collector status --require-status-file --json
+python .\hulun.py collector service-template --output .\.hulun\collector-service --force --json
 python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000
@@ -305,6 +309,8 @@ python -m pytest -q
 `adapter-matrix` verifies OpenTelemetry/OpenInference/Langfuse/Phoenix round-trips plus OpenHands-like, SWE-agent-like, LangGraph, and LangSmith stream coverage without committing private traces.
 `collector smoke` starts a temporary local HTTP collector, POSTs one OTLP/HTTP JSON span, and verifies that the queue grows by one record.
 `collector smoke --managed --scan --init-if-missing` verifies that a live POST can be flushed into a fresh project ledger and rescanned without a separate operator command.
+`collector status` verifies queue, dead-letter, managed status, and last risk state without starting the HTTP server.
+`collector service-template` verifies that reviewed managed-mode templates can be generated for systemd, launchd, and Windows Scheduled Task.
 `batch ingest-stdin` verifies the runtime pipe path used by agents that emit JSON/JSONL events directly instead of writing trace files.
 `schema-check` loads legacy JSON fixtures, normalizes them through the migration layer, and fails if current public schemas are not written. See `docs/SCHEMAS.md`.
 
