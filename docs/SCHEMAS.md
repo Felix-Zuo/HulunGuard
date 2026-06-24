@@ -54,7 +54,7 @@ The loader normalizes older project and conversation ledgers into current schema
 - GitHub release verification repository, tag, asset directory, checksum, SBOM, attestation, and gate fields
 - trace doctor file metadata, selected format, observation counts, field coverage, warnings, next command, and gate fields
 - batched ingestion operation, queue status, imported counts, event ids, and dead-letter counts across enqueue, stdin/payload, status, and flush paths
-- collector health, status, ingest, smoke, endpoint, queue, auth, limit, response, and gate fields
+- collector health, status, ingest, smoke, managed flush, endpoint, queue, auth, limit, response, runtime, and gate fields
 
 Unsupported future schema majors fail the compatibility gate instead of being guessed.
 

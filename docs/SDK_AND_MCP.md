@@ -174,10 +174,17 @@ http://127.0.0.1:4318/v1/traces
 
 The collector accepts OTLP/HTTP JSON at `/v1/traces` and adapter payloads at `/ingest` or `/ingest/<format>`. It writes to `.hulun/ingest_queue.jsonl`; use `hulun batch flush --scan` to import queued observations into the project ledger.
 
+For a long-running local monitor, enable managed flush:
+
+```powershell
+python -m hulun_guard collector serve --flush-interval-seconds 5 --scan-on-flush --init-if-missing
+```
+
 Run the non-blocking smoke check in CI or release gates:
 
 ```powershell
 python -m hulun_guard collector smoke --json
+python -m hulun_guard collector smoke --managed --scan --init-if-missing --json
 ```
 
 ## Privacy Defaults

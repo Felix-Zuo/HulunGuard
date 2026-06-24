@@ -15,6 +15,7 @@
 - [ ] `python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json`
 - [ ] `python -m hulun_guard adapter-matrix --json`
 - [ ] `python -m hulun_guard collector smoke --json`
+- [ ] `python -m hulun_guard collector smoke --managed --scan --init-if-missing --json`
 - [ ] Batched ingestion smoke: enqueue, status, flush with `--init-if-missing`
 - [ ] Public-safe `trace-doctor-sample.jsonl` created for trace diagnostics
 - [ ] `python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json`

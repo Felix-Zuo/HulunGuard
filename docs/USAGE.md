@@ -172,6 +172,7 @@ Use `collector serve` when an agent runtime can emit OTLP/HTTP JSON or POST adap
 
 ```powershell
 python .\hulun.py collector serve
+python .\hulun.py collector serve --flush-interval-seconds 5 --scan-on-flush --init-if-missing
 ```
 
 Default endpoint:
@@ -184,6 +185,7 @@ Machine-check the collector path without leaving a server running:
 
 ```powershell
 python .\hulun.py collector smoke --json
+python .\hulun.py collector smoke --managed --scan --init-if-missing --json
 python .\hulun.py batch status --json
 python .\hulun.py batch flush --scan --init-if-missing --json
 ```
@@ -194,7 +196,7 @@ Supported POST routes:
 - `/ingest`: auto-detected JSON or JSONL runtime payload.
 - `/ingest/<format>`: explicit adapter payload, such as `generic`, `langgraph`, `langsmith`, `langfuse`, `phoenix`, or `openai-agents`.
 
-The collector writes to the same durable queue as `batch`. It does not update `.hulun/state.json` on every request; run `batch flush --scan` to import queued observations and recompute risk.
+The collector writes to the same durable queue as `batch`. Queue-only mode does not update `.hulun/state.json` on every request; run `batch flush --scan` to import queued observations and recompute risk. Managed mode enables a periodic flush loop, writes `.hulun/collector_status.json`, and can update `.hulun/risk.json` automatically after successful flushes.
 
 Security defaults:
 
@@ -285,6 +287,7 @@ python .\hulun.py integration-kit --agent all --output .\.hulun\integration-kits
 python .\hulun.py onboard --agent all --output .\.hulun\onboarding --force --json
 python .\hulun.py adapter-matrix --json
 python .\hulun.py collector smoke --json
+python .\hulun.py collector smoke --managed --scan --init-if-missing --json
 python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000
@@ -301,6 +304,7 @@ python -m pytest -q
 `onboard` verifies generated kits with an isolated sandbox import and returns next-step commands for real traces.
 `adapter-matrix` verifies OpenTelemetry/OpenInference/Langfuse/Phoenix round-trips plus OpenHands-like, SWE-agent-like, LangGraph, and LangSmith stream coverage without committing private traces.
 `collector smoke` starts a temporary local HTTP collector, POSTs one OTLP/HTTP JSON span, and verifies that the queue grows by one record.
+`collector smoke --managed --scan --init-if-missing` verifies that a live POST can be flushed into a fresh project ledger and rescanned without a separate operator command.
 `batch ingest-stdin` verifies the runtime pipe path used by agents that emit JSON/JSONL events directly instead of writing trace files.
 `schema-check` loads legacy JSON fixtures, normalizes them through the migration layer, and fails if current public schemas are not written. See `docs/SCHEMAS.md`.
 

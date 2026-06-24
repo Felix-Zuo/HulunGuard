@@ -20,6 +20,7 @@ Smoke-test the installed collector without leaving a long-running server:
 
 ```powershell
 python -m hulun_guard --root . collector smoke --json
+python -m hulun_guard --root . collector smoke --managed --scan --init-if-missing --json
 python -m hulun_guard batch status --json
 python -m hulun_guard batch flush --scan --init-if-missing --json
 ```
@@ -48,6 +49,28 @@ Supported explicit formats:
 - `openai-agents`
 
 The collector queues normalized observations into `.hulun/ingest_queue.jsonl`. It does not rewrite `.hulun/state.json` on every request. Use `hulun batch flush --scan` to import queued observations and recalculate the HulunIndex.
+
+## Managed Flush
+
+Queue-only mode is the default. Use managed mode when this process should keep the local project ledger and HulunIndex current without a separate scheduler:
+
+```powershell
+python -m hulun_guard collector serve `
+  --flush-interval-seconds 5 `
+  --flush-limit 500 `
+  --scan-on-flush `
+  --init-if-missing
+```
+
+Managed mode:
+
+- flushes at most `--flush-limit` queued observations per cycle
+- uses the same `batch flush` safety path, redaction, dead-letter handling, and initialization controls
+- writes `.hulun/collector_status.json`
+- updates `.hulun/risk.json` when `--scan-on-flush` imports observations
+- reports flush failures in `/status` and the status file without stopping HTTP ingestion
+
+Use `GET /status` to inspect queue state and managed runtime counters.
 
 ## OTLP JSON
 

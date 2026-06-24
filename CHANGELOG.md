@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.35.0 - 2026-06-25
+
+- Added managed collector flush mode so `collector serve` can periodically flush queued live observations and optionally recompute HulunIndex.
+- Added `collector smoke --managed --scan --init-if-missing`, managed runtime status, and `.hulun/collector_status.json`.
+- Extended collector tests, release gates, and documentation for long-running live-monitor operation.
+
 ## 0.34.0 - 2026-06-25
 
 - Added `collector serve`, a loopback-first local HTTP collector for live OTLP/HTTP JSON traces and adapter runtime payloads.

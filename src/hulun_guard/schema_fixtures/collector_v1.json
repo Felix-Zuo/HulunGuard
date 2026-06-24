@@ -4,6 +4,7 @@
   "operation": "smoke",
   "root": "fixture",
   "endpoint": "/v1/traces",
+  "managed": true,
   "response_status": 202,
   "response": {
     "schema": "hulun.collector.v1",
@@ -46,6 +47,62 @@
   "dead_letter": {
     "path": ".hulun/ingest_dead_letter.jsonl",
     "records": 0
+  },
+  "managed_flush": {
+    "schema": "hulun.collector.v1",
+    "generated_at": "2026-06-25T00:00:00Z",
+    "operation": "managed_flush",
+    "root": "fixture",
+    "requested_limit": 500,
+    "pending_before": 1,
+    "imported": 1,
+    "scanned": true,
+    "batch": {
+      "schema": "hulun.batch_ingest.v1",
+      "operation": "flush",
+      "imported": 1,
+      "queue": {
+        "path": ".hulun/ingest_queue.jsonl",
+        "pending": 0,
+        "bytes": 0,
+        "oldest_queued_at": null,
+        "newest_queued_at": null,
+        "parse_error_count": 0
+      },
+      "dead_letter": {
+        "path": ".hulun/ingest_dead_letter.jsonl",
+        "records": 0
+      }
+    },
+    "risk": {
+      "schema": "hulun.risk.v1",
+      "score": 8,
+      "slop_index": 8,
+      "band": "green",
+      "threshold": 66,
+      "blocked": false,
+      "required_action": "continue",
+      "components": {},
+      "weights": {},
+      "reasons": []
+    },
+    "queue": {
+      "path": ".hulun/ingest_queue.jsonl",
+      "pending": 0,
+      "bytes": 0,
+      "oldest_queued_at": null,
+      "newest_queued_at": null,
+      "parse_error_count": 0
+    },
+    "dead_letter": {
+      "path": ".hulun/ingest_dead_letter.jsonl",
+      "records": 0
+    },
+    "gate": {
+      "passed": true,
+      "failure_count": 0,
+      "failures": []
+    }
   },
   "gate": {
     "passed": true,

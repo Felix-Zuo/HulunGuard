@@ -66,6 +66,8 @@ Runtime payloads submitted through SDK, MCP, or stdin are capped by the same def
 
 Runtime payloads submitted through `hulun collector serve` use the same default payload cap and redaction path. The collector binds to `127.0.0.1` by default. Binding to a non-loopback host requires both `--allow-remote` and `--token`. `/healthz` exposes only liveness and supported-format metadata; `/status` and POST ingestion require the configured token. The collector accepts JSON and JSONL payloads and rejects protobuf or opaque binary OTLP bodies.
 
+Managed collector mode is opt-in through `--flush-interval-seconds`. It uses the existing batch flush path to move queued observations into `.hulun/state.json`, optionally initializes a minimal project ledger with `--init-if-missing`, writes `.hulun/collector_status.json`, and recomputes `.hulun/risk.json` only when `--scan-on-flush` is enabled. Flush or scan failures are reported in status output and do not stop HTTP ingestion.
+
 ## Sensitive Data
 
 Default mode is `redacted-default`.
@@ -123,6 +125,7 @@ This protects against path traversal, symlink escape, and accidental deletion of
 | Host pipes an oversized runtime payload | `batch ingest-stdin`, SDK `enqueue_payload`, and MCP `hulun_batch_ingest_payload` reject oversized JSON payloads before queue persistence. |
 | Local HTTP collector is accidentally exposed | Default bind is loopback-only; non-loopback bind requires `--allow-remote --token`; POST and `/status` require the token when configured. |
 | OTLP producer sends protobuf or binary payloads | Collector rejects protobuf and `application/octet-stream`; configure the producer for OTLP/HTTP JSON. |
+| Managed collector writes project state unexpectedly | Managed flush is off by default and requires explicit `--flush-interval-seconds`; scan is separate through `--scan-on-flush`. |
 | Desktop monitor leaks to a remote service | Monitor state is local JSON/HTML; remote exposure only occurs if the user or host publishes it. |
 
 ## Safe Usage Modes
@@ -136,6 +139,7 @@ python -m hulun_guard observe --type tool_result --summary "pytest passed" --sca
 python -m hulun_guard batch enqueue --type tool_result --summary "pytest passed"
 '{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass"}' | python -m hulun_guard batch ingest-stdin --format generic
 python -m hulun_guard collector smoke --json
+python -m hulun_guard collector smoke --managed --scan --init-if-missing --json
 python -m hulun_guard batch flush --scan
 ```
 
@@ -154,6 +158,7 @@ python -m hulun_guard integration-kit --agent all --output .hulun/integration-ki
 python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json
 python -m hulun_guard adapter-matrix --json
 python -m hulun_guard collector smoke --json
+python -m hulun_guard collector smoke --managed --scan --init-if-missing --json
 python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json
 python -m hulun_guard cleanup --json
 python -m hulun_guard schema-check --json
@@ -171,6 +176,7 @@ Every release must keep these checks green:
 - `python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json`
 - `python -m hulun_guard adapter-matrix --json`
 - `python -m hulun_guard collector smoke --json`
+- `python -m hulun_guard collector smoke --managed --scan --init-if-missing --json`
 - `'{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass"}' | python -m hulun_guard batch ingest-stdin --format generic --json`
 - `python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json`
 - `python -m hulun_guard schema-check --json`

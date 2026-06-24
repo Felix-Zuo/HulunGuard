@@ -108,11 +108,13 @@ Run a live local HTTP collector for OTLP/HTTP JSON or adapter payloads:
 
 ```powershell
 python .\hulun.py collector serve
+python .\hulun.py collector serve --flush-interval-seconds 5 --scan-on-flush --init-if-missing
 python .\hulun.py collector smoke --json
+python .\hulun.py collector smoke --managed --scan --init-if-missing --json
 python .\hulun.py batch flush --scan --init-if-missing
 ```
 
-The collector listens on `127.0.0.1:4318` by default. `POST /v1/traces` accepts OTLP/HTTP JSON, while `POST /ingest/<format>` accepts adapter payloads such as `generic`, `langgraph`, `langsmith`, `langfuse`, `phoenix`, and `openai-agents`. Non-loopback binds require `--allow-remote --token`.
+The collector listens on `127.0.0.1:4318` by default. `POST /v1/traces` accepts OTLP/HTTP JSON, while `POST /ingest/<format>` accepts adapter payloads such as `generic`, `langgraph`, `langsmith`, `langfuse`, `phoenix`, and `openai-agents`. Queue-only mode is the default. Managed mode periodically flushes queued observations and can update `.hulun/risk.json` automatically. Non-loopback binds require `--allow-remote --token`.
 
 By default, runtime observations and imported traces redact known secrets, emails, URL query strings, private home paths, and raw payload fields such as prompts, completions, outputs, and tool arguments. Use `--include-sensitive --retention-days 7` only for trusted local debugging.
 
@@ -146,6 +148,7 @@ python .\hulun.py integration-kit --agent all --output .\.hulun\integration-kits
 python .\hulun.py onboard --agent all --output .\.hulun\onboarding --force --json
 python .\hulun.py adapter-matrix --json
 python .\hulun.py collector smoke --json
+python .\hulun.py collector smoke --managed --scan --init-if-missing --json
 @'
 {"type":"tool_result","phase":"verify","summary":"stdin payload passed","result":"pass","action_key":"stdin-smoke"}
 '@ | python .\hulun.py batch ingest-stdin --format generic --json
