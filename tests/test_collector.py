@@ -71,6 +71,17 @@ def request_json(url: str, *, method: str = "GET", payload: Any | None = None, h
         return int(exc.code), body
 
 
+def request_text(url: str, *, headers: dict[str, str] | None = None) -> tuple[int, str, str]:
+    request = urllib.request.Request(url, headers=headers or {}, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            body = response.read().decode("utf-8")
+            return int(response.status), body, str(response.headers.get("Content-Type") or "")
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8")
+        return int(exc.code), body, str(exc.headers.get("Content-Type") or "")
+
+
 class CollectorTest(unittest.TestCase):
     def run_cli(self, *args: str) -> tuple[int, str]:
         buf = io.StringIO()
@@ -146,6 +157,30 @@ class CollectorTest(unittest.TestCase):
             self.assertTrue(payload["risk"]["exists"])
             self.assertEqual(payload["risk"]["band"], "yellow")
 
+    def test_collector_metrics_reports_prometheus_health(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.run_cli("--root", tmp, "collector", "smoke", "--managed", "--scan", "--init-if-missing", "--json")
+            self.assertEqual(code, 0, out)
+
+            code, out = self.run_cli("--root", tmp, "collector", "metrics", "--require-status-file", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["operation"], "metrics")
+            self.assertEqual(payload["format"], "prometheus")
+            metric_names = {metric["name"] for metric in payload["metrics"]}
+            self.assertIn("hulun_collector_up", metric_names)
+            self.assertIn("hulun_collector_queue_pending", metric_names)
+            self.assertIn("hulun_collector_risk_score", metric_names)
+            self.assertIn("hulun_collector_risk_band", metric_names)
+            self.assertIn("hulun_collector_queue_pending 0", payload["text"])
+            self.assertIn('hulun_collector_risk_band{band="yellow"} 1', payload["text"])
+            self.assertNotIn(str(Path(tmp)), payload["text"])
+
+            code, out = self.run_cli("--root", tmp, "collector", "metrics", "--require-status-file")
+            self.assertEqual(code, 0, out)
+            self.assertIn("# HELP hulun_collector_up", out)
+            self.assertIn("hulun_collector_up 1", out)
+
     def test_collector_service_template_generates_cross_platform_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             output_dir = Path(tmp) / "service-templates"
@@ -203,6 +238,13 @@ class CollectorTest(unittest.TestCase):
                 self.assertEqual(managed["runtime"]["flush_count"], 1)
                 self.assertEqual(managed["runtime"]["imported_total"], 1)
                 self.assertEqual(body["queue"]["pending"], 0)
+
+                code, text, content_type = request_text(f"{base_url}/metrics")
+                self.assertEqual(code, 200)
+                self.assertIn("text/plain", content_type)
+                self.assertIn("hulun_collector_managed_flush_total 1", text)
+                self.assertIn("hulun_collector_managed_imported_total 1", text)
+                self.assertIn("hulun_collector_queue_pending 0", text)
             finally:
                 self.stop_server(server, thread)
 
@@ -236,6 +278,10 @@ class CollectorTest(unittest.TestCase):
                 self.assertEqual(code, 401)
                 self.assertEqual(body["error"]["code"], "unauthorized")
 
+                code, text, _content_type = request_text(f"{base_url}/metrics")
+                self.assertEqual(code, 401)
+                self.assertIn("unauthorized", text)
+
                 code, body = request_json(f"{base_url}/v1/traces", method="POST", payload=otlp_payload())
                 self.assertEqual(code, 401)
                 self.assertEqual(body["error"]["code"], "unauthorized")
@@ -243,6 +289,10 @@ class CollectorTest(unittest.TestCase):
                 code, body = request_json(f"{base_url}/v1/traces", method="POST", payload=otlp_payload(), headers={"X-Hulun-Token": "secret-token"})
                 self.assertEqual(code, 202)
                 self.assertEqual(body["queued"], 1)
+
+                code, text, _content_type = request_text(f"{base_url}/metrics", headers={"X-Hulun-Token": "secret-token"})
+                self.assertEqual(code, 200)
+                self.assertIn("hulun_collector_queue_pending 1", text)
             finally:
                 self.stop_server(server, thread)
 

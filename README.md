@@ -19,7 +19,7 @@ using HulunGuard on real work.
 - Realtime HulunIndex observations: record phase, claims, failures, tokens, cost, latency, and retry fingerprints.
 - Privacy-safe trace ingestion: import generic JSON/JSONL, OpenTelemetry GenAI, OpenInference, OpenHands-like events, SWE-agent-like trajectories, LangGraph stream parts, LangSmith run exports, Langfuse OTEL traces, and Phoenix/OpenInference spans without persisting raw sensitive payloads by default.
 - Runtime payload bridge: SDK, MCP, and stdin ingestion can queue in-memory spans or stream events without writing trace files first.
-- Local HTTP collector: accept live OTLP/HTTP JSON traces at `/v1/traces` and adapter payloads at `/ingest/<format>` into the durable queue, with offline operations status and reviewed service templates for long-running managed mode.
+- Local HTTP collector: accept live OTLP/HTTP JSON traces at `/v1/traces` and adapter payloads at `/ingest/<format>` into the durable queue, with offline operations status, Prometheus metrics, and reviewed service templates for long-running managed mode.
 - Python SDK and MCP server: agents can record runtime state directly without shell glue.
 - Built-in validation suite: run synthetic healthy/slop-risk scenarios before release.
 - Product operations: `onboard`, `quickstart`, `doctor`, `trace-doctor`, `compatibility`, `integration-kit`, `adapter-matrix`, `schema-check`, `release-verify`, `cleanup`, and `benchmark` commands for onboarding, trace diagnostics, agent compatibility, first-run integration packages, adapter integration, schema compatibility, release verification, retention cleanup, scan performance, and public-safe real-world workflow checks.
@@ -112,11 +112,12 @@ python .\hulun.py collector serve --flush-interval-seconds 5 --scan-on-flush --i
 python .\hulun.py collector smoke --json
 python .\hulun.py collector smoke --managed --scan --init-if-missing --json
 python .\hulun.py collector status --require-status-file --json
+python .\hulun.py collector metrics --require-status-file
 python .\hulun.py collector service-template --output .\.hulun\collector-service --force --json
 python .\hulun.py batch flush --scan --init-if-missing
 ```
 
-The collector listens on `127.0.0.1:4318` by default. `POST /v1/traces` accepts OTLP/HTTP JSON, while `POST /ingest/<format>` accepts adapter payloads such as `generic`, `langgraph`, `langsmith`, `langfuse`, `phoenix`, and `openai-agents`. Queue-only mode is the default. Managed mode periodically flushes queued observations and can update `.hulun/risk.json` automatically. `collector status` reads queue, status, and risk files without opening a server. `collector service-template` generates systemd, launchd, and Windows Scheduled Task templates without installing them or embedding tokens. Non-loopback binds require `--allow-remote --token`.
+The collector listens on `127.0.0.1:4318` by default. `POST /v1/traces` accepts OTLP/HTTP JSON, while `POST /ingest/<format>` accepts adapter payloads such as `generic`, `langgraph`, `langsmith`, `langfuse`, `phoenix`, and `openai-agents`. Queue-only mode is the default. Managed mode periodically flushes queued observations and can update `.hulun/risk.json` automatically. `collector status` reads queue, status, and risk files without opening a server. `collector metrics` and `GET /metrics` export Prometheus health metrics without local paths as labels. `collector service-template` generates systemd, launchd, and Windows Scheduled Task templates without installing them or embedding tokens. Non-loopback binds require `--allow-remote --token`.
 
 By default, runtime observations and imported traces redact known secrets, emails, URL query strings, private home paths, and raw payload fields such as prompts, completions, outputs, and tool arguments. Use `--include-sensitive --retention-days 7` only for trusted local debugging.
 
@@ -152,6 +153,7 @@ python .\hulun.py adapter-matrix --json
 python .\hulun.py collector smoke --json
 python .\hulun.py collector smoke --managed --scan --init-if-missing --json
 python .\hulun.py collector status --require-status-file --json
+python .\hulun.py collector metrics --require-status-file
 python .\hulun.py collector service-template --output .\.hulun\collector-service --force --json
 @'
 {"type":"tool_result","phase":"verify","summary":"stdin payload passed","result":"pass","action_key":"stdin-smoke"}

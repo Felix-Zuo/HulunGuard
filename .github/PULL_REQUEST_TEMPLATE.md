@@ -17,6 +17,7 @@
 - [ ] `python -m hulun_guard collector smoke --json`
 - [ ] `python -m hulun_guard collector smoke --managed --scan --init-if-missing --json`
 - [ ] `python -m hulun_guard collector status --require-status-file --json`
+- [ ] `python -m hulun_guard collector metrics --require-status-file`
 - [ ] `python -m hulun_guard collector service-template --output .hulun/collector-service --force --json`
 - [ ] Batched ingestion smoke: enqueue, status, flush with `--init-if-missing`
 - [ ] Public-safe `trace-doctor-sample.jsonl` created for trace diagnostics

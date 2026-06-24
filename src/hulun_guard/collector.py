@@ -165,7 +165,7 @@ def _request_format(path: str, query: dict[str, list[str]]) -> str:
     elif path.startswith("/ingest/"):
         source_format = path.removeprefix("/ingest/").strip("/").lower()
     else:
-        raise CollectorHTTPError(404, "not_found", "Supported endpoints are /v1/traces, /ingest, /ingest/<format>, /status, and /healthz.")
+        raise CollectorHTTPError(404, "not_found", "Supported endpoints are /v1/traces, /ingest, /ingest/<format>, /status, /metrics, and /healthz.")
     if source_format not in TRACE_PAYLOAD_FORMATS:
         raise CollectorHTTPError(400, "unsupported_format", f"Unsupported trace format: {source_format}.")
     return source_format
@@ -222,7 +222,7 @@ def _health_payload(config: CollectorConfig) -> dict[str, Any]:
         "generated_at": utc_now(),
         "operation": "healthz",
         "status": "ok",
-        "endpoints": ["/v1/traces", "/ingest", "/ingest/<format>", "/status", "/healthz"],
+        "endpoints": ["/v1/traces", "/ingest", "/ingest/<format>", "/status", "/metrics", "/healthz"],
         "formats": list(TRACE_PAYLOAD_FORMATS),
         "limits": {"max_payload_bytes": int(config.max_payload_bytes)},
         "auth_required": bool(config.token),
@@ -320,10 +320,11 @@ def collector_operations_status(
     stale_after_seconds: int = 60,
     require_status_file: bool = False,
     fail_on_stale: bool = False,
+    live_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     root_path = _resolved_root(root)
     status_file = collector_status_path(root_path)
-    status_payload, status_parse_error = _read_json_payload(status_file)
+    status_payload, status_parse_error = (live_status, None) if isinstance(live_status, dict) else _read_json_payload(status_file)
     status_age = _file_age_seconds(status_file)
     stale_limit = max(1, int(stale_after_seconds))
     status_stale = bool(status_file.exists() and status_age is not None and status_age > stale_limit)
@@ -357,7 +358,7 @@ def collector_operations_status(
         failures.append(f"Managed collector reported last_error: {last_error}.")
     if risk_payload and risk_payload.get("blocked"):
         warnings.append(f"HulunIndex is blocked: {risk_payload.get('score')} >= {risk_payload.get('threshold')}.")
-    if not status_file.exists() and not require_status_file:
+    if not status_file.exists() and not require_status_file and live_status is None:
         warnings.append("Collector status file is absent; run managed collector mode to publish runtime counters.")
 
     return {
@@ -370,6 +371,7 @@ def collector_operations_status(
         "status_file": {
             "path": str(status_file),
             "exists": status_file.exists(),
+            "source": "runtime" if live_status is not None else "file",
             "age_seconds": _round_age(status_age),
             "stale_after_seconds": stale_limit,
             "stale": status_stale,
@@ -388,6 +390,125 @@ def collector_operations_status(
         },
         "warnings": warnings,
         "gate": {"passed": not failures, "failure_count": len(failures), "failures": failures},
+    }
+
+
+PROMETHEUS_METRIC_HELP = {
+    "hulun_collector_up": "Collector operations gate status, 1 when passing.",
+    "hulun_collector_gate_failures": "Number of collector operations gate failures.",
+    "hulun_collector_warnings": "Number of collector operations warnings.",
+    "hulun_collector_queue_pending": "Pending observations in the collector ingest queue.",
+    "hulun_collector_queue_bytes": "Bytes currently stored in the collector ingest queue.",
+    "hulun_collector_queue_parse_errors_total": "Malformed records detected while reading the collector ingest queue.",
+    "hulun_collector_dead_letter_records": "Records currently stored in the collector ingest dead-letter queue.",
+    "hulun_collector_status_file_present": "Collector managed status file presence, 1 when present.",
+    "hulun_collector_status_file_stale": "Collector managed status stale flag, 1 when stale.",
+    "hulun_collector_status_file_age_seconds": "Collector managed status file age in seconds.",
+    "hulun_collector_managed_enabled": "Managed flush mode flag, 1 when enabled.",
+    "hulun_collector_managed_flush_total": "Managed collector flush count.",
+    "hulun_collector_managed_imported_total": "Total observations imported by managed collector flushes.",
+    "hulun_collector_managed_last_error": "Managed collector runtime error flag, 1 when the last flush recorded an error.",
+    "hulun_collector_risk_present": "Latest HulunIndex risk file presence, 1 when present.",
+    "hulun_collector_risk_score": "Latest HulunIndex risk score.",
+    "hulun_collector_risk_blocked": "Latest HulunIndex blocked flag, 1 when blocked.",
+    "hulun_collector_risk_band": "Latest HulunIndex band as one-hot labelled gauges.",
+}
+
+
+def _metric_number(value: Any, default: float = 0.0) -> float:
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _metric_label(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
+
+
+def _metric_line(name: str, value: float, labels: dict[str, str] | None = None) -> str:
+    if labels:
+        label_text = ",".join(f'{key}="{_metric_label(str(label_value))}"' for key, label_value in sorted(labels.items()))
+        return f"{name}{{{label_text}}} {value:g}"
+    return f"{name} {value:g}"
+
+
+def collector_metrics_from_status(status: dict[str, Any]) -> list[dict[str, Any]]:
+    gate = status.get("gate") if isinstance(status.get("gate"), dict) else {}
+    queue = status.get("queue") if isinstance(status.get("queue"), dict) else {}
+    dead_letter = status.get("dead_letter") if isinstance(status.get("dead_letter"), dict) else {}
+    status_file = status.get("status_file") if isinstance(status.get("status_file"), dict) else {}
+    managed = status.get("managed") if isinstance(status.get("managed"), dict) else {}
+    runtime = managed.get("runtime") if isinstance(managed.get("runtime"), dict) else {}
+    risk = status.get("risk") if isinstance(status.get("risk"), dict) else {}
+    metrics: list[dict[str, Any]] = [
+        {"name": "hulun_collector_up", "value": 1.0 if gate.get("passed") else 0.0},
+        {"name": "hulun_collector_gate_failures", "value": _metric_number(gate.get("failure_count"))},
+        {"name": "hulun_collector_warnings", "value": _metric_number(len(status.get("warnings") or []))},
+        {"name": "hulun_collector_queue_pending", "value": _metric_number(queue.get("pending"))},
+        {"name": "hulun_collector_queue_bytes", "value": _metric_number(queue.get("bytes"))},
+        {"name": "hulun_collector_queue_parse_errors_total", "value": _metric_number(queue.get("parse_error_count"))},
+        {"name": "hulun_collector_dead_letter_records", "value": _metric_number(dead_letter.get("records"))},
+        {"name": "hulun_collector_status_file_present", "value": _metric_number(status_file.get("exists"))},
+        {"name": "hulun_collector_status_file_stale", "value": _metric_number(status_file.get("stale"))},
+        {"name": "hulun_collector_managed_enabled", "value": _metric_number(managed.get("enabled"))},
+        {"name": "hulun_collector_managed_flush_total", "value": _metric_number(runtime.get("flush_count"))},
+        {"name": "hulun_collector_managed_imported_total", "value": _metric_number(runtime.get("imported_total"))},
+        {"name": "hulun_collector_managed_last_error", "value": 1.0 if runtime.get("last_error") else 0.0},
+        {"name": "hulun_collector_risk_present", "value": _metric_number(risk.get("exists"))},
+        {"name": "hulun_collector_risk_blocked", "value": _metric_number(risk.get("blocked"))},
+    ]
+    if status_file.get("age_seconds") is not None:
+        metrics.append({"name": "hulun_collector_status_file_age_seconds", "value": _metric_number(status_file.get("age_seconds"))})
+    if risk.get("score") is not None:
+        metrics.append({"name": "hulun_collector_risk_score", "value": _metric_number(risk.get("score"))})
+    active_band = str(risk.get("band") or "unknown")
+    for band in ("green", "yellow", "red", "unknown"):
+        metrics.append({"name": "hulun_collector_risk_band", "value": 1.0 if band == active_band else 0.0, "labels": {"band": band}})
+    return metrics
+
+
+def collector_metrics_text(metrics: list[dict[str, Any]]) -> str:
+    lines: list[str] = []
+    emitted: set[str] = set()
+    for metric in metrics:
+        name = str(metric["name"])
+        if name not in emitted:
+            lines.append(f"# HELP {name} {PROMETHEUS_METRIC_HELP.get(name, 'HulunGuard collector metric.')}")
+            lines.append(f"# TYPE {name} gauge")
+            emitted.add(name)
+        lines.append(_metric_line(name, _metric_number(metric.get("value")), metric.get("labels") if isinstance(metric.get("labels"), dict) else None))
+    return "\n".join(lines) + "\n"
+
+
+def collector_metrics_report(
+    root: str | Path | None = None,
+    *,
+    stale_after_seconds: int = 60,
+    require_status_file: bool = False,
+    fail_on_stale: bool = False,
+    live_status: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    status = collector_operations_status(
+        root,
+        stale_after_seconds=stale_after_seconds,
+        require_status_file=require_status_file,
+        fail_on_stale=fail_on_stale,
+        live_status=live_status,
+    )
+    metrics = collector_metrics_from_status(status)
+    return {
+        "schema": COLLECTOR_SCHEMA,
+        "generated_at": utc_now(),
+        "operation": "metrics",
+        "root": status["root"],
+        "format": "prometheus",
+        "metrics": metrics,
+        "text": collector_metrics_text(metrics),
+        "status": status,
+        "gate": status["gate"],
     }
 
 
@@ -732,6 +853,16 @@ def _write_json(handler: BaseHTTPRequestHandler, status: int, payload: dict[str,
     handler.wfile.write(body)
 
 
+def _write_text(handler: BaseHTTPRequestHandler, status: int, text: str, content_type: str) -> None:
+    body = text.encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("Content-Type", content_type)
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
 def _write_error(handler: BaseHTTPRequestHandler, exc: CollectorHTTPError) -> None:
     _write_json(
         handler,
@@ -798,7 +929,14 @@ def make_collector_handler(config: CollectorConfig, runtime_state: CollectorRunt
                         raise CollectorHTTPError(401, "unauthorized", "A valid HulunGuard collector token is required.")
                     _write_json(self, 200, collector_status(config, runtime_state))
                     return
-                raise CollectorHTTPError(404, "not_found", "Supported GET endpoints are /healthz and /status.")
+                if path == "/metrics":
+                    if not _authorized(self.headers, config.token):
+                        raise CollectorHTTPError(401, "unauthorized", "A valid HulunGuard collector token is required.")
+                    live_status = collector_status(config, runtime_state)
+                    metrics = collector_metrics_report(config.root, live_status=live_status)
+                    _write_text(self, 200, metrics["text"], "text/plain; version=0.0.4; charset=utf-8")
+                    return
+                raise CollectorHTTPError(404, "not_found", "Supported GET endpoints are /healthz, /status, and /metrics.")
             except CollectorHTTPError as exc:
                 _write_error(self, exc)
 

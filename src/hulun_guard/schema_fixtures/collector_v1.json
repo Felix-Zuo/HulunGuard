@@ -103,6 +103,26 @@
       "failures": []
     }
   },
+  "metrics": {
+    "schema": "hulun.collector.v1",
+    "generated_at": "2026-06-25T00:00:00Z",
+    "operation": "metrics",
+    "root": "fixture",
+    "format": "prometheus",
+    "metrics": [
+      {"name": "hulun_collector_up", "value": 1.0},
+      {"name": "hulun_collector_queue_pending", "value": 0.0},
+      {"name": "hulun_collector_managed_flush_total", "value": 1.0},
+      {"name": "hulun_collector_risk_score", "value": 8.0},
+      {"name": "hulun_collector_risk_band", "value": 1.0, "labels": {"band": "green"}}
+    ],
+    "text": "# HELP hulun_collector_up Collector operations gate status, 1 when passing.\n# TYPE hulun_collector_up gauge\nhulun_collector_up 1\n",
+    "gate": {
+      "passed": true,
+      "failure_count": 0,
+      "failures": []
+    }
+  },
   "service_template": {
     "schema": "hulun.collector.v1",
     "generated_at": "2026-06-25T00:00:00Z",

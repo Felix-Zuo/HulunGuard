@@ -73,6 +73,7 @@ python -m hulun_guard ingest --format generic --file events.jsonl --scan
 python -m hulun_guard collector serve
 python -m hulun_guard collector serve --flush-interval-seconds 5 --scan-on-flush --init-if-missing
 python -m hulun_guard collector status --require-status-file --json
+python -m hulun_guard collector metrics --require-status-file
 python -m hulun_guard collector service-template --output .hulun/collector-service --force --json
 ```
 

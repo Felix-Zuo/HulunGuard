@@ -15,6 +15,7 @@ Default bind:
 - host: `127.0.0.1`
 - port: `4318`
 - OTLP traces endpoint: `http://127.0.0.1:4318/v1/traces`
+- Prometheus metrics endpoint: `http://127.0.0.1:4318/metrics`
 
 Smoke-test the installed collector without leaving a long-running server:
 
@@ -22,6 +23,7 @@ Smoke-test the installed collector without leaving a long-running server:
 python -m hulun_guard --root . collector smoke --json
 python -m hulun_guard --root . collector smoke --managed --scan --init-if-missing --json
 python -m hulun_guard --root . collector status --require-status-file --json
+python -m hulun_guard --root . collector metrics --require-status-file
 python -m hulun_guard --root . collector service-template --force --json
 python -m hulun_guard batch status --json
 python -m hulun_guard batch flush --scan --init-if-missing --json
@@ -33,6 +35,7 @@ python -m hulun_guard batch flush --scan --init-if-missing --json
 | --- | --- | --- |
 | `GET` | `/healthz` | Liveness and supported formats. |
 | `GET` | `/status` | Queue status. Requires token when `--token` is set. |
+| `GET` | `/metrics` | Prometheus text metrics. Requires token when `--token` is set. |
 | `POST` | `/v1/traces` | OTLP/HTTP JSON traces. |
 | `POST` | `/ingest` | Auto-detected JSON or JSONL runtime payload. |
 | `POST` | `/ingest/<format>` | Explicit adapter payload format. |
@@ -92,6 +95,17 @@ The command reads local files only:
 
 It reports queue parse errors, dead letters, stale managed status, managed runtime `last_error`, and the latest HulunIndex summary. Missing status files are warnings by default; use `--require-status-file` for service health checks.
 
+## Prometheus Metrics
+
+Use `collector metrics` or `GET /metrics` when a service monitor should scrape collector health without parsing JSON:
+
+```powershell
+python -m hulun_guard collector metrics
+python -m hulun_guard collector metrics --require-status-file --json
+```
+
+Metrics include queue depth, queue bytes, parse errors, dead-letter records, status-file presence/staleness, managed flush counters, managed runtime error state, latest HulunIndex score, blocked state, and band. Local paths are not exposed as Prometheus labels.
+
 ## Service Templates
 
 Generate reviewed service templates for long-running managed mode:
@@ -141,7 +155,7 @@ Remote bind requires both an explicit flag and a token:
 python -m hulun_guard collector serve --host 0.0.0.0 --allow-remote --token "<local-token>"
 ```
 
-Authenticated requests can use either header:
+Authenticated requests to `/status`, `/metrics`, and POST ingestion can use either header:
 
 ```text
 Authorization: Bearer <local-token>
