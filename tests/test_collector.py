@@ -11,14 +11,23 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from hulun_guard import collector as collector_module
 from hulun_guard.cli import main
-from hulun_guard.collector import CollectorConfig, CollectorError, build_collector_server
+from hulun_guard.collector import (
+    CollectorConfig,
+    CollectorError,
+    CollectorRuntimeState,
+    build_collector_server,
+    collector_flush_once,
+    collector_status_path,
+)
 from hulun_guard.queue import queue_status
 
 
@@ -91,6 +100,36 @@ class CollectorTest(unittest.TestCase):
             self.assertEqual(payload["response"]["format"], "opentelemetry")
             self.assertEqual(queue_status(tmp)["queue"]["pending"], 1)
 
+    def test_managed_collector_smoke_flushes_and_scans(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.run_cli("--root", tmp, "collector", "smoke", "--managed", "--scan", "--init-if-missing", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertTrue(payload["gate"]["passed"])
+            self.assertTrue(payload["managed"])
+            self.assertEqual(payload["response"]["queued"], 1)
+            self.assertEqual(payload["managed_flush"]["imported"], 1)
+            self.assertTrue(payload["managed_flush"]["scanned"])
+            self.assertIn("risk", payload["managed_flush"])
+            self.assertEqual(queue_status(tmp)["queue"]["pending"], 0)
+            self.assertTrue((Path(tmp) / ".hulun" / "state.json").exists())
+            self.assertTrue((Path(tmp) / ".hulun" / "risk.json").exists())
+            self.assertTrue(collector_status_path(tmp).exists())
+
+    def test_managed_collector_smoke_flushes_existing_queue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.run_cli("--root", tmp, "collector", "smoke", "--json")
+            self.assertEqual(code, 0, out)
+            self.assertEqual(queue_status(tmp)["queue"]["pending"], 1)
+
+            code, out = self.run_cli("--root", tmp, "collector", "smoke", "--managed", "--scan", "--init-if-missing", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertTrue(payload["gate"]["passed"])
+            self.assertEqual(payload["managed_flush"]["pending_before"], 2)
+            self.assertEqual(payload["managed_flush"]["imported"], 2)
+            self.assertEqual(queue_status(tmp)["queue"]["pending"], 0)
+
     def test_otlp_endpoint_queues_span(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             server, thread, base_url = self.start_server(CollectorConfig(root=tmp, port=0))
@@ -103,6 +142,49 @@ class CollectorTest(unittest.TestCase):
                 self.assertEqual(queue_status(tmp)["queue"]["pending"], 1)
             finally:
                 self.stop_server(server, thread)
+
+    def test_status_reports_managed_runtime_after_flush(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = CollectorConfig(root=tmp, port=0, flush_interval_seconds=1, scan_on_flush=True, init_if_missing=True)
+            runtime_state = CollectorRuntimeState()
+            server = build_collector_server(config, runtime_state)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            host, port = server.server_address[:2]
+            base_url = f"http://{host}:{port}"
+            try:
+                code, body = request_json(f"{base_url}/v1/traces", method="POST", payload=otlp_payload())
+                self.assertEqual(code, 202)
+                flush = collector_flush_once(config, runtime_state)
+                self.assertTrue(flush["gate"]["passed"])
+                self.assertEqual(flush["imported"], 1)
+
+                code, body = request_json(f"{base_url}/status")
+                self.assertEqual(code, 200)
+                managed = body["managed"]
+                self.assertTrue(managed["enabled"])
+                self.assertEqual(managed["runtime"]["flush_count"], 1)
+                self.assertEqual(managed["runtime"]["imported_total"], 1)
+                self.assertEqual(body["queue"]["pending"], 0)
+            finally:
+                self.stop_server(server, thread)
+
+    def test_managed_loop_records_unexpected_flush_error(self) -> None:
+        class OneShotStopEvent:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def wait(self, _timeout: float) -> bool:
+                self.calls += 1
+                return self.calls > 1
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config = CollectorConfig(root=tmp, port=0, flush_interval_seconds=1)
+            runtime_state = CollectorRuntimeState()
+            with mock.patch.object(collector_module, "collector_flush_once", side_effect=RuntimeError("transient flush failure")):
+                collector_module._flush_loop(config, runtime_state, OneShotStopEvent())  # noqa: SLF001
+            self.assertEqual(runtime_state.last_error["code"], "managed_loop_failed")
+            self.assertIn("transient flush failure", runtime_state.last_error["message"])
 
     def test_token_auth_protects_ingest_and_status(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -143,6 +225,8 @@ class CollectorTest(unittest.TestCase):
             build_collector_server(CollectorConfig(host="0.0.0.0", port=0))
         with self.assertRaises(CollectorError):
             build_collector_server(CollectorConfig(host="0.0.0.0", port=0, allow_remote=True))
+        with self.assertRaises(CollectorError):
+            build_collector_server(CollectorConfig(port=0, flush_interval_seconds=-1))
 
 
 if __name__ == "__main__":

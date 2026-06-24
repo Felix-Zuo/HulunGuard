@@ -31,9 +31,12 @@ from .collector import (
     DEFAULT_COLLECTOR_PORT,
     CollectorConfig,
     CollectorError,
+    CollectorRuntimeState,
     build_collector_server,
     collector_json,
     collector_smoke,
+    collector_status_path,
+    start_collector_manager,
 )
 from .compatibility import agent_compatibility_json, compatibility_report
 from .constants import DASHBOARD_FILE, RISK_REPORT_FILE, VALID_EVENT_PHASES, VALID_STATUSES
@@ -566,32 +569,57 @@ def _collector_config_from_args(args: argparse.Namespace) -> CollectorConfig:
         source_platform=args.source_platform,
         include_sensitive=args.include_sensitive,
         retention_days=args.retention_days,
+        flush_interval_seconds=args.flush_interval_seconds,
+        flush_limit=args.flush_limit,
+        scan_on_flush=args.scan_on_flush,
+        init_if_missing=args.init_if_missing,
+        init_objective=args.init_objective,
+        init_criterion=args.init_criterion,
+        init_threshold=args.init_threshold,
+        threshold=args.threshold,
+        checkpoint_stale_minutes=args.checkpoint_stale_minutes,
+        write_status_file=not args.no_status_file,
     )
 
 
 def cmd_collector_serve(args: argparse.Namespace) -> int:
     config = _collector_config_from_args(args)
     try:
-        server = build_collector_server(config)
+        runtime_state = CollectorRuntimeState()
+        server = build_collector_server(config, runtime_state)
     except CollectorError as exc:
         raise SystemExit(str(exc)) from None
+    manager = start_collector_manager(config, runtime_state)
     host, port = server.server_address[:2]
     url_host = host_for_browser_url(str(host))
     print(f"HulunGuard collector listening on http://{url_host}:{port}")
     print("POST /v1/traces for OTLP/HTTP JSON. POST /ingest or /ingest/<format> for adapter payloads.")
     print("GET /healthz for liveness. GET /status for queue state.")
+    if manager:
+        print(f"Managed flush: every {config.flush_interval_seconds}s, limit {config.flush_limit}, scan={'on' if config.scan_on_flush else 'off'}.")
+        if config.write_status_file:
+            print(f"Status file: {collector_status_path(config.root)}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("Collector stopped.")
     finally:
+        if manager:
+            manager.stop()
         server.server_close()
     return 0
 
 
 def cmd_collector_smoke(args: argparse.Namespace) -> int:
     try:
-        payload = collector_smoke(args.root, token=args.token, max_payload_bytes=args.max_payload_bytes)
+        payload = collector_smoke(
+            args.root,
+            token=args.token,
+            max_payload_bytes=args.max_payload_bytes,
+            managed=args.managed,
+            scan=args.scan,
+            init_if_missing=args.init_if_missing,
+        )
     except CollectorError as exc:
         raise SystemExit(str(exc)) from None
     if args.json:
@@ -1986,12 +2014,25 @@ def build_parser() -> argparse.ArgumentParser:
     collector_serve.add_argument("--allow-remote", action="store_true", help="Allow a non-loopback bind. Requires --token.")
     collector_serve.add_argument("--max-payload-bytes", type=int, default=MAX_TRACE_BYTES, help=f"Reject payloads larger than this many bytes. Defaults to {MAX_TRACE_BYTES}.")
     collector_serve.add_argument("--source-platform", help="Override source platform on queued observations.")
+    collector_serve.add_argument("--flush-interval-seconds", type=int, default=0, help="Enable managed queue flush every N seconds. Defaults to 0, which keeps queue-only mode.")
+    collector_serve.add_argument("--flush-limit", type=int, default=BATCH_FLUSH_LIMIT, help=f"Maximum queued observations to flush per managed cycle. Defaults to {BATCH_FLUSH_LIMIT}.")
+    collector_serve.add_argument("--scan-on-flush", action="store_true", help="Recompute HulunIndex after a managed flush imports observations.")
+    collector_serve.add_argument("--threshold", type=int)
+    collector_serve.add_argument("--checkpoint-stale-minutes", type=int, default=45)
+    collector_serve.add_argument("--init-if-missing", action="store_true", help="Create a minimal project ledger before the first managed flush if no state exists.")
+    collector_serve.add_argument("--init-objective", help="Objective used with --init-if-missing in managed mode.")
+    collector_serve.add_argument("--init-criterion", help="Criterion used with --init-if-missing in managed mode.")
+    collector_serve.add_argument("--init-threshold", type=int, default=66, help="Risk threshold used with --init-if-missing.")
+    collector_serve.add_argument("--no-status-file", action="store_true", help="Do not write .hulun/collector_status.json in managed mode.")
     add_privacy_controls(collector_serve)
     collector_serve.set_defaults(func=cmd_collector_serve)
 
     collector_smoke_cmd = collector_sub.add_parser("smoke", parents=[root_parent], help="Start a temporary collector, POST one OTLP JSON span, and verify the queue.")
     collector_smoke_cmd.add_argument("--token", help="Exercise collector smoke with a required bearer token.")
     collector_smoke_cmd.add_argument("--max-payload-bytes", type=int, default=MAX_TRACE_BYTES, help=f"Reject payloads larger than this many bytes. Defaults to {MAX_TRACE_BYTES}.")
+    collector_smoke_cmd.add_argument("--managed", action="store_true", help="Also run one managed flush after the POST and verify the queue is drained.")
+    collector_smoke_cmd.add_argument("--scan", action="store_true", help="With --managed, scan after flush and verify a risk report is produced.")
+    collector_smoke_cmd.add_argument("--init-if-missing", action="store_true", help="With --managed, initialize a minimal ledger before flush if needed.")
     collector_smoke_cmd.add_argument("--json", action="store_true")
     collector_smoke_cmd.set_defaults(func=cmd_collector_smoke)
 

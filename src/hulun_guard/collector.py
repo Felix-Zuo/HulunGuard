@@ -5,7 +5,7 @@ import http.client
 import json
 import tempfile
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from ipaddress import ip_address
 from pathlib import Path
@@ -13,14 +13,17 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from .adapters import MAX_TRACE_BYTES, parse_trace_text
+from .constants import RISK_REPORT_FILE
 from .privacy import DEFAULT_RETENTION_DAYS
-from .queue import BatchIngestError, enqueue_payload, queue_status
+from .queue import BATCH_FLUSH_LIMIT, BatchIngestError, enqueue_payload, flush_queue, queue_status
+from .risk import scan_state
 from .schemas import COLLECTOR_SCHEMA
-from .storage import project_root
+from .storage import hulun_dir, load_state, project_root, risk_path, save_state, write_json
 from .util import utc_now
 
 DEFAULT_COLLECTOR_HOST = "127.0.0.1"
 DEFAULT_COLLECTOR_PORT = 4318
+COLLECTOR_STATUS_FILE = "collector_status.json"
 TRACE_PAYLOAD_FORMATS = (
     "auto",
     "generic",
@@ -52,6 +55,26 @@ class CollectorConfig:
     source_platform: str | None = None
     include_sensitive: bool = False
     retention_days: int = DEFAULT_RETENTION_DAYS
+    flush_interval_seconds: int = 0
+    flush_limit: int = BATCH_FLUSH_LIMIT
+    scan_on_flush: bool = False
+    init_if_missing: bool = False
+    init_objective: str | None = None
+    init_criterion: str | None = None
+    init_threshold: int = 66
+    threshold: int | None = None
+    checkpoint_stale_minutes: int = 45
+    write_status_file: bool = True
+
+
+@dataclass
+class CollectorRuntimeState:
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    started_at: str = field(default_factory=utc_now)
+    flush_count: int = 0
+    imported_total: int = 0
+    last_flush: dict[str, Any] | None = None
+    last_error: dict[str, Any] | None = None
 
 
 class CollectorHTTPError(Exception):
@@ -81,6 +104,14 @@ def validate_collector_config(config: CollectorConfig) -> None:
         raise CollectorError("collector port must be between 0 and 65535.")
     if int(config.max_payload_bytes) < 1:
         raise CollectorError("collector max_payload_bytes must be at least 1.")
+    if int(config.flush_interval_seconds) < 0:
+        raise CollectorError("collector flush_interval_seconds must be zero or greater.")
+    if int(config.flush_limit) < 1:
+        raise CollectorError("collector flush_limit must be at least 1.")
+    if int(config.init_threshold) < 1:
+        raise CollectorError("collector init_threshold must be at least 1.")
+    if int(config.checkpoint_stale_minutes) < 1:
+        raise CollectorError("collector checkpoint_stale_minutes must be at least 1.")
     if not _is_loopback_host(config.host):
         if not config.allow_remote:
             raise CollectorError("Refusing to bind the collector to a non-loopback host without --allow-remote.")
@@ -94,6 +125,10 @@ def _json_bytes(payload: dict[str, Any]) -> bytes:
 
 def collector_json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+
+
+def collector_status_path(root: str | Path | None) -> Path:
+    return hulun_dir(_resolved_root(root)) / COLLECTOR_STATUS_FILE
 
 
 def _content_type(headers: Any) -> str:
@@ -172,10 +207,34 @@ def _health_payload(config: CollectorConfig) -> dict[str, Any]:
         "formats": list(TRACE_PAYLOAD_FORMATS),
         "limits": {"max_payload_bytes": int(config.max_payload_bytes)},
         "auth_required": bool(config.token),
+        "managed": {
+            "enabled": int(config.flush_interval_seconds) > 0,
+            "flush_interval_seconds": int(config.flush_interval_seconds),
+            "scan_on_flush": bool(config.scan_on_flush),
+        },
     }
 
 
-def collector_status(config: CollectorConfig) -> dict[str, Any]:
+def _runtime_snapshot(runtime_state: CollectorRuntimeState | None) -> dict[str, Any]:
+    if runtime_state is None:
+        return {
+            "started_at": None,
+            "flush_count": 0,
+            "imported_total": 0,
+            "last_flush": None,
+            "last_error": None,
+        }
+    with runtime_state.lock:
+        return {
+            "started_at": runtime_state.started_at,
+            "flush_count": runtime_state.flush_count,
+            "imported_total": runtime_state.imported_total,
+            "last_flush": runtime_state.last_flush,
+            "last_error": runtime_state.last_error,
+        }
+
+
+def collector_status(config: CollectorConfig, runtime_state: CollectorRuntimeState | None = None) -> dict[str, Any]:
     status = queue_status(_resolved_root(config.root))
     return {
         "schema": COLLECTOR_SCHEMA,
@@ -191,7 +250,122 @@ def collector_status(config: CollectorConfig) -> dict[str, Any]:
             "auth_required": bool(config.token),
             "max_payload_bytes": int(config.max_payload_bytes),
         },
+        "managed": {
+            "enabled": int(config.flush_interval_seconds) > 0,
+            "flush_interval_seconds": int(config.flush_interval_seconds),
+            "flush_limit": int(config.flush_limit),
+            "scan_on_flush": bool(config.scan_on_flush),
+            "init_if_missing": bool(config.init_if_missing),
+            "status_file": str(collector_status_path(config.root)) if config.write_status_file else None,
+            "runtime": _runtime_snapshot(runtime_state),
+        },
     }
+
+
+def write_collector_status(config: CollectorConfig, runtime_state: CollectorRuntimeState | None = None) -> Path | None:
+    if not config.write_status_file:
+        return None
+    path = collector_status_path(config.root)
+    write_json(path, collector_status(config, runtime_state))
+    return path
+
+
+def _risk_markdown(risk: dict[str, Any]) -> str:
+    lines = ["# HulunGuard Risk Report", "", f"Score: {risk['score']} ({risk['band']})", ""]
+    lines.append(f"Slop index: {risk.get('slop_index', risk['score'])}")
+    lines.append(f"Threshold: {risk['threshold']}")
+    lines.append(f"Required action: {risk['required_action']}")
+    lines.extend(["", "## Components"])
+    for key, value in risk.get("components", {}).items():
+        weight = risk.get("weights", {}).get(key)
+        suffix = f" / {weight}" if weight is not None else ""
+        lines.append(f"- {key}: {value}{suffix}")
+    lines.extend(["", "## Reasons"])
+    lines.extend([f"- {reason}" for reason in risk.get("reasons", [])])
+    return "\n".join(lines) + "\n"
+
+
+def _scan_after_flush(config: CollectorConfig) -> dict[str, Any]:
+    root = _resolved_root(config.root)
+    state = load_state(root)
+    risk = scan_state(
+        state,
+        threshold=config.threshold,
+        final_attempt=False,
+        checkpoint_stale_minutes=config.checkpoint_stale_minutes,
+    )
+    state["last_scan"] = risk
+    save_state(root, state)
+    write_json(risk_path(root), risk)
+    report_path = hulun_dir(root) / RISK_REPORT_FILE
+    report_path.write_text(_risk_markdown(risk), encoding="utf-8")
+    return risk
+
+
+def _record_runtime_flush(runtime_state: CollectorRuntimeState | None, payload: dict[str, Any]) -> None:
+    if runtime_state is None:
+        return
+    with runtime_state.lock:
+        runtime_state.flush_count += 1
+        runtime_state.imported_total += int(payload.get("imported") or 0)
+        runtime_state.last_flush = payload
+        runtime_state.last_error = None if payload.get("gate", {}).get("passed", True) else payload.get("error")
+
+
+def _record_runtime_error(runtime_state: CollectorRuntimeState | None, *, code: str, message: str) -> None:
+    if runtime_state is None:
+        return
+    with runtime_state.lock:
+        runtime_state.last_error = {"code": code, "message": message, "generated_at": utc_now()}
+
+
+def collector_flush_once(config: CollectorConfig, runtime_state: CollectorRuntimeState | None = None) -> dict[str, Any]:
+    root = _resolved_root(config.root)
+    pending_before = int(queue_status(root)["queue"]["pending"])
+    payload: dict[str, Any] = {
+        "schema": COLLECTOR_SCHEMA,
+        "generated_at": utc_now(),
+        "operation": "managed_flush",
+        "root": str(root),
+        "requested_limit": int(config.flush_limit),
+        "pending_before": pending_before,
+        "imported": 0,
+        "scanned": False,
+        "batch": None,
+        "risk": None,
+        "gate": {"passed": True, "failure_count": 0, "failures": []},
+    }
+    if pending_before < 1:
+        payload["queue"] = queue_status(root)["queue"]
+        _record_runtime_flush(runtime_state, payload)
+        write_collector_status(config, runtime_state)
+        return payload
+    try:
+        batch = flush_queue(
+            root,
+            limit=int(config.flush_limit),
+            init_if_missing=config.init_if_missing,
+            init_objective=config.init_objective,
+            init_criterion=config.init_criterion,
+            init_threshold=config.init_threshold,
+            include_sensitive=config.include_sensitive,
+            retention_days=config.retention_days,
+        )
+        payload["batch"] = batch
+        payload["imported"] = int(batch.get("imported") or 0)
+        payload["queue"] = batch["queue"]
+        payload["dead_letter"] = batch["dead_letter"]
+        if config.scan_on_flush and payload["imported"]:
+            payload["risk"] = _scan_after_flush(config)
+            payload["scanned"] = True
+    except (BatchIngestError, SystemExit, OSError, ValueError) as exc:
+        payload["gate"] = {"passed": False, "failure_count": 1, "failures": [str(exc)]}
+        payload["error"] = {"code": "managed_flush_failed", "message": str(exc)}
+        payload["queue"] = queue_status(root)["queue"]
+        payload["dead_letter"] = queue_status(root)["dead_letter"]
+    _record_runtime_flush(runtime_state, payload)
+    write_collector_status(config, runtime_state)
+    return payload
 
 
 def _ingest_payload(config: CollectorConfig, *, endpoint: str, source_format: str, payload: Any) -> dict[str, Any]:
@@ -243,9 +417,43 @@ def _write_error(handler: BaseHTTPRequestHandler, exc: CollectorHTTPError) -> No
     )
 
 
-def make_collector_handler(config: CollectorConfig) -> type[BaseHTTPRequestHandler]:
+@dataclass
+class CollectorManager:
+    stop_event: threading.Event
+    thread: threading.Thread
+    flush_interval_seconds: int
+
+    def stop(self) -> None:
+        self.stop_event.set()
+        self.thread.join(timeout=max(5, 2 * int(self.flush_interval_seconds or 1)))
+
+
+def _flush_loop(config: CollectorConfig, runtime_state: CollectorRuntimeState, stop_event: threading.Event) -> None:
+    interval = max(1, int(config.flush_interval_seconds))
+    while not stop_event.wait(interval):
+        try:
+            collector_flush_once(config, runtime_state)
+        except Exception as exc:
+            _record_runtime_error(runtime_state, code="managed_loop_failed", message=str(exc))
+            try:
+                write_collector_status(config, runtime_state)
+            except OSError:
+                pass
+
+
+def start_collector_manager(config: CollectorConfig, runtime_state: CollectorRuntimeState) -> CollectorManager | None:
+    if int(config.flush_interval_seconds) < 1:
+        return None
+    stop_event = threading.Event()
+    thread = threading.Thread(target=_flush_loop, args=(config, runtime_state, stop_event), name="hulun-collector-flush", daemon=True)
+    thread.start()
+    write_collector_status(config, runtime_state)
+    return CollectorManager(stop_event=stop_event, thread=thread, flush_interval_seconds=int(config.flush_interval_seconds))
+
+
+def make_collector_handler(config: CollectorConfig, runtime_state: CollectorRuntimeState | None = None) -> type[BaseHTTPRequestHandler]:
     class HulunCollectorHandler(BaseHTTPRequestHandler):
-        server_version = "HulunGuardCollector/0.34"
+        server_version = "HulunGuardCollector/0.35"
 
         def log_message(self, format: str, *args: Any) -> None:
             return
@@ -260,7 +468,7 @@ def make_collector_handler(config: CollectorConfig) -> type[BaseHTTPRequestHandl
                 if path == "/status":
                     if not _authorized(self.headers, config.token):
                         raise CollectorHTTPError(401, "unauthorized", "A valid HulunGuard collector token is required.")
-                    _write_json(self, 200, collector_status(config))
+                    _write_json(self, 200, collector_status(config, runtime_state))
                     return
                 raise CollectorHTTPError(404, "not_found", "Supported GET endpoints are /healthz and /status.")
             except CollectorHTTPError as exc:
@@ -294,17 +502,21 @@ def make_collector_handler(config: CollectorConfig) -> type[BaseHTTPRequestHandl
     return HulunCollectorHandler
 
 
-def build_collector_server(config: CollectorConfig) -> ThreadingHTTPServer:
+def build_collector_server(config: CollectorConfig, runtime_state: CollectorRuntimeState | None = None) -> ThreadingHTTPServer:
     validate_collector_config(config)
-    handler = make_collector_handler(config)
+    handler = make_collector_handler(config, runtime_state)
     return ThreadingHTTPServer((config.host, int(config.port)), handler)
 
 
 def serve_collector(config: CollectorConfig) -> None:
-    server = build_collector_server(config)
+    runtime_state = CollectorRuntimeState()
+    server = build_collector_server(config, runtime_state)
+    manager = start_collector_manager(config, runtime_state)
     try:
         server.serve_forever()
     finally:
+        if manager:
+            manager.stop()
         server.server_close()
 
 
@@ -360,23 +572,46 @@ def _post_json(url: str, payload: dict[str, Any], *, token: str | None) -> tuple
         connection.close()
 
 
-def collector_smoke(root: str | Path | None = None, *, token: str | None = None, max_payload_bytes: int = MAX_TRACE_BYTES) -> dict[str, Any]:
+def collector_smoke(
+    root: str | Path | None = None,
+    *,
+    token: str | None = None,
+    max_payload_bytes: int = MAX_TRACE_BYTES,
+    managed: bool = False,
+    scan: bool = False,
+    init_if_missing: bool = False,
+) -> dict[str, Any]:
     if root is None:
         with tempfile.TemporaryDirectory(prefix="hulun-collector-smoke-") as tmp:
-            return collector_smoke(tmp, token=token, max_payload_bytes=max_payload_bytes)
+            return collector_smoke(tmp, token=token, max_payload_bytes=max_payload_bytes, managed=managed, scan=scan, init_if_missing=init_if_missing)
 
     root_path = _resolved_root(root)
     before = queue_status(root_path)
-    config = CollectorConfig(root=root_path, host=DEFAULT_COLLECTOR_HOST, port=0, token=token, max_payload_bytes=max_payload_bytes)
-    server = build_collector_server(config)
+    config = CollectorConfig(
+        root=root_path,
+        host=DEFAULT_COLLECTOR_HOST,
+        port=0,
+        token=token,
+        max_payload_bytes=max_payload_bytes,
+        flush_interval_seconds=0,
+        scan_on_flush=scan,
+        init_if_missing=init_if_missing,
+        init_objective="Monitor managed collector runtime reliability",
+        init_criterion="Managed collector imports live traces into the project ledger.",
+    )
+    runtime_state = CollectorRuntimeState()
+    server = build_collector_server(config, runtime_state)
     thread = threading.Thread(target=server.serve_forever, name="hulun-collector-smoke", daemon=True)
     thread.start()
     response_status = 0
     response_body: dict[str, Any] = {}
+    managed_flush: dict[str, Any] | None = None
     failures: list[str] = []
     try:
         host, port = server.server_address[:2]
         response_status, response_body = _post_json(f"http://{host}:{port}/v1/traces", _smoke_payload(), token=token)
+        if managed:
+            managed_flush = collector_flush_once(config, runtime_state)
     except (OSError, TimeoutError, http.client.HTTPException, json.JSONDecodeError) as exc:
         failures.append(str(exc))
     finally:
@@ -385,21 +620,32 @@ def collector_smoke(root: str | Path | None = None, *, token: str | None = None,
         thread.join(timeout=5)
 
     after = queue_status(root_path)
-    expected_pending = int(before["queue"]["pending"]) + 1
     if response_status != 202:
         failures.append(f"expected HTTP 202, got {response_status}")
     if int(response_body.get("queued") or 0) != 1:
         failures.append("collector response did not queue exactly one observation")
-    if int(after["queue"]["pending"]) != expected_pending:
-        failures.append(f"expected pending queue {expected_pending}, got {after['queue']['pending']}")
+    if managed:
+        if not managed_flush or not managed_flush.get("gate", {}).get("passed"):
+            failures.append("managed collector flush did not pass")
+        expected_pending = int((managed_flush or {}).get("queue", {}).get("pending") or 0)
+        if int(after["queue"]["pending"]) != expected_pending:
+            failures.append(f"expected managed pending queue {expected_pending}, got {after['queue']['pending']}")
+        if scan and not (managed_flush or {}).get("risk"):
+            failures.append("managed collector smoke expected a risk scan")
+    else:
+        expected_pending = int(before["queue"]["pending"]) + 1
+        if int(after["queue"]["pending"]) != expected_pending:
+            failures.append(f"expected pending queue {expected_pending}, got {after['queue']['pending']}")
     return {
         "schema": COLLECTOR_SCHEMA,
         "generated_at": utc_now(),
         "operation": "smoke",
         "root": str(root_path),
         "endpoint": "/v1/traces",
+        "managed": managed,
         "response_status": response_status,
         "response": response_body,
+        "managed_flush": managed_flush,
         "queue_before": before["queue"],
         "queue": after["queue"],
         "dead_letter": after["dead_letter"],

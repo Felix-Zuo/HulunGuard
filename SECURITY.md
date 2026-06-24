@@ -24,6 +24,7 @@ Every release must pass:
 - Threat model static check.
 - Integration kit verification gate.
 - Local HTTP collector smoke gate.
+- Managed collector flush/scan smoke gate.
 - Schema compatibility fixture gate.
 - Benchmark gate for expected scan latency.
 - Retention cleanup dry-run gate.

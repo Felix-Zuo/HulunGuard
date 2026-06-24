@@ -39,6 +39,7 @@ The adapter conformance test covers:
 - `ingest --format generic`
 - HTTP collector `/ingest/generic`
 - HTTP collector `/v1/traces`
+- Managed HTTP collector flush plus scan
 - `ingest --format opentelemetry`
 - `ingest --format openinference`
 - `ingest --format openhands`
@@ -55,7 +56,7 @@ Trace-file adapters must reject files above the configured `--max-trace-bytes` l
 
 Runtime payload adapters must reject JSON-serialized payloads above the configured `--max-payload-bytes` limit before queueing events. The default limit is 5 MiB. Queue metadata stores a source name and payload fingerprint, not the raw host path or raw private payload.
 
-HTTP collector adapters must use JSON or JSONL, must queue through the same durable batch path, must reject oversized payloads before queueing, and must refuse non-loopback binds unless explicitly started with `--allow-remote --token`.
+HTTP collector adapters must use JSON or JSONL, must queue through the same durable batch path, must reject oversized payloads before queueing, and must refuse non-loopback binds unless explicitly started with `--allow-remote --token`. Managed collector mode must preserve the same fields after automatic flush and scan.
 
 Integration coverage is defined in `docs/ADAPTER_MATRIX.md`. The conformance test proves each adapter can write the shared contract; `adapter-matrix` proves supported trace families survive realistic import, export, redaction, and workflow-path checks.
 
@@ -64,7 +65,7 @@ Integration coverage is defined in `docs/ADAPTER_MATRIX.md`. The conformance tes
 | Tier | Surfaces | Gate |
 | --- | --- | --- |
 | integration-tested | OpenTelemetry, OpenInference, OpenHands-like, SWE-agent-like, OpenAI Agents SDK | `python -m hulun_guard adapter-matrix --json` |
-| collector-smoke-tested | OTLP/HTTP JSON and generic HTTP adapter payload path | `python -m hulun_guard collector smoke --json` |
+| collector-smoke-tested | OTLP/HTTP JSON, generic HTTP adapter payload path, managed flush/scan | `python -m hulun_guard collector smoke --json` and `python -m hulun_guard collector smoke --managed --scan --init-if-missing --json` |
 | hosted-fixture-tested | LangGraph, LangSmith, Langfuse, Phoenix | Synthetic public-safe hosted platform fixture shapes |
 | roundtrip-tested | OpenTelemetry, OpenInference, Langfuse, Phoenix | Import to persisted events to OTLP export to OTLP re-import |
 | conformance | CLI, Python SDK, MCP, generic JSON | `tests/test_adapter_conformance.py` |

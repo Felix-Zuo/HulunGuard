@@ -153,7 +153,20 @@ def verify_installed_commands(
     collector = run_json_command([str(hulun_path), "--root", str(collector_root), "collector", "smoke", "--json"], cwd=cwd, env=env)
     if collector.get("schema") != "hulun.collector.v1" or not collector.get("gate", {}).get("passed"):
         raise ArtifactSmokeError("collector smoke failed from the installed wheel")
+    managed_collector_root = cwd / "managed-collector-root"
+    managed_collector = run_json_command(
+        [str(hulun_path), "--root", str(managed_collector_root), "collector", "smoke", "--managed", "--scan", "--init-if-missing", "--json"],
+        cwd=cwd,
+        env=env,
+    )
+    if (
+        managed_collector.get("schema") != "hulun.collector.v1"
+        or not managed_collector.get("gate", {}).get("passed")
+        or not managed_collector.get("managed_flush", {}).get("scanned")
+    ):
+        raise ArtifactSmokeError("managed collector smoke failed from the installed wheel")
     commands.append({"name": "hulun collector smoke --json", "status": "ok", "detail": str(collector_root)})
+    commands.append({"name": "hulun collector smoke --managed --scan --json", "status": "ok", "detail": str(managed_collector_root)})
 
     batch_root = cwd / "batch-root"
     batch_root.mkdir()

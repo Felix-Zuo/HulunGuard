@@ -74,9 +74,9 @@ AGENT_COMPATIBILITY: tuple[dict[str, Any], ...] = (
         "category": "standard",
         "tier": "roundtrip-tested",
         "ingest_format": "opentelemetry",
-        "command": "python -m hulun_guard collector serve",
+        "command": "python -m hulun_guard collector serve --flush-interval-seconds 5 --scan-on-flush --init-if-missing",
         "source_uri": "https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/",
-        "guarantee": "OTLP JSON with GenAI attributes is round-trip tested through import, persistence, export, re-import, and collector smoke; POST to /v1/traces and flush the queue to scan.",
+        "guarantee": "OTLP JSON with GenAI attributes is round-trip tested through import, persistence, export, re-import, collector smoke, and managed flush/scan; POST to /v1/traces.",
     },
     {
         "id": "openinference",
@@ -154,9 +154,9 @@ AGENT_COMPATIBILITY: tuple[dict[str, Any], ...] = (
         "category": "bridge",
         "tier": "generic-bridge",
         "ingest_format": "generic",
-        "command": "python -m hulun_guard collector serve",
+        "command": "python -m hulun_guard collector serve --flush-interval-seconds 5 --scan-on-flush --init-if-missing",
         "source_uri": "internal://hulunguard/adapter-contract/generic-json",
-        "guarantee": "Any agent that can emit JSON or JSONL with HulunGuard event fields can use the generic file, stdin, SDK, MCP, or HTTP bridge; POST to /ingest/generic and flush the queue to scan.",
+        "guarantee": "Any agent that can emit JSON or JSONL with HulunGuard event fields can use the generic file, stdin, SDK, MCP, or HTTP bridge; POST to /ingest/generic for managed flush/scan.",
     },
 )
 
