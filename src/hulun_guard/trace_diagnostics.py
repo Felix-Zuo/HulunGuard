@@ -22,6 +22,7 @@ TRACE_FORMATS = (
     "langsmith",
     "langfuse",
     "phoenix",
+    "openai-agents",
 )
 
 EXPLICIT_TRACE_FORMATS = tuple(item for item in TRACE_FORMATS if item != "auto")
@@ -32,6 +33,9 @@ def _format_hint_from_name(path: Path) -> str | None:
     hints = (
         ("langgraph", "langgraph"),
         ("langsmith", "langsmith"),
+        ("openai-agents", "openai-agents"),
+        ("openai_agents", "openai-agents"),
+        ("openai", "openai-agents"),
         ("langfuse", "langfuse"),
         ("phoenix", "phoenix"),
         ("openinference", "openinference"),
@@ -116,6 +120,9 @@ def detect_trace_format(path: str | Path, payload: Any | None = None) -> str:
 
     if _has_nested_key(probe, "resourceSpans"):
         return name_hint if name_hint in {"langfuse", "opentelemetry"} else "opentelemetry"
+
+    if any(item.get("object") == "trace.span" or isinstance(item.get("span_data"), dict) for item in dicts):
+        return "openai-agents"
 
     if any("openinference.span.kind" in _span_attrs(item) for item in dicts):
         return name_hint if name_hint in {"phoenix", "openinference"} else "openinference"

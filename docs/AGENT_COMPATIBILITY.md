@@ -32,6 +32,7 @@ These surfaces have explicit ingest formats and fixture coverage:
 | LangSmith | `langsmith` | hosted fixture, real-world benchmark |
 | Langfuse | `langfuse` | OTEL round-trip, real-world benchmark |
 | Phoenix | `phoenix` | OpenInference round-trip, real-world benchmark |
+| OpenAI Agents SDK | `openai-agents` | adapter matrix, integration kit |
 
 ## Standards Paths
 
@@ -69,8 +70,6 @@ Use:
 ```powershell
 python -m hulun_guard ingest --format generic --file events.jsonl --scan
 ```
-
-OpenAI Agents SDK traces can use this bridge through exported trace events, or a tracing processor can emit OTLP JSON for the OpenTelemetry adapter.
 
 ## Boundaries
 

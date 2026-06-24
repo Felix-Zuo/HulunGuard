@@ -57,6 +57,8 @@ def _otlp_attr(key: str, value: Any) -> dict[str, Any]:
 def _sample_name(ingest_format: str) -> str:
     if ingest_format == "generic":
         return "sample-events.jsonl"
+    if ingest_format == "openai-agents":
+        return "sample-openai-agents-trace.json"
     if ingest_format in {"opentelemetry", "langfuse"}:
         return "sample-otlp.json"
     if ingest_format in {"openinference", "phoenix"}:
@@ -101,6 +103,76 @@ def _sample_payload(ingest_format: str, agent: dict[str, Any]) -> tuple[str, str
                 ]
             ),
         )
+
+    if ingest_format == "openai-agents":
+        payload = {
+            "data": [
+                {
+                    "object": "trace",
+                    "id": "trace_openai_agents_sample",
+                    "workflow_name": f"{name} sample workflow",
+                    "group_id": "sample-group",
+                    "metadata": {"source": "hulunguard-public-safe-sample"},
+                },
+                {
+                    "object": "trace.span",
+                    "id": "span_openai_agents_verify",
+                    "trace_id": "trace_openai_agents_sample",
+                    "parent_id": None,
+                    "started_at": "2026-01-01T00:00:00+00:00",
+                    "ended_at": "2026-01-01T00:00:00.350000+00:00",
+                    "span_data": {
+                        "type": "function",
+                        "name": "sample_verify",
+                        "input": {"command": "pytest"},
+                        "output": {"status": "passed"},
+                    },
+                    "error": None,
+                    "metadata": {
+                        "hulun.event.type": "tool_result",
+                        "hulun.event.summary": f"{name} verification command passed",
+                        "hulun.event.result": "pass",
+                        "hulun.event.phase": "verify",
+                        "hulun.evidence.ids": ["E-sample-verify"],
+                        "hulun.refs": [f"{source}:sample:verify"],
+                        "hulun.action_key": f"{source}:sample-verify",
+                        "prompt_tokens": 120,
+                        "completion_tokens": 24,
+                        "hulun.cost": 0.01,
+                        "hulun.latency_ms": 350,
+                        "model": "sample-model",
+                    },
+                },
+                {
+                    "object": "trace.span",
+                    "id": "span_openai_agents_final",
+                    "trace_id": "trace_openai_agents_sample",
+                    "parent_id": "span_openai_agents_verify",
+                    "started_at": "2026-01-01T00:00:01+00:00",
+                    "ended_at": "2026-01-01T00:00:01.100000+00:00",
+                    "span_data": {
+                        "type": "custom",
+                        "name": "final",
+                        "data": {
+                            "sdk_span_type": "turn",
+                            "status": "done",
+                        },
+                    },
+                    "error": None,
+                    "metadata": {
+                        "hulun.event.type": "final_attempt",
+                        "hulun.event.summary": f"{name} sample final claim with evidence",
+                        "hulun.event.result": "pass",
+                        "hulun.event.phase": "final",
+                        "hulun.claims": ["sample workflow completed with verification evidence"],
+                        "hulun.evidence.ids": ["E-sample-verify"],
+                        "hulun.refs": [f"{source}:sample:final"],
+                        "hulun.action_key": f"{source}:sample-final",
+                    },
+                },
+            ]
+        }
+        return _sample_name(ingest_format), _json_text(payload)
 
     if ingest_format in {"opentelemetry", "langfuse"}:
         payload = {

@@ -24,6 +24,7 @@ The gate verifies:
 - SWE-agent-like trajectory streams with success, retry, recovery, summary, and finalization paths.
 - LangGraph stream parts with success, retry, recovery, summary, and finalization paths.
 - LangSmith run exports with success, retry, recovery, summary, and finalization paths.
+- OpenAI Agents SDK trace/span exports with success, retry, recovery, summary, and finalization paths.
 - Privacy redaction for secrets, emails, passwords, and URL query strings.
 - Preservation of source references, evidence IDs, action keys, tokens, cost, latency, model, result, phase, and runtime event type.
 
@@ -31,7 +32,7 @@ The gate verifies:
 
 | Tier | Surfaces | Meaning |
 | --- | --- | --- |
-| integration-tested | OpenTelemetry, OpenInference, OpenHands-like, SWE-agent-like | Public-safe fixture streams are imported through adapters and checked by `adapter-matrix`. |
+| integration-tested | OpenTelemetry, OpenInference, OpenHands-like, SWE-agent-like, OpenAI Agents SDK | Public-safe fixture streams are imported through adapters and checked by `adapter-matrix`. |
 | hosted-fixture-tested | LangGraph, LangSmith, Langfuse, Phoenix | Hosted platform fixture shapes are checked with synthetic public-safe exports and no private service trace data. |
 | roundtrip-tested | OpenTelemetry, OpenInference, Langfuse, Phoenix | Hulun-compatible fields survive import, HulunGuard persistence, OTLP export, and OTLP re-import. |
 | conformance | CLI, Python SDK, MCP, generic JSON | The shared adapter contract test verifies field preservation, redaction, and malformed payload rejection. |
@@ -53,3 +54,4 @@ The command is also included in `doctor --run-validation`, CI, Release, and the 
 - LangSmith trace and run model: `https://docs.langchain.com/langsmith/observability-concepts`
 - Langfuse OTEL ingestion: `https://langfuse.com/integrations/native/opentelemetry`
 - OpenInference/Phoenix semantic conventions: `https://arize-ai.github.io/openinference/spec/semantic_conventions.html`
+- OpenAI Agents SDK tracing: `https://openai.github.io/openai-agents-python/tracing/`

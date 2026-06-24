@@ -45,7 +45,7 @@ def adapter_support_tiers() -> list[dict[str, Any]]:
     return [
         {
             "tier": "integration-tested",
-            "surfaces": ["opentelemetry", "openinference", "openhands", "swe-agent"],
+            "surfaces": ["opentelemetry", "openinference", "openhands", "swe-agent", "openai-agents"],
             "guarantee": "Public-safe fixture streams are imported through adapters, checked for contract fields, and covered by the adapter-matrix gate.",
         },
         {
@@ -520,6 +520,127 @@ def _langsmith_fixture() -> list[dict[str, Any]]:
     ]
 
 
+def _openai_agents_fixture() -> dict[str, Any]:
+    return {
+        "data": [
+            {
+                "object": "trace",
+                "id": "trace_openai_agents_matrix",
+                "workflow_name": "OpenAI Agents SDK adapter matrix workflow",
+                "group_id": "matrix-group",
+                "metadata": {"source": "hulunguard-public-safe-fixture"},
+            },
+            {
+                "object": "trace.span",
+                "id": "span_openai_agents_explore",
+                "trace_id": "trace_openai_agents_matrix",
+                "parent_id": None,
+                "started_at": "2026-01-01T00:00:00+00:00",
+                "ended_at": "2026-01-01T00:00:00.100000+00:00",
+                "span_data": {"type": "agent", "name": "MatrixAgent", "handoffs": [], "tools": ["sample_verify"], "output_type": "text"},
+                "error": None,
+                "metadata": {
+                    "hulun.event.summary": "OpenAI Agents SDK agent prepared adapter fixture",
+                    "hulun.event.result": "pass",
+                    "hulun.event.phase": "explore",
+                    "hulun.evidence.ids": [EVIDENCE_ID],
+                    "hulun.refs": [TRACE_REF_WITH_QUERY],
+                },
+            },
+            {
+                "object": "trace.span",
+                "id": "span_openai_agents_verify",
+                "trace_id": "trace_openai_agents_matrix",
+                "parent_id": "span_openai_agents_explore",
+                "started_at": "2026-01-01T00:00:01+00:00",
+                "ended_at": "2026-01-01T00:00:01.890000+00:00",
+                "span_data": {"type": "guardrail", "name": "sample_guardrail", "triggered": True},
+                "error": {"message": f"guardrail failed with {KEY_MARKER} for {EMAIL_MARKER} and {AUTH_MARKER}", "data": {"attempt": 1}},
+                "metadata": {
+                    "hulun.event.summary": f"OpenAI Agents SDK guardrail failed with {KEY_MARKER} for {EMAIL_MARKER} and {AUTH_MARKER}",
+                    "hulun.event.result": "fail",
+                    "hulun.event.phase": "verify",
+                    "hulun.evidence.ids": [EVIDENCE_ID],
+                    "hulun.refs": [TRACE_REF_WITH_QUERY],
+                    "hulun.action_key": ACTION_KEY,
+                    "prompt_tokens": 123,
+                    "completion_tokens": 45,
+                    "hulun.cost": 0.67,
+                    "hulun.latency_ms": 890,
+                    "model": MODEL,
+                },
+            },
+            {
+                "object": "trace.span",
+                "id": "span_openai_agents_recover",
+                "trace_id": "trace_openai_agents_matrix",
+                "parent_id": "span_openai_agents_verify",
+                "started_at": "2026-01-01T00:00:02+00:00",
+                "ended_at": "2026-01-01T00:00:02.300000+00:00",
+                "span_data": {"type": "handoff", "from_agent": "MatrixAgent", "to_agent": "RecoveryAgent"},
+                "error": None,
+                "metadata": {
+                    "hulun.event.summary": "OpenAI Agents SDK handoff prepared recovery agent",
+                    "hulun.event.result": "pass",
+                    "hulun.event.phase": "orchestrate",
+                    "hulun.evidence.ids": [EVIDENCE_ID],
+                },
+            },
+            {
+                "object": "trace.span",
+                "id": "span_openai_agents_recovered",
+                "trace_id": "trace_openai_agents_matrix",
+                "parent_id": "span_openai_agents_recover",
+                "started_at": "2026-01-01T00:00:03+00:00",
+                "ended_at": "2026-01-01T00:00:03.200000+00:00",
+                "span_data": {"type": "function", "name": "sample_verify", "input": {"command": "pytest"}, "output": {"status": "passed"}},
+                "error": None,
+                "metadata": {
+                    "hulun.event.type": "tool_result",
+                    "hulun.event.summary": "OpenAI Agents SDK retry passed after recovery",
+                    "hulun.event.result": "pass",
+                    "hulun.event.phase": "recover",
+                    "hulun.evidence.ids": [EVIDENCE_ID],
+                },
+            },
+            {
+                "object": "trace.span",
+                "id": "span_openai_agents_summary",
+                "trace_id": "trace_openai_agents_matrix",
+                "parent_id": "span_openai_agents_recovered",
+                "started_at": "2026-01-01T00:00:04+00:00",
+                "ended_at": "2026-01-01T00:00:04.100000+00:00",
+                "span_data": {"type": "custom", "name": "summary", "data": {"sdk_span_type": "turn"}},
+                "error": None,
+                "metadata": {
+                    "hulun.event.type": "summary",
+                    "hulun.event.summary": "OpenAI Agents SDK summary preserved integration evidence",
+                    "hulun.event.result": "pass",
+                    "hulun.event.phase": "summarize",
+                    "hulun.evidence.ids": [EVIDENCE_ID],
+                },
+            },
+            {
+                "object": "trace.span",
+                "id": "span_openai_agents_final",
+                "trace_id": "trace_openai_agents_matrix",
+                "parent_id": "span_openai_agents_summary",
+                "started_at": "2026-01-01T00:00:05+00:00",
+                "ended_at": "2026-01-01T00:00:05.100000+00:00",
+                "span_data": {"type": "custom", "name": "final", "data": {"sdk_span_type": "turn"}},
+                "error": None,
+                "metadata": {
+                    "hulun.event.type": "final_attempt",
+                    "hulun.event.summary": "OpenAI Agents SDK finalization evidence recorded",
+                    "hulun.event.result": "pass",
+                    "hulun.event.phase": "final",
+                    "hulun.evidence.ids": [EVIDENCE_ID],
+                },
+            },
+        ]
+    }
+
+
 def _roundtrip_case(name: str, source_format: str, fixture: Any, tmp: Path) -> dict[str, Any]:
     source_path = tmp / f"{name}.json"
     exported_path = tmp / f"{name}.exported.otlp.json"
@@ -612,6 +733,11 @@ def run_adapter_matrix() -> dict[str, Any]:
             _safe_case(
                 "langsmith_run_export",
                 lambda workdir: _stream_case("langsmith_run_export", "langsmith", _langsmith_fixture(), workdir),
+                tmp,
+            ),
+            _safe_case(
+                "openai_agents_trace_export",
+                lambda workdir: _stream_case("openai_agents_trace_export", "openai-agents", _openai_agents_fixture(), workdir),
                 tmp,
             ),
         ]
