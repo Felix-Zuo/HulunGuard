@@ -163,7 +163,7 @@ SUPPORTED_PUBLIC_SCHEMAS: dict[str, dict[str, Any]] = {
     "collector": {
         "current": COLLECTOR_SCHEMA,
         "supported": [COLLECTOR_SCHEMA],
-        "promise": "Collector reports preserve health, status, ingest, smoke, managed flush, operations status, service template, endpoint, queue, auth, limit, response, runtime, generated file, and gate fields.",
+        "promise": "Collector reports preserve health, status, ingest, smoke, managed flush, operations status, Prometheus metrics, service template, endpoint, queue, auth, limit, response, runtime, generated file, and gate fields.",
     },
 }
 

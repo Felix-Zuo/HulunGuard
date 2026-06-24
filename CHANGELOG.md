@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.0 - 2026-06-25
+
+- Added Prometheus metrics export through `collector metrics` and `GET /metrics`.
+- Reused collector operations status semantics for metrics so queue, dead-letter, stale status, runtime error, and risk signals share one health gate.
+- Extended collector tests, CI, release gates, installed-wheel smoke checks, docs, and schema fixture coverage for external observability.
+
 ## 0.36.0 - 2026-06-25
 
 - Added `collector status` for offline collector operations health across queue, status file, runtime error, and last-risk signals.

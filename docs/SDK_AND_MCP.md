@@ -184,6 +184,7 @@ Check operations status without opening the HTTP server, or generate reviewed se
 
 ```powershell
 python -m hulun_guard collector status --require-status-file --json
+python -m hulun_guard collector metrics --require-status-file
 python -m hulun_guard collector service-template --output .hulun/collector-service --force --json
 ```
 
@@ -193,6 +194,7 @@ Run the non-blocking smoke and operations checks in CI or release gates:
 python -m hulun_guard collector smoke --json
 python -m hulun_guard collector smoke --managed --scan --init-if-missing --json
 python -m hulun_guard collector status --require-status-file --json
+python -m hulun_guard collector metrics --require-status-file
 python -m hulun_guard collector service-template --output .hulun/collector-service --force --json
 ```
 

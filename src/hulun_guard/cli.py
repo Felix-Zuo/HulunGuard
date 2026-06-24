@@ -34,6 +34,7 @@ from .collector import (
     CollectorRuntimeState,
     build_collector_server,
     collector_json,
+    collector_metrics_report,
     collector_operations_status,
     collector_service_templates,
     collector_smoke,
@@ -663,6 +664,20 @@ def cmd_collector_status(args: argparse.Namespace) -> int:
             print(f"Warning: {warning}")
         for failure in gate["failures"]:
             print(f"Failure: {failure}")
+    return 0 if payload["gate"]["passed"] else 2
+
+
+def cmd_collector_metrics(args: argparse.Namespace) -> int:
+    payload = collector_metrics_report(
+        args.root,
+        stale_after_seconds=args.stale_after_seconds,
+        require_status_file=args.require_status_file,
+        fail_on_stale=args.fail_on_stale,
+    )
+    if args.json:
+        print(collector_json(payload), end="")
+    else:
+        print(payload["text"], end="")
     return 0 if payload["gate"]["passed"] else 2
 
 
@@ -2113,6 +2128,13 @@ def build_parser() -> argparse.ArgumentParser:
     collector_status_cmd.add_argument("--fail-on-stale", action="store_true", help="Fail when the managed status file is older than --stale-after-seconds.")
     collector_status_cmd.add_argument("--json", action="store_true")
     collector_status_cmd.set_defaults(func=cmd_collector_status)
+
+    collector_metrics_cmd = collector_sub.add_parser("metrics", parents=[root_parent], help="Export collector operations health as Prometheus metrics.")
+    collector_metrics_cmd.add_argument("--stale-after-seconds", type=int, default=60, help="Mark the managed status file stale after this many seconds. Defaults to 60.")
+    collector_metrics_cmd.add_argument("--require-status-file", action="store_true", help="Fail when .hulun/collector_status.json is missing.")
+    collector_metrics_cmd.add_argument("--fail-on-stale", action="store_true", help="Fail when the managed status file is older than --stale-after-seconds.")
+    collector_metrics_cmd.add_argument("--json", action="store_true")
+    collector_metrics_cmd.set_defaults(func=cmd_collector_metrics)
 
     collector_template_cmd = collector_sub.add_parser("service-template", parents=[root_parent], help="Generate reviewed service templates for long-running managed collector operation.")
     collector_template_cmd.add_argument("--target", choices=["all", "systemd", "launchd", "windows-task"], default="all")

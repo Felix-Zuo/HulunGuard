@@ -64,11 +64,11 @@ Trace files are capped by `MAX_TRACE_BYTES`, currently 5 MiB, unless the user ex
 
 Runtime payloads submitted through SDK, MCP, or stdin are capped by the same default 5 MiB limit unless the caller explicitly raises `max_payload_bytes` or `--max-payload-bytes`. Queue metadata stores a redacted logical source name and a payload fingerprint instead of the raw payload text.
 
-Runtime payloads submitted through `hulun collector serve` use the same default payload cap and redaction path. The collector binds to `127.0.0.1` by default. Binding to a non-loopback host requires both `--allow-remote` and `--token`. `/healthz` exposes only liveness and supported-format metadata; `/status` and POST ingestion require the configured token. The collector accepts JSON and JSONL payloads and rejects protobuf or opaque binary OTLP bodies.
+Runtime payloads submitted through `hulun collector serve` use the same default payload cap and redaction path. The collector binds to `127.0.0.1` by default. Binding to a non-loopback host requires both `--allow-remote` and `--token`. `/healthz` exposes only liveness and supported-format metadata; `/status`, `/metrics`, and POST ingestion require the configured token. The collector accepts JSON and JSONL payloads and rejects protobuf or opaque binary OTLP bodies.
 
 Managed collector mode is opt-in through `--flush-interval-seconds`. It uses the existing batch flush path to move queued observations into `.hulun/state.json`, optionally initializes a minimal project ledger with `--init-if-missing`, writes `.hulun/collector_status.json`, and recomputes `.hulun/risk.json` only when `--scan-on-flush` is enabled. Flush or scan failures are reported in status output and do not stop HTTP ingestion.
 
-`collector status` reads local queue, dead-letter, managed status, and risk files without starting the HTTP server. `collector service-template` only writes reviewed systemd, launchd, and Windows Scheduled Task template files; it does not install services, change host startup policy, or embed authentication tokens.
+`collector status` reads local queue, dead-letter, managed status, and risk files without starting the HTTP server. `collector metrics` and `GET /metrics` expose numeric health and risk gauges without local filesystem paths as Prometheus labels. `collector service-template` only writes reviewed systemd, launchd, and Windows Scheduled Task template files; it does not install services, change host startup policy, or embed authentication tokens.
 
 ## Sensitive Data
 
@@ -125,7 +125,8 @@ This protects against path traversal, symlink escape, and accidental deletion of
 | Adapter writes malformed runtime fields | SDK and MCP validation reject invalid phase/result values without persisting bad events. |
 | Batched ingestion queue contains malformed records | `batch flush` moves malformed queue records to `.hulun/ingest_dead_letter.jsonl` and continues flushing valid records. |
 | Host pipes an oversized runtime payload | `batch ingest-stdin`, SDK `enqueue_payload`, and MCP `hulun_batch_ingest_payload` reject oversized JSON payloads before queue persistence. |
-| Local HTTP collector is accidentally exposed | Default bind is loopback-only; non-loopback bind requires `--allow-remote --token`; POST and `/status` require the token when configured. |
+| Local HTTP collector is accidentally exposed | Default bind is loopback-only; non-loopback bind requires `--allow-remote --token`; POST, `/status`, and `/metrics` require the token when configured. |
+| Metrics export leaks local filesystem paths | Prometheus metrics expose numeric gauges and bounded labels only; local paths stay in JSON status fields, not metrics labels. |
 | OTLP producer sends protobuf or binary payloads | Collector rejects protobuf and `application/octet-stream`; configure the producer for OTLP/HTTP JSON. |
 | Managed collector writes project state unexpectedly | Managed flush is off by default and requires explicit `--flush-interval-seconds`; scan is separate through `--scan-on-flush`. |
 | Service template generation changes host startup state | `collector service-template` writes files only; operators must review and install them explicitly. |
@@ -144,6 +145,7 @@ python -m hulun_guard batch enqueue --type tool_result --summary "pytest passed"
 python -m hulun_guard collector smoke --json
 python -m hulun_guard collector smoke --managed --scan --init-if-missing --json
 python -m hulun_guard collector status --require-status-file --json
+python -m hulun_guard collector metrics --require-status-file
 python -m hulun_guard collector service-template --output .hulun/collector-service --force --json
 python -m hulun_guard batch flush --scan
 ```
@@ -165,6 +167,7 @@ python -m hulun_guard adapter-matrix --json
 python -m hulun_guard collector smoke --json
 python -m hulun_guard collector smoke --managed --scan --init-if-missing --json
 python -m hulun_guard collector status --require-status-file --json
+python -m hulun_guard collector metrics --require-status-file
 python -m hulun_guard collector service-template --output .hulun/collector-service --force --json
 python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json
 python -m hulun_guard cleanup --json
@@ -185,6 +188,7 @@ Every release must keep these checks green:
 - `python -m hulun_guard collector smoke --json`
 - `python -m hulun_guard collector smoke --managed --scan --init-if-missing --json`
 - `python -m hulun_guard collector status --require-status-file --json`
+- `python -m hulun_guard collector metrics --require-status-file`
 - `python -m hulun_guard collector service-template --output .hulun/collector-service --force --json`
 - `'{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass"}' | python -m hulun_guard batch ingest-stdin --format generic --json`
 - `python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json`
