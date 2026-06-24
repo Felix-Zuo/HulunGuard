@@ -52,6 +52,7 @@ jobs:
         run: |
           tmp="$(mktemp -d)"
           python -m hulun_guard --root "$tmp" batch enqueue --type tool_result --phase verify --summary "batch smoke passed" --result pass --json
+          printf '%s\n' '{"type":"tool_result","phase":"verify","summary":"stdin smoke passed","result":"pass","action_key":"stdin-smoke"}' | python -m hulun_guard --root "$tmp" batch ingest-stdin --format generic --json
           python -m hulun_guard --root "$tmp" batch status --json
           python -m hulun_guard --root "$tmp" batch flush --scan --init-if-missing --json
       - name: HulunGuard trace doctor

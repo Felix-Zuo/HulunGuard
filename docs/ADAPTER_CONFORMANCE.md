@@ -33,6 +33,9 @@ The adapter conformance test covers:
 - CLI `batch enqueue` plus `batch flush`
 - Python `HulunGuardClient.enqueue` plus `flush_queue`
 - MCP `hulun_batch_enqueue` plus `hulun_batch_flush`
+- CLI `batch ingest-stdin` plus `batch flush`
+- Python `HulunGuardClient.enqueue_payload` plus `flush_queue`
+- MCP `hulun_batch_ingest_payload` plus `hulun_batch_flush`
 - `ingest --format generic`
 - `ingest --format opentelemetry`
 - `ingest --format openinference`
@@ -47,6 +50,8 @@ The adapter conformance test covers:
 Each surface must be able to record the contract event, redact sensitive payloads by default, write `.hulun/risk.json` when scan is requested, and reject malformed SDK/MCP payloads without silently persisting a bad event. Batched surfaces must also preserve contract fields after queue flush and must not let malformed queued records block valid records.
 
 Trace-file adapters must reject files above the configured `--max-trace-bytes` limit before parsing or persisting events. The default limit is 5 MiB.
+
+Runtime payload adapters must reject JSON-serialized payloads above the configured `--max-payload-bytes` limit before queueing events. The default limit is 5 MiB. Queue metadata stores a source name and payload fingerprint, not the raw host path or raw private payload.
 
 Integration coverage is defined in `docs/ADAPTER_MATRIX.md`. The conformance test proves each adapter can write the shared contract; `adapter-matrix` proves supported trace families survive realistic import, export, redaction, and workflow-path checks.
 

@@ -40,6 +40,21 @@ def _boolean(description: str) -> dict[str, str]:
     return {"type": "boolean", "description": description}
 
 
+def _json_value(description: str) -> dict[str, Any]:
+    return {
+        "anyOf": [
+            {"type": "object"},
+            {"type": "array"},
+            {"type": "string"},
+            {"type": "number"},
+            {"type": "integer"},
+            {"type": "boolean"},
+            {"type": "null"},
+        ],
+        "description": description,
+    }
+
+
 class HulunMCPServer:
     def __init__(self, *, root: str = ".", include_sensitive: bool = False, retention_days: int = 30) -> None:
         self.client = HulunGuardClient(root, include_sensitive=include_sensitive, retention_days=retention_days)
@@ -130,6 +145,21 @@ class HulunMCPServer:
                 "title": "Inspect HulunGuard Batch Queue",
                 "description": "Report pending queue records, queue bytes, parse errors, and dead letters.",
                 "inputSchema": _schema({}),
+            },
+            {
+                "name": "hulun_batch_ingest_payload",
+                "title": "Queue HulunGuard Runtime Payload",
+                "description": "Normalize an in-memory trace payload and append its observations to the durable batch queue.",
+                "inputSchema": _schema(
+                    {
+                        "payload": _json_value("Trace payload object or array from a supported runtime adapter."),
+                        "format": _string("auto, generic, opentelemetry, openinference, openhands, swe-agent, langgraph, langsmith, langfuse, phoenix, or openai-agents."),
+                        "source_name": _string("Logical source name recorded as redacted queue metadata."),
+                        "source_platform": _string("Override source platform on queued observations."),
+                        "max_payload_bytes": _integer("Maximum JSON-serialized payload size in bytes."),
+                    },
+                    ["payload"],
+                ),
             },
             {
                 "name": "hulun_batch_flush",
@@ -296,6 +326,15 @@ class HulunMCPServer:
             return self._tool_result(payload)
         if name == "hulun_batch_status":
             payload = self.client.queue_status()
+            return self._tool_result(payload)
+        if name == "hulun_batch_ingest_payload":
+            payload = self.client.enqueue_payload(
+                arguments["payload"],
+                source_format=str(arguments.get("format") or "auto"),
+                source_name=arguments.get("source_name") or "mcp-payload",
+                source_platform=arguments.get("source_platform") or "mcp",
+                max_payload_bytes=arguments.get("max_payload_bytes"),
+            )
             return self._tool_result(payload)
         if name == "hulun_batch_flush":
             payload = self.client.flush_queue(

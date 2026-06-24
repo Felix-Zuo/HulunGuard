@@ -147,6 +147,7 @@ Use `batch` when an agent emits events continuously and the adapter should avoid
 ```powershell
 python .\hulun.py batch enqueue --type tool_result --phase verify --summary "pytest passed" --result pass
 python .\hulun.py batch ingest-file --file .\trace.jsonl --format generic
+'{"events":[{"type":"tasks","event_type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass","action_key":"pytest"}]}' | python .\hulun.py batch ingest-stdin --format langgraph
 python .\hulun.py batch status
 python .\hulun.py batch flush --limit 500 --scan
 ```
@@ -155,12 +156,15 @@ Behavior:
 
 - `batch enqueue` writes one normalized observation to `.hulun/ingest_queue.jsonl`.
 - `batch ingest-file` parses a supported trace format and appends the normalized observations to the same queue.
+- `batch ingest-stdin` parses JSON or JSONL from stdin and queues normalized observations without requiring a trace file on disk.
 - `batch status` reports pending queue size, queue bytes, parse errors, and dead-letter count.
 - `batch flush` moves queued observations into `.hulun/state.json` in bounded batches. Use `--scan` to recompute risk after flushing.
 - Malformed queued records are moved to `.hulun/ingest_dead_letter.jsonl` and do not block valid queued observations.
 - `--init-if-missing` on `batch flush` creates a minimal project ledger before the first flush.
 
 The JSON output for `batch` commands uses `hulun.batch_ingest.v1`.
+
+Use stdin ingestion when the host runtime already has stream events or spans in memory. Examples include LangGraph stream chunks, LangSmith run dictionaries, OpenAI Agents SDK span export dictionaries, OTLP JSON, OpenInference spans, and generic JSONL events emitted by a custom agent wrapper.
 
 ## Check Agent Compatibility
 
@@ -255,6 +259,7 @@ python -m pytest -q
 `integration-kit` generates first-run onboarding packages and verifies their sample traces through the matching ingest adapters.
 `onboard` verifies generated kits with an isolated sandbox import and returns next-step commands for real traces.
 `adapter-matrix` verifies OpenTelemetry/OpenInference/Langfuse/Phoenix round-trips plus OpenHands-like, SWE-agent-like, LangGraph, and LangSmith stream coverage without committing private traces.
+`batch ingest-stdin` verifies the runtime pipe path used by agents that emit JSON/JSONL events directly instead of writing trace files.
 `schema-check` loads legacy JSON fixtures, normalizes them through the migration layer, and fails if current public schemas are not written. See `docs/SCHEMAS.md`.
 
 ## Release Asset Verification

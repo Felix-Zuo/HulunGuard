@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.33.0 - 2026-06-25
+
+- Added in-memory runtime payload ingestion through adapter APIs, SDK `enqueue_payload`, and MCP `hulun_batch_ingest_payload`.
+- Added `batch ingest-stdin` so agents and host processes can pipe JSON/JSONL trace events directly into the durable queue.
+- Extended adapter conformance and release artifact smoke coverage for payload/stdin ingestion paths.
+
 ## 0.32.0 - 2026-06-24
 
 - Added durable batched runtime ingestion with `batch enqueue`, `batch ingest-file`, `batch status`, and `batch flush`.

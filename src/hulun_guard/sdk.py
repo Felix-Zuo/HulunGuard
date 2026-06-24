@@ -296,6 +296,29 @@ class HulunGuardClient:
             max_trace_bytes=max_trace_bytes or MAX_TRACE_BYTES,
         )
 
+    def enqueue_payload(
+        self,
+        payload: Any,
+        *,
+        source_format: str = "auto",
+        source_name: str | None = None,
+        source_platform: str | None = None,
+        max_payload_bytes: int | None = None,
+    ) -> dict[str, Any]:
+        from .adapters import MAX_TRACE_BYTES
+        from .queue import enqueue_payload
+
+        return enqueue_payload(
+            self.root,
+            payload,
+            source_format,
+            source_name=source_name,
+            source_platform=source_platform,
+            include_sensitive=self.include_sensitive,
+            retention_days=self.retention_days,
+            max_payload_bytes=max_payload_bytes or MAX_TRACE_BYTES,
+        )
+
     def queue_status(self) -> dict[str, Any]:
         from .queue import queue_status
 

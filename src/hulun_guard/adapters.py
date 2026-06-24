@@ -364,6 +364,18 @@ def _read_items(path: Path) -> list[dict[str, Any]]:
     return []
 
 
+def _read_items_from_payload(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        for key in ["events", "steps", "trajectory", "messages", "observations"]:
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+        return [payload]
+    return []
+
+
 def _iter_items(path: Path) -> Iterator[dict[str, Any]]:
     if path.suffix.lower() in {".jsonl", ".ndjson"}:
         with path.open("r", encoding="utf-8-sig") as handle:
@@ -376,6 +388,77 @@ def _iter_items(path: Path) -> Iterator[dict[str, Any]]:
         return
 
     yield from _read_items(path)
+
+
+def _iter_items_from_payload(payload: Any) -> Iterator[dict[str, Any]]:
+    yield from _read_items_from_payload(payload)
+
+
+def parse_trace_text(text: str) -> Any:
+    stripped = text.lstrip("\ufeff").strip()
+    if not stripped:
+        return []
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        items: list[dict[str, Any]] = []
+        for line_number, line in enumerate(stripped.splitlines(), start=1):
+            if not line.strip():
+                continue
+            try:
+                value = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise SystemExit(f"Invalid JSONL on stdin line {line_number}: {exc.msg}") from exc
+            if isinstance(value, dict):
+                items.append(value)
+        return items
+
+
+def _attrs_from_payload_span(span: dict[str, Any]) -> dict[str, Any]:
+    return _span_attributes(span)
+
+
+def _looks_like_openai_agents(payload: Any) -> bool:
+    return any(True for _ in _iter_openai_agents_payload(payload))
+
+
+def _looks_like_openinference_span(span: dict[str, Any]) -> bool:
+    attrs = _attrs_from_payload_span(span)
+    return "openinference.span.kind" in attrs or any(str(key).startswith("openinference.") for key in attrs)
+
+
+def _looks_like_telemetry(payload: Any) -> str | None:
+    if isinstance(payload, dict) and "resourceSpans" in payload:
+        return "opentelemetry"
+    for span in _iter_spans_from_payload(payload):
+        if _looks_like_openinference_span(span):
+            return "openinference"
+        attrs = _attrs_from_payload_span(span)
+        if attrs or span.get("spanId") or span.get("span_id"):
+            return "opentelemetry"
+    return None
+
+
+def _looks_like_langsmith(payload: Any) -> bool:
+    return any("run_type" in item or "dotted_order" in item for item in _iter_items_from_payload(payload))
+
+
+def _looks_like_langgraph(payload: Any) -> bool:
+    langgraph_modes = {"updates", "values", "messages", "custom", "debug", "tasks", "checkpoints"}
+    return any(str(item.get("type") or item.get("stream_mode") or item.get("event")).lower() in langgraph_modes for item in _iter_items_from_payload(payload))
+
+
+def _detect_payload_format(payload: Any) -> str:
+    if _looks_like_openai_agents(payload):
+        return "openai-agents"
+    telemetry_format = _looks_like_telemetry(payload)
+    if telemetry_format:
+        return telemetry_format
+    if _looks_like_langsmith(payload):
+        return "langsmith"
+    if _looks_like_langgraph(payload):
+        return "langgraph"
+    return "generic"
 
 
 def _iter_spans_from_payload(payload: Any) -> Iterator[dict[str, Any]]:
@@ -846,6 +929,10 @@ def load_observations(path: str | Path, source_format: str = "auto", *, include_
     return list(iter_observations(path, source_format, include_sensitive=include_sensitive, max_trace_bytes=max_trace_bytes))
 
 
+def load_payload_observations(payload: Any, source_format: str = "auto", *, include_sensitive: bool = False) -> list[Observation]:
+    return list(iter_payload_observations(payload, source_format, include_sensitive=include_sensitive))
+
+
 def iter_observations(
     path: str | Path,
     source_format: str = "auto",
@@ -902,6 +989,43 @@ def iter_observations(
             yield normalizer(span, include_sensitive=include_sensitive)
         return
     for item in _iter_items(trace_path):
+        yield normalizer(item, include_sensitive=include_sensitive)
+
+
+def iter_payload_observations(
+    payload: Any,
+    source_format: str = "auto",
+    *,
+    include_sensitive: bool = False,
+) -> Iterator[Observation]:
+    fmt = source_format.lower()
+    if fmt == "auto":
+        fmt = _detect_payload_format(payload)
+
+    normalizers = {
+        "generic": normalize_generic,
+        "openhands": normalize_openhands,
+        "opentelemetry": normalize_opentelemetry,
+        "openinference": normalize_openinference,
+        "swe-agent": normalize_swe_agent,
+        "langgraph": normalize_langgraph,
+        "langsmith": normalize_langsmith,
+        "langfuse": normalize_langfuse,
+        "phoenix": normalize_phoenix,
+        "openai-agents": normalize_openai_agents,
+    }
+    if fmt not in normalizers:
+        raise SystemExit(f"Unsupported trace format: {source_format}")
+    normalizer = normalizers[fmt]
+    if fmt in {"opentelemetry", "openinference", "langfuse", "phoenix"}:
+        for span in _iter_spans_from_payload(payload):
+            yield normalizer(span, include_sensitive=include_sensitive)
+        return
+    if fmt == "openai-agents":
+        for span in _iter_openai_agents_payload(payload):
+            yield normalizer(span, include_sensitive=include_sensitive)
+        return
+    for item in _iter_items_from_payload(payload):
         yield normalizer(item, include_sensitive=include_sensitive)
 
 
