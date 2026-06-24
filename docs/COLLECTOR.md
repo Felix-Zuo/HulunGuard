@@ -24,6 +24,7 @@ python -m hulun_guard --root . collector smoke --json
 python -m hulun_guard --root . collector smoke --managed --scan --init-if-missing --json
 python -m hulun_guard --root . collector status --require-status-file --json
 python -m hulun_guard --root . collector metrics --require-status-file
+python -m hulun_guard --root . collector alert-rules --force --json
 python -m hulun_guard --root . collector service-template --force --json
 python -m hulun_guard batch status --json
 python -m hulun_guard batch flush --scan --init-if-missing --json
@@ -105,6 +106,24 @@ python -m hulun_guard collector metrics --require-status-file --json
 ```
 
 Metrics include queue depth, queue bytes, parse errors, dead-letter records, status-file presence/staleness, managed flush counters, managed runtime error state, latest HulunIndex score, blocked state, and band. Local paths are not exposed as Prometheus labels.
+
+See `docs/OBSERVABILITY.md` for the full metrics and alerting deployment surface.
+
+## Alert Rules
+
+Generate Prometheus alerting rules for collector operations and HulunIndex risk signals:
+
+```powershell
+python -m hulun_guard collector alert-rules --force --json
+python -m hulun_guard collector alert-rules --queue-pending-threshold 100 --status-stale-seconds 120 --risk-red-threshold 66 --force
+```
+
+Generated files are written to `.hulun/collector-alerts` by default:
+
+- `hulunguard-collector.rules.yml`
+- `README.md`
+
+The rule file includes alerts for collector gate failure, managed runtime errors, missing or stale status, dead-letter records, queue backlog, blocked risk state, red risk score, and advisory warnings. The generator writes files only. It does not install Prometheus rules, modify Alertmanager routing, or embed local paths or tokens. Validate the generated YAML with `promtool check rules .hulun/collector-alerts/hulunguard-collector.rules.yml` before deployment.
 
 ## Service Templates
 
