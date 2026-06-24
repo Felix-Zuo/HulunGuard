@@ -74,9 +74,9 @@ AGENT_COMPATIBILITY: tuple[dict[str, Any], ...] = (
         "category": "standard",
         "tier": "roundtrip-tested",
         "ingest_format": "opentelemetry",
-        "command": "python -m hulun_guard ingest --format opentelemetry --file otlp.json --scan",
+        "command": "python -m hulun_guard collector serve",
         "source_uri": "https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/",
-        "guarantee": "OTLP JSON with GenAI attributes is round-trip tested through import, persistence, export, and re-import.",
+        "guarantee": "OTLP JSON with GenAI attributes is round-trip tested through import, persistence, export, re-import, and collector smoke; POST to /v1/traces and flush the queue to scan.",
     },
     {
         "id": "openinference",
@@ -154,9 +154,9 @@ AGENT_COMPATIBILITY: tuple[dict[str, Any], ...] = (
         "category": "bridge",
         "tier": "generic-bridge",
         "ingest_format": "generic",
-        "command": "python -m hulun_guard ingest --format generic --file events.jsonl --scan",
+        "command": "python -m hulun_guard collector serve",
         "source_uri": "internal://hulunguard/adapter-contract/generic-json",
-        "guarantee": "Any agent that can emit JSON or JSONL with HulunGuard event fields can use the generic ingest bridge.",
+        "guarantee": "Any agent that can emit JSON or JSONL with HulunGuard event fields can use the generic file, stdin, SDK, MCP, or HTTP bridge; POST to /ingest/generic and flush the queue to scan.",
     },
 )
 
@@ -170,7 +170,7 @@ def compatibility_report() -> dict[str, Any]:
         "generated_at": utc_now(),
         "coverage_statement": (
             "Most mainstream agents can use HulunGuard through a direct adapter, OpenTelemetry/OpenInference, "
-            "or the generic JSON/JSONL bridge; native exporter guarantees remain limited to tested formats."
+            "the local HTTP collector, or the generic JSON/JSONL bridge; native exporter guarantees remain limited to tested formats."
         ),
         "entry_count": len(AGENT_COMPATIBILITY),
         "direct_or_standard_count": direct_or_standard,

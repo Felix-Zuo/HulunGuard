@@ -149,6 +149,12 @@ def verify_installed_commands(
         raise ArtifactSmokeError("onboard --agent langgraph failed from the installed wheel")
     commands.append({"name": "hulun onboard --agent langgraph --json", "status": "ok", "detail": str(onboarding_dir)})
 
+    collector_root = cwd / "collector-root"
+    collector = run_json_command([str(hulun_path), "--root", str(collector_root), "collector", "smoke", "--json"], cwd=cwd, env=env)
+    if collector.get("schema") != "hulun.collector.v1" or not collector.get("gate", {}).get("passed"):
+        raise ArtifactSmokeError("collector smoke failed from the installed wheel")
+    commands.append({"name": "hulun collector smoke --json", "status": "ok", "detail": str(collector_root)})
+
     batch_root = cwd / "batch-root"
     batch_root.mkdir()
     batch_enqueue = run_json_command(
@@ -221,10 +227,12 @@ def verify_artifacts(root: Path, dist_dir: Path, version: str) -> dict[str, Any]
         {
             "hulun_guard/__init__.py",
             "hulun_guard/cli.py",
+            "hulun_guard/collector.py",
             "hulun_guard/queue.py",
             "hulun_guard/release_metadata.py",
             "hulun_guard/release_verification.py",
             "hulun_guard/schema_fixtures/batch_ingest_v1.json",
+            "hulun_guard/schema_fixtures/collector_v1.json",
             "hulun_guard/schema_fixtures/legacy_state_v0.json",
             "hulun_guard/security_docs/THREAT_MODEL.md",
             f"hulun_guard-{version}.dist-info/METADATA",
@@ -239,10 +247,13 @@ def verify_artifacts(root: Path, dist_dir: Path, version: str) -> dict[str, Any]
             f"hulun_guard-{version}/README.md",
             f"hulun_guard-{version}/LICENSE",
             f"hulun_guard-{version}/src/hulun_guard/cli.py",
+            f"hulun_guard-{version}/src/hulun_guard/collector.py",
             f"hulun_guard-{version}/src/hulun_guard/queue.py",
             f"hulun_guard-{version}/src/hulun_guard/release_metadata.py",
             f"hulun_guard-{version}/src/hulun_guard/release_verification.py",
             f"hulun_guard-{version}/src/hulun_guard/schema_fixtures/batch_ingest_v1.json",
+            f"hulun_guard-{version}/src/hulun_guard/schema_fixtures/collector_v1.json",
+            f"hulun_guard-{version}/tests/test_collector.py",
             f"hulun_guard-{version}/tests/test_hulun_guard.py",
         },
         archive_type="sdist",

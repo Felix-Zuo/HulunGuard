@@ -166,6 +166,46 @@ The JSON output for `batch` commands uses `hulun.batch_ingest.v1`.
 
 Use stdin ingestion when the host runtime already has stream events or spans in memory. Examples include LangGraph stream chunks, LangSmith run dictionaries, OpenAI Agents SDK span export dictionaries, OTLP JSON, OpenInference spans, and generic JSONL events emitted by a custom agent wrapper.
 
+## Run A Local HTTP Collector
+
+Use `collector serve` when an agent runtime can emit OTLP/HTTP JSON or POST adapter payloads during execution:
+
+```powershell
+python .\hulun.py collector serve
+```
+
+Default endpoint:
+
+```text
+http://127.0.0.1:4318/v1/traces
+```
+
+Machine-check the collector path without leaving a server running:
+
+```powershell
+python .\hulun.py collector smoke --json
+python .\hulun.py batch status --json
+python .\hulun.py batch flush --scan --init-if-missing --json
+```
+
+Supported POST routes:
+
+- `/v1/traces`: OTLP/HTTP JSON traces.
+- `/ingest`: auto-detected JSON or JSONL runtime payload.
+- `/ingest/<format>`: explicit adapter payload, such as `generic`, `langgraph`, `langsmith`, `langfuse`, `phoenix`, or `openai-agents`.
+
+The collector writes to the same durable queue as `batch`. It does not update `.hulun/state.json` on every request; run `batch flush --scan` to import queued observations and recompute risk.
+
+Security defaults:
+
+- loopback bind only unless `--allow-remote` is set
+- non-loopback bind requires `--token`
+- protobuf payloads are rejected; use OTLP/HTTP JSON
+- `--max-payload-bytes` defaults to the same 5 MiB runtime payload cap
+- `/healthz` is public; `/status` and POST requests require a token when configured
+
+See `docs/COLLECTOR.md` for endpoint and adapter examples.
+
 ## Check Agent Compatibility
 
 Use `compatibility` to see whether an agent framework has a direct adapter, a standards path, or the generic bridge:
@@ -244,6 +284,7 @@ python .\hulun.py compatibility --json
 python .\hulun.py integration-kit --agent all --output .\.hulun\integration-kits --force --verify --json
 python .\hulun.py onboard --agent all --output .\.hulun\onboarding --force --json
 python .\hulun.py adapter-matrix --json
+python .\hulun.py collector smoke --json
 python .\hulun.py schema-check --json
 python .\hulun.py cleanup --json
 python .\hulun.py benchmark --events 10000
@@ -259,6 +300,7 @@ python -m pytest -q
 `integration-kit` generates first-run onboarding packages and verifies their sample traces through the matching ingest adapters.
 `onboard` verifies generated kits with an isolated sandbox import and returns next-step commands for real traces.
 `adapter-matrix` verifies OpenTelemetry/OpenInference/Langfuse/Phoenix round-trips plus OpenHands-like, SWE-agent-like, LangGraph, and LangSmith stream coverage without committing private traces.
+`collector smoke` starts a temporary local HTTP collector, POSTs one OTLP/HTTP JSON span, and verifies that the queue grows by one record.
 `batch ingest-stdin` verifies the runtime pipe path used by agents that emit JSON/JSONL events directly instead of writing trace files.
 `schema-check` loads legacy JSON fixtures, normalizes them through the migration layer, and fails if current public schemas are not written. See `docs/SCHEMAS.md`.
 

@@ -19,6 +19,7 @@ using HulunGuard on real work.
 - Realtime HulunIndex observations: record phase, claims, failures, tokens, cost, latency, and retry fingerprints.
 - Privacy-safe trace ingestion: import generic JSON/JSONL, OpenTelemetry GenAI, OpenInference, OpenHands-like events, SWE-agent-like trajectories, LangGraph stream parts, LangSmith run exports, Langfuse OTEL traces, and Phoenix/OpenInference spans without persisting raw sensitive payloads by default.
 - Runtime payload bridge: SDK, MCP, and stdin ingestion can queue in-memory spans or stream events without writing trace files first.
+- Local HTTP collector: accept live OTLP/HTTP JSON traces at `/v1/traces` and adapter payloads at `/ingest/<format>` into the durable queue.
 - Python SDK and MCP server: agents can record runtime state directly without shell glue.
 - Built-in validation suite: run synthetic healthy/slop-risk scenarios before release.
 - Product operations: `onboard`, `quickstart`, `doctor`, `trace-doctor`, `compatibility`, `integration-kit`, `adapter-matrix`, `schema-check`, `release-verify`, `cleanup`, and `benchmark` commands for onboarding, trace diagnostics, agent compatibility, first-run integration packages, adapter integration, schema compatibility, release verification, retention cleanup, scan performance, and public-safe real-world workflow checks.
@@ -103,6 +104,16 @@ python .\hulun.py batch flush --limit 500 --scan
 
 `batch` writes a durable local JSONL queue first. `ingest-stdin` accepts JSON or JSONL from an agent process, shell pipe, or host runtime. `flush` moves queued observations into `.hulun/state.json`; `flush --scan` then recomputes the HulunIndex from those events.
 
+Run a live local HTTP collector for OTLP/HTTP JSON or adapter payloads:
+
+```powershell
+python .\hulun.py collector serve
+python .\hulun.py collector smoke --json
+python .\hulun.py batch flush --scan --init-if-missing
+```
+
+The collector listens on `127.0.0.1:4318` by default. `POST /v1/traces` accepts OTLP/HTTP JSON, while `POST /ingest/<format>` accepts adapter payloads such as `generic`, `langgraph`, `langsmith`, `langfuse`, `phoenix`, and `openai-agents`. Non-loopback binds require `--allow-remote --token`.
+
 By default, runtime observations and imported traces redact known secrets, emails, URL query strings, private home paths, and raw payload fields such as prompts, completions, outputs, and tool arguments. Use `--include-sensitive --retention-days 7` only for trusted local debugging.
 
 Check mainstream agent compatibility:
@@ -134,6 +145,7 @@ python .\hulun.py compatibility --json
 python .\hulun.py integration-kit --agent all --output .\.hulun\integration-kits --force --verify --json
 python .\hulun.py onboard --agent all --output .\.hulun\onboarding --force --json
 python .\hulun.py adapter-matrix --json
+python .\hulun.py collector smoke --json
 @'
 {"type":"tool_result","phase":"verify","summary":"stdin payload passed","result":"pass","action_key":"stdin-smoke"}
 '@ | python .\hulun.py batch ingest-stdin --format generic --json

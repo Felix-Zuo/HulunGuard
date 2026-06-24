@@ -45,6 +45,10 @@ jobs:
         run: python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json
       - name: HulunGuard adapter matrix
         run: python -m hulun_guard adapter-matrix --json
+      - name: HulunGuard collector smoke
+        run: |
+          tmp="$(mktemp -d)"
+          python -m hulun_guard --root "$tmp" collector smoke --json
       - name: HulunGuard batched ingestion smoke
         run: |
           tmp="$(mktemp -d)"

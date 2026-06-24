@@ -45,7 +45,7 @@ Frameworks that emit OpenTelemetry or OpenInference traces can use the standards
 | LlamaIndex | `opentelemetry`, `openinference`, or Phoenix |
 | Haystack | `opentelemetry` |
 | Semantic Kernel | `opentelemetry` |
-| Any OTLP GenAI emitter | `opentelemetry` |
+| Any OTLP GenAI emitter | `opentelemetry` through `POST /v1/traces` or trace-file import |
 | Any OpenInference emitter | `openinference` |
 
 ## Generic Bridge
@@ -70,9 +70,10 @@ Use:
 ```powershell
 python -m hulun_guard ingest --format generic --file events.jsonl --scan
 '{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass"}' | python -m hulun_guard batch ingest-stdin --format generic
+python -m hulun_guard collector serve
 ```
 
-For host runtimes that already hold events or spans in memory, use `HulunGuardClient.enqueue_payload(...)` or MCP `hulun_batch_ingest_payload` and then flush the durable queue. This is the preferred path for live stream integrations where writing a trace file first would add latency or operational friction.
+For host runtimes that already hold events or spans in memory, use `HulunGuardClient.enqueue_payload(...)`, MCP `hulun_batch_ingest_payload`, `batch ingest-stdin`, or `collector serve`, and then flush the durable queue. This is the preferred path for live stream integrations where writing a trace file first would add latency or operational friction.
 
 ## Boundaries
 
@@ -80,5 +81,6 @@ For host runtimes that already hold events or spans in memory, use `HulunGuardCl
 - Direct adapters mean HulunGuard can ingest compatible exported shapes.
 - Standards paths require the user to export or submit OTLP JSON or OpenInference-compatible spans.
 - The generic bridge requires the user to map agent events into HulunGuard event fields.
+- The local HTTP collector accepts JSON/JSONL only; OTLP producers must use OTLP/HTTP JSON rather than protobuf.
 - Raw private prompts, completions, tool arguments, credentials, and customer logs should not be committed.
 

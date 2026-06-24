@@ -15,6 +15,7 @@ The product boundary is:
 - optional local desktop monitor files under `HULUN_HOME`
 - user-provided trace files passed to `hulun ingest`
 - runtime payloads submitted through SDK, MCP, or `batch ingest-stdin`
+- runtime payloads submitted to the local HTTP collector
 - explicit export paths passed to commands such as `export-otel`
 
 Any agent, hook, or adapter that can write to those locations can affect HulunGuard state. Treat adapter processes as trusted local producers unless they are isolated by the host application.
@@ -54,6 +55,7 @@ Adapters may import user-provided local trace files in these formats:
 - OpenHands-like event logs
 - SWE-agent-like trajectories
 - in-memory or stdin JSON/JSONL payloads from supported runtime adapters
+- local HTTP collector payloads posted to `/v1/traces`, `/ingest`, or `/ingest/<format>`
 - CLI, Python SDK, MCP, and OpenClaw hook events
 
 By default, imported observations preserve only scoring-relevant structure: event type, phase, result, sanitized summary, evidence IDs, sanitized references, action fingerprints, model pressure, latency, and privacy metadata.
@@ -61,6 +63,8 @@ By default, imported observations preserve only scoring-relevant structure: even
 Trace files are capped by `MAX_TRACE_BYTES`, currently 5 MiB, unless the user explicitly passes `--max-trace-bytes`. Oversized trace files fail before JSON parsing or persistence.
 
 Runtime payloads submitted through SDK, MCP, or stdin are capped by the same default 5 MiB limit unless the caller explicitly raises `max_payload_bytes` or `--max-payload-bytes`. Queue metadata stores a redacted logical source name and a payload fingerprint instead of the raw payload text.
+
+Runtime payloads submitted through `hulun collector serve` use the same default payload cap and redaction path. The collector binds to `127.0.0.1` by default. Binding to a non-loopback host requires both `--allow-remote` and `--token`. `/healthz` exposes only liveness and supported-format metadata; `/status` and POST ingestion require the configured token. The collector accepts JSON and JSONL payloads and rejects protobuf or opaque binary OTLP bodies.
 
 ## Sensitive Data
 
@@ -117,6 +121,8 @@ This protects against path traversal, symlink escape, and accidental deletion of
 | Adapter writes malformed runtime fields | SDK and MCP validation reject invalid phase/result values without persisting bad events. |
 | Batched ingestion queue contains malformed records | `batch flush` moves malformed queue records to `.hulun/ingest_dead_letter.jsonl` and continues flushing valid records. |
 | Host pipes an oversized runtime payload | `batch ingest-stdin`, SDK `enqueue_payload`, and MCP `hulun_batch_ingest_payload` reject oversized JSON payloads before queue persistence. |
+| Local HTTP collector is accidentally exposed | Default bind is loopback-only; non-loopback bind requires `--allow-remote --token`; POST and `/status` require the token when configured. |
+| OTLP producer sends protobuf or binary payloads | Collector rejects protobuf and `application/octet-stream`; configure the producer for OTLP/HTTP JSON. |
 | Desktop monitor leaks to a remote service | Monitor state is local JSON/HTML; remote exposure only occurs if the user or host publishes it. |
 
 ## Safe Usage Modes
@@ -129,6 +135,7 @@ python -m hulun_guard trace-doctor --file .\trace.jsonl --json
 python -m hulun_guard observe --type tool_result --summary "pytest passed" --scan
 python -m hulun_guard batch enqueue --type tool_result --summary "pytest passed"
 '{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass"}' | python -m hulun_guard batch ingest-stdin --format generic
+python -m hulun_guard collector smoke --json
 python -m hulun_guard batch flush --scan
 ```
 
@@ -146,6 +153,7 @@ python -m hulun_guard compatibility --json
 python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify --json
 python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json
 python -m hulun_guard adapter-matrix --json
+python -m hulun_guard collector smoke --json
 python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json
 python -m hulun_guard cleanup --json
 python -m hulun_guard schema-check --json
@@ -162,6 +170,7 @@ Every release must keep these checks green:
 - `python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify --json`
 - `python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json`
 - `python -m hulun_guard adapter-matrix --json`
+- `python -m hulun_guard collector smoke --json`
 - `'{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass"}' | python -m hulun_guard batch ingest-stdin --format generic --json`
 - `python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json`
 - `python -m hulun_guard schema-check --json`
