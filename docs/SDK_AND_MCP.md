@@ -1,11 +1,12 @@
 # HulunGuard SDK And MCP
 
-HulunGuard exposes two adapter surfaces for agents that should record runtime state without shell glue:
+HulunGuard exposes stable adapter surfaces for agents that should record runtime state without shell glue:
 
 - Python SDK: import `HulunGuardClient` and write events directly.
 - MCP stdio server: run `hulun-mcp` or `python -m hulun_guard.mcp` from any MCP-capable host.
+- CLI stdin bridge: pipe JSON/JSONL payloads to `hulun batch ingest-stdin`.
 
-Both surfaces use the same event schema, privacy redaction defaults, and risk engine as the CLI.
+All surfaces use the same event schema, privacy redaction defaults, and risk engine.
 
 ## Python SDK
 
@@ -48,12 +49,35 @@ flushed = client.flush_queue(limit=500, scan=True)
 print(flushed["risk"]["slop_index"])
 ```
 
+Queue an in-memory runtime payload when the host framework already has spans or stream events available:
+
+```python
+client.enqueue_payload(
+    {
+        "events": [
+            {
+                "type": "tasks",
+                "event_type": "tool_result",
+                "phase": "verify",
+                "summary": "pytest passed",
+                "result": "pass",
+                "action_key": "pytest",
+            }
+        ]
+    },
+    source_format="langgraph",
+    source_name="langgraph-stream",
+)
+client.flush_queue(scan=True)
+```
+
 ### Project Methods
 
 - `init(objective, criteria=None, constraints=None, assumptions=None, threshold=66, force=False)`: create `.hulun/state.json`.
 - `observe(event_type, summary, ..., scan=False)`: record a project observation.
 - `enqueue(event_type, summary, ...)`: append one normalized observation to the durable local batch queue.
 - `enqueue_trace_file(file, source_format="auto", source_platform=None, max_trace_bytes=None)`: parse a supported trace file and queue normalized observations.
+- `enqueue_payload(payload, source_format="auto", source_name=None, source_platform=None, max_payload_bytes=None)`: normalize an in-memory trace payload and queue its observations.
 - `queue_status()`: report pending queue records, queue bytes, parse errors, and dead letters.
 - `flush_queue(limit=500, scan=False, init_if_missing=False, ...)`: move queued observations into the project ledger and optionally recompute risk.
 - `scan(threshold=None, final_attempt=False, checkpoint_stale_minutes=45)`: recompute project HulunIndex.
@@ -123,6 +147,7 @@ Available tools:
 - `hulun_scan`: scan the project ledger.
 - `hulun_batch_enqueue`: append one observation to the durable batch queue.
 - `hulun_batch_status`: inspect pending queue records and dead letters.
+- `hulun_batch_ingest_payload`: normalize an in-memory trace payload and append its observations to the durable batch queue.
 - `hulun_batch_flush`: flush queued observations into the project ledger and optionally scan.
 - `hulun_conversation_start`: start a live conversation monitor.
 - `hulun_conversation_event`: record a live conversation event.

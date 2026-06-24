@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .adapter_matrix import adapter_matrix_json, run_adapter_matrix
-from .adapters import MAX_TRACE_BYTES, export_opentelemetry, iter_observations
+from .adapters import MAX_TRACE_BYTES, export_opentelemetry, iter_observations, parse_trace_text
 from .benchmarks import build_real_world_benchmark_markdown, real_world_benchmark_json, run_real_world_benchmark
 from .calibration import (
     build_calibration_drift_markdown,
@@ -53,6 +53,7 @@ from .queue import (
     BATCH_FLUSH_LIMIT,
     BatchIngestError,
     enqueue_observations,
+    enqueue_payload,
     enqueue_trace_file,
     flush_queue,
     make_observation,
@@ -458,6 +459,41 @@ def cmd_batch_ingest_file(args: argparse.Namespace) -> int:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         print(f"Queued {payload['queued']} observations from {args.file}")
+        print(f"Pending queue: {payload['queue']['pending']}")
+    return 0
+
+
+def _read_stdin_text(max_bytes: int) -> str:
+    limit = max(1, int(max_bytes))
+    stream = sys.stdin
+    if hasattr(stream, "buffer"):
+        raw = stream.buffer.read(limit + 1)
+        if len(raw) > limit:
+            raise SystemExit(f"stdin payload is too large: limit is {limit} bytes.")
+        return raw.decode("utf-8-sig")
+    text = stream.read(limit + 1)
+    if len(text.encode("utf-8")) > limit:
+        raise SystemExit(f"stdin payload is too large: limit is {limit} bytes.")
+    return text
+
+
+def cmd_batch_ingest_stdin(args: argparse.Namespace) -> int:
+    text = _read_stdin_text(args.max_payload_bytes)
+    parsed = parse_trace_text(text)
+    payload = enqueue_payload(
+        args.root,
+        parsed,
+        args.format,
+        source_name=args.source_name or "stdin",
+        source_platform=args.source_platform,
+        include_sensitive=args.include_sensitive,
+        retention_days=args.retention_days,
+        max_payload_bytes=args.max_payload_bytes,
+    )
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"Queued {payload['queued']} observations from stdin")
         print(f"Pending queue: {payload['queue']['pending']}")
     return 0
 
@@ -1835,6 +1871,31 @@ def build_parser() -> argparse.ArgumentParser:
     add_privacy_controls(batch_file)
     batch_file.add_argument("--json", action="store_true")
     batch_file.set_defaults(func=cmd_batch_ingest_file)
+
+    batch_stdin = batch_sub.add_parser("ingest-stdin", parents=[root_parent], help="Queue observations from JSON or JSONL on stdin.")
+    batch_stdin.add_argument(
+        "--format",
+        choices=[
+            "auto",
+            "generic",
+            "opentelemetry",
+            "openinference",
+            "openhands",
+            "swe-agent",
+            "langgraph",
+            "langsmith",
+            "langfuse",
+            "phoenix",
+            "openai-agents",
+        ],
+        default="auto",
+    )
+    batch_stdin.add_argument("--max-payload-bytes", type=int, default=MAX_TRACE_BYTES, help=f"Reject stdin payloads larger than this many bytes. Defaults to {MAX_TRACE_BYTES}.")
+    batch_stdin.add_argument("--source-name", help="Logical source name recorded as redacted queue metadata. Defaults to stdin.")
+    batch_stdin.add_argument("--source-platform", help="Override source platform on queued observations.")
+    add_privacy_controls(batch_stdin)
+    batch_stdin.add_argument("--json", action="store_true")
+    batch_stdin.set_defaults(func=cmd_batch_ingest_stdin)
 
     batch_status = batch_sub.add_parser("status", parents=[root_parent], help="Inspect pending and dead-lettered batched ingestion records.")
     batch_status.add_argument("--json", action="store_true")

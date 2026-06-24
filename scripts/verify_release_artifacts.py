@@ -64,8 +64,18 @@ def clean_env(tmp_root: Path) -> dict[str, str]:
     return env
 
 
-def run_command(command: list[str], *, cwd: Path, env: dict[str, str]) -> str:
-    result = subprocess.run(command, cwd=cwd, env=env, text=True, encoding="utf-8", errors="replace", capture_output=True, check=False)
+def run_command(command: list[str], *, cwd: Path, env: dict[str, str], input_text: str | None = None) -> str:
+    result = subprocess.run(
+        command,
+        cwd=cwd,
+        env=env,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        input=input_text,
+        capture_output=True,
+        check=False,
+    )
     if result.returncode != 0:
         rendered = " ".join(command)
         raise ArtifactSmokeError(
@@ -76,8 +86,8 @@ def run_command(command: list[str], *, cwd: Path, env: dict[str, str]) -> str:
     return result.stdout
 
 
-def run_json_command(command: list[str], *, cwd: Path, env: dict[str, str]) -> dict[str, Any]:
-    output = run_command(command, cwd=cwd, env=env)
+def run_json_command(command: list[str], *, cwd: Path, env: dict[str, str], input_text: str | None = None) -> dict[str, Any]:
+    output = run_command(command, cwd=cwd, env=env, input_text=input_text)
     try:
         payload = json.loads(output)
     except json.JSONDecodeError as exc:
@@ -163,17 +173,34 @@ def verify_installed_commands(
     )
     if batch_enqueue.get("schema") != "hulun.batch_ingest.v1" or batch_enqueue.get("queued") != 1:
         raise ArtifactSmokeError("batch enqueue failed from the installed wheel")
+    batch_stdin = run_json_command(
+        [
+            str(hulun_path),
+            "--root",
+            str(batch_root),
+            "batch",
+            "ingest-stdin",
+            "--format",
+            "generic",
+            "--json",
+        ],
+        cwd=cwd,
+        env=env,
+        input_text='{"type":"tool_result","phase":"verify","summary":"installed stdin smoke passed","result":"pass","action_key":"stdin-smoke"}\n',
+    )
+    if batch_stdin.get("schema") != "hulun.batch_ingest.v1" or batch_stdin.get("queued") != 1:
+        raise ArtifactSmokeError("batch ingest-stdin failed from the installed wheel")
     batch_status = run_json_command([str(hulun_path), "--root", str(batch_root), "batch", "status", "--json"], cwd=cwd, env=env)
-    if batch_status.get("queue", {}).get("pending") != 1:
+    if batch_status.get("queue", {}).get("pending") != 2:
         raise ArtifactSmokeError("batch status did not report the queued installed-wheel event")
     batch_flush = run_json_command(
         [str(hulun_path), "--root", str(batch_root), "batch", "flush", "--scan", "--init-if-missing", "--json"],
         cwd=cwd,
         env=env,
     )
-    if batch_flush.get("imported") != 1 or batch_flush.get("queue", {}).get("pending") != 0 or "risk" not in batch_flush:
+    if batch_flush.get("imported") != 2 or batch_flush.get("queue", {}).get("pending") != 0 or "risk" not in batch_flush:
         raise ArtifactSmokeError("batch flush failed from the installed wheel")
-    commands.append({"name": "hulun batch enqueue/status/flush", "status": "ok", "detail": str(batch_root)})
+    commands.append({"name": "hulun batch enqueue/ingest-stdin/status/flush", "status": "ok", "detail": str(batch_root)})
 
     release_verify = run_json_command([str(hulun_path), "release-verify", "--asset-dir", str(release_asset_dir), "--skip-attestation", "--json"], cwd=cwd, env=env)
     if release_verify.get("schema") != "hulun.github_release_verification.v1" or not release_verify.get("gate", {}).get("passed"):

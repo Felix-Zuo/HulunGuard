@@ -60,7 +60,7 @@ def adapter_support_tiers() -> list[dict[str, Any]]:
         },
         {
             "tier": "conformance",
-            "surfaces": ["cli", "sdk", "mcp", "generic"],
+            "surfaces": ["cli", "sdk", "mcp", "stdin-payload", "in-memory-payload", "generic"],
             "guarantee": "The shared adapter contract test verifies field preservation, redaction, and malformed payload rejection.",
         },
         {

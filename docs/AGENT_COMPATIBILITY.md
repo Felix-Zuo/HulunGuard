@@ -69,13 +69,16 @@ Use:
 
 ```powershell
 python -m hulun_guard ingest --format generic --file events.jsonl --scan
+'{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass"}' | python -m hulun_guard batch ingest-stdin --format generic
 ```
+
+For host runtimes that already hold events or spans in memory, use `HulunGuardClient.enqueue_payload(...)` or MCP `hulun_batch_ingest_payload` and then flush the durable queue. This is the preferred path for live stream integrations where writing a trace file first would add latency or operational friction.
 
 ## Boundaries
 
 - A listed framework does not mean HulunGuard controls that framework.
 - Direct adapters mean HulunGuard can ingest compatible exported shapes.
-- Standards paths require the user to export OTLP JSON or OpenInference-compatible spans.
+- Standards paths require the user to export or submit OTLP JSON or OpenInference-compatible spans.
 - The generic bridge requires the user to map agent events into HulunGuard event fields.
 - Raw private prompts, completions, tool arguments, credentials, and customer logs should not be committed.
 

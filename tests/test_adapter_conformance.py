@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Callable
+from unittest import mock
 
 from hulun_guard.cli import main
 from hulun_guard.mcp import HulunMCPServer
@@ -28,6 +29,13 @@ EVIDENCE_ID = "E-contract"
 def run_cli(*args: str) -> tuple[int, str]:
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
+        code = main(list(args))
+    return code, buf.getvalue()
+
+
+def run_cli_with_stdin(stdin_text: str, *args: str) -> tuple[int, str]:
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), mock.patch("sys.stdin", io.StringIO(stdin_text)):
         code = main(list(args))
     return code, buf.getvalue()
 
@@ -256,31 +264,30 @@ def write_swe_agent_trace(path: Path) -> None:
 
 
 def write_langgraph_trace(path: Path) -> None:
-    path.write_text(
-        json.dumps(
+    path.write_text(json.dumps(langgraph_contract_payload()), encoding="utf-8")
+
+
+def langgraph_contract_payload() -> dict[str, object]:
+    return {
+        "events": [
             {
-                "events": [
-                    {
-                        "type": "tasks",
-                        "event_type": "tool_result",
-                        "summary": PUBLIC_SUMMARY,
-                        "result": "fail",
-                        "phase": "verify",
-                        "evidence": [EVIDENCE_ID],
-                        "refs": [REF_WITH_QUERY],
-                        "action_key": ACTION_KEY,
-                        "prompt_tokens": 123,
-                        "completion_tokens": 45,
-                        "cost": 0.67,
-                        "latency_ms": 890,
-                        "model": "gpt-contract",
-                        "data": {"node": "pytest", "status": "redacted failure"},
-                    }
-                ]
+                "type": "tasks",
+                "event_type": "tool_result",
+                "summary": PUBLIC_SUMMARY,
+                "result": "fail",
+                "phase": "verify",
+                "evidence": [EVIDENCE_ID],
+                "refs": [REF_WITH_QUERY],
+                "action_key": ACTION_KEY,
+                "prompt_tokens": 123,
+                "completion_tokens": 45,
+                "cost": 0.67,
+                "latency_ms": 890,
+                "model": "gpt-contract",
+                "data": {"node": "pytest", "status": "redacted failure"},
             }
-        ),
-        encoding="utf-8",
-    )
+        ]
+    }
 
 
 def write_langsmith_trace(path: Path) -> None:
@@ -328,6 +335,9 @@ class AdapterConformanceTest(unittest.TestCase):
             ("cli-batch", self._record_cli_batch, False),
             ("sdk-batch", self._record_sdk_batch, False),
             ("mcp-batch", self._record_mcp_batch, False),
+            ("cli-stdin-batch", self._record_cli_stdin_batch, False),
+            ("sdk-payload-batch", self._record_sdk_payload_batch, False),
+            ("mcp-payload-batch", self._record_mcp_payload_batch, False),
             ("generic", self._record_generic_ingest, True),
             ("opentelemetry", self._record_opentelemetry_ingest, True),
             ("openinference", self._record_openinference_ingest, True),
@@ -366,6 +376,8 @@ class AdapterConformanceTest(unittest.TestCase):
             self.assertEqual(response["error"]["code"], -32602)
             with self.assertRaises(HulunGuardError):
                 client.enqueue(event_type="tool_result", summary="bad phase", phase="invalid-phase")
+            with self.assertRaises(HulunGuardError):
+                client.enqueue_payload({"type": "tool_result", "summary": "too large"}, source_format="generic", max_payload_bytes=1)
 
             batch_response = server.handle_message(
                 {
@@ -587,6 +599,80 @@ class AdapterConformanceTest(unittest.TestCase):
             }
         )
         self.assertNotIn("error", enqueue_response)
+        flush_response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": "hulun_batch_flush", "arguments": {"limit": 1, "scan": True}},
+            }
+        )
+        self.assertNotIn("error", flush_response)
+        payload = flush_response["result"]["structuredContent"]
+        return load_last_event(root), payload
+
+    def _record_cli_stdin_batch(self, root: str) -> tuple[dict[str, object], dict[str, object]]:
+        init_cli_project(root)
+        code, out = run_cli_with_stdin(
+            json.dumps(langgraph_contract_payload()),
+            "--root",
+            root,
+            "batch",
+            "ingest-stdin",
+            "--format",
+            "langgraph",
+            "--json",
+        )
+        self.assertEqual(code, 0, out)
+        payload = json.loads(out)
+        self.assertEqual(payload["queued"], 1)
+        code, out = run_cli("--root", root, "batch", "flush", "--scan", "--include-events", "--json")
+        self.assertEqual(code, 0, out)
+        payload = json.loads(out)
+        return payload["events"][0], payload
+
+    def _record_sdk_payload_batch(self, root: str) -> tuple[dict[str, object], dict[str, object]]:
+        client = HulunGuardClient(root)
+        client.init(objective="adapter contract conformance", criteria=["adapter emits durable runtime semantics"])
+        queued = client.enqueue_payload(langgraph_contract_payload(), source_format="langgraph", source_name="langgraph-stream")
+        self.assertEqual(queued["queued"], 1)
+        payload = client.flush_queue(limit=1, scan=True)
+        return load_last_event(root), payload
+
+    def _record_mcp_payload_batch(self, root: str) -> tuple[dict[str, object], dict[str, object]]:
+        server = HulunMCPServer(root=root)
+        init_response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "hulun_project_init",
+                    "arguments": {
+                        "objective": "adapter contract conformance",
+                        "criteria": ["adapter emits durable runtime semantics"],
+                    },
+                },
+            }
+        )
+        self.assertNotIn("error", init_response)
+        enqueue_response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "hulun_batch_ingest_payload",
+                    "arguments": {
+                        "format": "langgraph",
+                        "source_name": "langgraph-stream",
+                        "payload": langgraph_contract_payload(),
+                    },
+                },
+            }
+        )
+        self.assertNotIn("error", enqueue_response)
+        self.assertEqual(enqueue_response["result"]["structuredContent"]["queued"], 1)
         flush_response = server.handle_message(
             {
                 "jsonrpc": "2.0",

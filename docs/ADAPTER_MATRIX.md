@@ -35,7 +35,7 @@ The gate verifies:
 | integration-tested | OpenTelemetry, OpenInference, OpenHands-like, SWE-agent-like, OpenAI Agents SDK | Public-safe fixture streams are imported through adapters and checked by `adapter-matrix`. |
 | hosted-fixture-tested | LangGraph, LangSmith, Langfuse, Phoenix | Hosted platform fixture shapes are checked with synthetic public-safe exports and no private service trace data. |
 | roundtrip-tested | OpenTelemetry, OpenInference, Langfuse, Phoenix | Hulun-compatible fields survive import, HulunGuard persistence, OTLP export, and OTLP re-import. |
-| conformance | CLI, Python SDK, MCP, generic JSON | The shared adapter contract test verifies field preservation, redaction, and malformed payload rejection. |
+| conformance | CLI, Python SDK, MCP, stdin payloads, in-memory payloads, generic JSON | The shared adapter contract test verifies field preservation, redaction, and malformed payload rejection. |
 | best-effort | Custom JSON or provider-specific exports without supported fields | Use generic JSON, OpenTelemetry, or OpenInference fields; unsupported provider-specific payloads are summarized or ignored. |
 
 ## Release Requirement

@@ -52,6 +52,7 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 ### M3: Production-Ready Open Source Product
 
 - Async/batched event ingestion.
+- In-memory and stdin runtime payload ingestion for host agents that already hold spans or stream events.
 - Cross-platform UI and no hidden local assumptions.
 - Native service export connectors beyond public-safe hosted fixture shapes.
 - User-facing onboarding that works without repository-specific knowledge.
@@ -76,4 +77,4 @@ HulunGuard is not a single skill or plugin. It is a reliability monitoring engin
 
 ## Current Target
 
-The current target is M3 hardening. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, hosted-platform fixture baseline, OpenAI Agents SDK native trace adapter baseline, durable async/batched ingestion baseline, release provenance baseline, installed release-verification baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, adapter conformance baseline, adapter integration matrix baseline, expanded public-safe real-world benchmark baseline, agent compatibility matrix baseline, verified integration kit baseline, zero-knowledge onboarding baseline, trace-doctor diagnostic baseline, retention cleanup baseline, schema compatibility baseline, and threat-model baseline are implemented. The next gate is native service export connectors beyond public-safe hosted fixture shapes.
+The current target is M3 hardening. The privacy-safe redaction baseline, adapter SDK, MCP stdio server, OpenTelemetry/OpenInference import/export baseline, hosted-platform fixture baseline, OpenAI Agents SDK native trace adapter baseline, durable async/batched ingestion baseline, in-memory/stdin runtime payload baseline, release provenance baseline, installed release-verification baseline, 100-trajectory labeled calibration baseline, checked-in calibration drift baseline, adapter conformance baseline, adapter integration matrix baseline, expanded public-safe real-world benchmark baseline, agent compatibility matrix baseline, verified integration kit baseline, zero-knowledge onboarding baseline, trace-doctor diagnostic baseline, retention cleanup baseline, schema compatibility baseline, and threat-model baseline are implemented. The next gate is native service export connectors and long-running collection workflows beyond public-safe hosted fixture shapes.

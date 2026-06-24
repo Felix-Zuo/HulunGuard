@@ -8,7 +8,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from .adapters import MAX_TRACE_BYTES, iter_observations
+from .adapters import MAX_TRACE_BYTES, iter_observations, iter_payload_observations
 from .constants import INGEST_DEAD_LETTER_FILE, INGEST_QUEUE_FILE
 from .privacy import DEFAULT_RETENTION_DAYS, fingerprint_text, redact_text, sanitize_event
 from .schemas import BATCH_INGEST_SCHEMA
@@ -57,6 +57,29 @@ def _source_metadata(source_file: str | None) -> dict[str, Any] | None:
         "name": redact_text(path.name),
         "fingerprint": fingerprint_text(str(source_file), prefix="source"),
     }
+
+
+def _payload_source_metadata(source_name: str | None, payload: Any) -> dict[str, Any]:
+    name = source_name or "runtime-payload"
+    try:
+        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError) as exc:
+        raise BatchIngestError(f"Runtime payload must be JSON-serializable: {exc}") from exc
+    return {
+        "name": redact_text(name),
+        "fingerprint": fingerprint_text(serialized, prefix="payload"),
+        "bytes": len(serialized.encode("utf-8")),
+    }
+
+
+def _check_payload_size(payload: Any, *, max_payload_bytes: int) -> None:
+    try:
+        size = len(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+    except (TypeError, ValueError) as exc:
+        raise BatchIngestError(f"Runtime payload must be JSON-serializable: {exc}") from exc
+    limit = max(1, int(max_payload_bytes))
+    if size > limit:
+        raise BatchIngestError(f"Runtime payload is too large: {size} bytes, limit is {limit} bytes.")
 
 
 def _append_jsonl(path: Path, records: Iterable[dict[str, Any]]) -> int:
@@ -154,6 +177,7 @@ def enqueue_observations(
     observations: Iterable[dict[str, Any]],
     *,
     source_file: str | None = None,
+    source: dict[str, Any] | None = None,
     source_format: str | None = None,
     source_platform: str | None = None,
     include_sensitive: bool = False,
@@ -162,7 +186,7 @@ def enqueue_observations(
     root_path = _root(root)
     queued_at = utc_now()
     path = queue_path(root_path)
-    source = _source_metadata(source_file)
+    source = source or _source_metadata(source_file)
     path.parent.mkdir(parents=True, exist_ok=True)
     queued_count = 0
     record_ids: list[str] = []
@@ -216,6 +240,30 @@ def enqueue_trace_file(
         root,
         observations,
         source_file=str(trace_path),
+        source_format=source_format,
+        source_platform=source_platform,
+        include_sensitive=include_sensitive,
+        retention_days=retention_days,
+    )
+
+
+def enqueue_payload(
+    root: str | Path | None,
+    payload: Any,
+    source_format: str = "auto",
+    *,
+    source_name: str | None = None,
+    source_platform: str | None = None,
+    include_sensitive: bool = False,
+    retention_days: int = DEFAULT_RETENTION_DAYS,
+    max_payload_bytes: int = MAX_TRACE_BYTES,
+) -> dict[str, Any]:
+    _check_payload_size(payload, max_payload_bytes=max_payload_bytes)
+    observations = iter_payload_observations(payload, source_format, include_sensitive=include_sensitive)
+    return enqueue_observations(
+        root,
+        observations,
+        source=_payload_source_metadata(source_name, payload),
         source_format=source_format,
         source_platform=source_platform,
         include_sensitive=include_sensitive,
