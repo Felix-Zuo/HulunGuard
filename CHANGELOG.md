@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.32.0 - 2026-06-24
+
+- Added durable batched runtime ingestion with `batch enqueue`, `batch ingest-file`, `batch status`, and `batch flush`.
+- Added SDK queue methods for high-frequency agent emitters and bounded batch flushes.
+- Added `hulun.batch_ingest.v1` reports, schema fixture coverage, dead-letter handling, CI smoke coverage, and release policy updates.
+
 ## 0.31.0 - 2026-06-24
 
 - Added the `openai-agents` trace adapter for OpenAI Agents SDK trace/span export payloads.

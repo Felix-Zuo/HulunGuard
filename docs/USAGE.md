@@ -140,6 +140,28 @@ Export HulunGuard events as OTLP-style JSON spans:
 python .\hulun.py export-otel --output .\hulun-otel.json
 ```
 
+## Batched Runtime Ingestion
+
+Use `batch` when an agent emits events continuously and the adapter should avoid opening and rewriting `.hulun/state.json` for every event:
+
+```powershell
+python .\hulun.py batch enqueue --type tool_result --phase verify --summary "pytest passed" --result pass
+python .\hulun.py batch ingest-file --file .\trace.jsonl --format generic
+python .\hulun.py batch status
+python .\hulun.py batch flush --limit 500 --scan
+```
+
+Behavior:
+
+- `batch enqueue` writes one normalized observation to `.hulun/ingest_queue.jsonl`.
+- `batch ingest-file` parses a supported trace format and appends the normalized observations to the same queue.
+- `batch status` reports pending queue size, queue bytes, parse errors, and dead-letter count.
+- `batch flush` moves queued observations into `.hulun/state.json` in bounded batches. Use `--scan` to recompute risk after flushing.
+- Malformed queued records are moved to `.hulun/ingest_dead_letter.jsonl` and do not block valid queued observations.
+- `--init-if-missing` on `batch flush` creates a minimal project ledger before the first flush.
+
+The JSON output for `batch` commands uses `hulun.batch_ingest.v1`.
+
 ## Check Agent Compatibility
 
 Use `compatibility` to see whether an agent framework has a direct adapter, a standards path, or the generic bridge:

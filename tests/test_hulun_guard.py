@@ -762,6 +762,125 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertEqual(event["privacy"]["mode"], "sensitive-opt-in")
             self.assertEqual(event["privacy"]["retention_days"], 7)
 
+    def test_batch_enqueue_flushes_limited_records_and_scans(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "init",
+                    "--objective",
+                    "monitor a long running agent",
+                    "--criterion",
+                    "queued events flush",
+                )[0],
+                0,
+            )
+            for summary in ["pytest failed", "checkpoint recovered"]:
+                code, out = self.run_cli(
+                    "--root",
+                    tmp,
+                    "batch",
+                    "enqueue",
+                    "--type",
+                    "tool_result",
+                    "--phase",
+                    "verify",
+                    "--summary",
+                    summary,
+                    "--result",
+                    "fail" if "failed" in summary else "pass",
+                    "--json",
+                )
+                self.assertEqual(code, 0, out)
+
+            code, out = self.run_cli("--root", tmp, "batch", "status", "--json")
+            self.assertEqual(code, 0, out)
+            self.assertEqual(json.loads(out)["queue"]["pending"], 2)
+
+            code, out = self.run_cli("--root", tmp, "batch", "flush", "--limit", "1", "--include-events", "--json")
+            self.assertEqual(code, 0, out)
+            first = json.loads(out)
+            self.assertEqual(first["imported"], 1)
+            self.assertEqual(first["queue"]["pending"], 1)
+            self.assertEqual(first["events"][0]["queue_id"], first["events"][0]["queue_id"].strip())
+            self.assertIn("queued_at", first["events"][0])
+
+            code, out = self.run_cli("--root", tmp, "batch", "flush", "--scan", "--json")
+            self.assertEqual(code, 0, out)
+            second = json.loads(out)
+            self.assertEqual(second["imported"], 1)
+            self.assertEqual(second["queue"]["pending"], 0)
+            self.assertIn("risk", second)
+            state = load_state(Path(tmp))
+            self.assertEqual(len([event for event in state["events"] if event.get("queue_id")]), 2)
+
+    def test_batch_ingest_file_redacts_before_flush_and_can_initialize_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "trace.jsonl"
+            raw_payload = "tool output contains internal payload marker 12345"
+            trace.write_text(json.dumps({"type": "llm_call", "phase": "implement", "content": raw_payload}) + "\n", encoding="utf-8")
+
+            code, out = self.run_cli("--root", tmp, "batch", "ingest-file", "--file", str(trace), "--format", "generic", "--json")
+            self.assertEqual(code, 0, out)
+            queued = json.loads(out)
+            self.assertEqual(queued["queued"], 1)
+            queue_text = (root / ".hulun" / "ingest_queue.jsonl").read_text(encoding="utf-8")
+            self.assertNotIn(raw_payload, queue_text)
+
+            code, out = self.run_cli("--root", tmp, "batch", "flush", "--init-if-missing", "--include-events", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["imported"], 1)
+            event = payload["events"][0]
+            joined = json.dumps(event, ensure_ascii=False)
+            self.assertIn("sensitive payload withheld", event["summary"])
+            self.assertNotIn(raw_payload, joined)
+            self.assertEqual(event["privacy"]["mode"], "redacted-default")
+
+    def test_batch_flush_dead_letters_malformed_records_without_blocking_valid_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "init",
+                    "--objective",
+                    "flush valid queued records",
+                    "--criterion",
+                    "malformed records do not block valid records",
+                )[0],
+                0,
+            )
+            self.assertEqual(
+                self.run_cli(
+                    "--root",
+                    tmp,
+                    "batch",
+                    "enqueue",
+                    "--type",
+                    "tool_result",
+                    "--summary",
+                    "pytest passed",
+                    "--result",
+                    "pass",
+                )[0],
+                0,
+            )
+            queue_file = root / ".hulun" / "ingest_queue.jsonl"
+            queue_file.write_text("not-json\n" + queue_file.read_text(encoding="utf-8"), encoding="utf-8")
+
+            code, out = self.run_cli("--root", tmp, "batch", "flush", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["imported"], 1)
+            self.assertEqual(payload["dead_lettered"], 1)
+            self.assertEqual(payload["queue"]["pending"], 0)
+            self.assertEqual(payload["dead_letter"]["records"], 1)
+            self.assertEqual(load_state(root)["events"][-1]["summary"], "pytest passed")
+
     def test_sdk_records_project_and_conversation_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
             old_home = os.environ.get("HULUN_HOME")
@@ -786,6 +905,20 @@ class HulunGuardCliTest(unittest.TestCase):
                 self.assertEqual(observed["event"]["source_platform"], "sdk")
                 self.assertIn("risk", observed)
                 self.assertTrue((Path(tmp) / ".hulun" / "state.json").exists())
+
+                queued = client.enqueue(
+                    event_type="tool_result",
+                    phase="verify",
+                    summary="queued pytest passed",
+                    result="pass",
+                    source_platform="sdk",
+                )
+                self.assertEqual(queued["queued"], 1)
+                self.assertEqual(client.queue_status()["queue"]["pending"], 1)
+                flushed = client.flush_queue(limit=1, scan=True)
+                self.assertEqual(flushed["imported"], 1)
+                self.assertEqual(flushed["queue"]["pending"], 0)
+                self.assertIn("risk", flushed)
 
                 conversation = client.start_conversation(name="sdk-live-test", group="tests")
                 pending = client.conversation_event(
@@ -823,6 +956,8 @@ class HulunGuardCliTest(unittest.TestCase):
                 tool_names = {tool["name"] for tool in listed["result"]["tools"]}
                 self.assertIn("hulun_project_init", tool_names)
                 self.assertIn("hulun_conversation_event", tool_names)
+                self.assertIn("hulun_batch_enqueue", tool_names)
+                self.assertIn("hulun_batch_flush", tool_names)
 
                 init_result = server.handle_message(
                     {
@@ -861,10 +996,40 @@ class HulunGuardCliTest(unittest.TestCase):
                 self.assertEqual(structured["event"]["source_platform"], "mcp")
                 self.assertIn("risk", structured)
 
-                started = server.handle_message(
+                queued = server.handle_message(
                     {
                         "jsonrpc": "2.0",
                         "id": 5,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "hulun_batch_enqueue",
+                            "arguments": {
+                                "type": "tool_result",
+                                "summary": "queued pytest passed",
+                                "phase": "verify",
+                            },
+                        },
+                    }
+                )
+                self.assertEqual(queued["result"]["structuredContent"]["queued"], 1)
+                flushed = server.handle_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 6,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "hulun_batch_flush",
+                            "arguments": {"limit": 1, "scan": True},
+                        },
+                    }
+                )
+                self.assertEqual(flushed["result"]["structuredContent"]["imported"], 1)
+                self.assertIn("risk", flushed["result"]["structuredContent"])
+
+                started = server.handle_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 7,
                         "method": "tools/call",
                         "params": {
                             "name": "hulun_conversation_start",
@@ -876,7 +1041,7 @@ class HulunGuardCliTest(unittest.TestCase):
                 event = server.handle_message(
                     {
                         "jsonrpc": "2.0",
-                        "id": 6,
+                        "id": 8,
                         "method": "tools/call",
                         "params": {
                             "name": "hulun_conversation_event",

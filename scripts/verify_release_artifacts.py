@@ -139,6 +139,42 @@ def verify_installed_commands(
         raise ArtifactSmokeError("onboard --agent langgraph failed from the installed wheel")
     commands.append({"name": "hulun onboard --agent langgraph --json", "status": "ok", "detail": str(onboarding_dir)})
 
+    batch_root = cwd / "batch-root"
+    batch_root.mkdir()
+    batch_enqueue = run_json_command(
+        [
+            str(hulun_path),
+            "--root",
+            str(batch_root),
+            "batch",
+            "enqueue",
+            "--type",
+            "tool_result",
+            "--phase",
+            "verify",
+            "--summary",
+            "installed batch smoke passed",
+            "--result",
+            "pass",
+            "--json",
+        ],
+        cwd=cwd,
+        env=env,
+    )
+    if batch_enqueue.get("schema") != "hulun.batch_ingest.v1" or batch_enqueue.get("queued") != 1:
+        raise ArtifactSmokeError("batch enqueue failed from the installed wheel")
+    batch_status = run_json_command([str(hulun_path), "--root", str(batch_root), "batch", "status", "--json"], cwd=cwd, env=env)
+    if batch_status.get("queue", {}).get("pending") != 1:
+        raise ArtifactSmokeError("batch status did not report the queued installed-wheel event")
+    batch_flush = run_json_command(
+        [str(hulun_path), "--root", str(batch_root), "batch", "flush", "--scan", "--init-if-missing", "--json"],
+        cwd=cwd,
+        env=env,
+    )
+    if batch_flush.get("imported") != 1 or batch_flush.get("queue", {}).get("pending") != 0 or "risk" not in batch_flush:
+        raise ArtifactSmokeError("batch flush failed from the installed wheel")
+    commands.append({"name": "hulun batch enqueue/status/flush", "status": "ok", "detail": str(batch_root)})
+
     release_verify = run_json_command([str(hulun_path), "release-verify", "--asset-dir", str(release_asset_dir), "--skip-attestation", "--json"], cwd=cwd, env=env)
     if release_verify.get("schema") != "hulun.github_release_verification.v1" or not release_verify.get("gate", {}).get("passed"):
         raise ArtifactSmokeError("release-verify --asset-dir failed from the installed wheel")
@@ -158,8 +194,10 @@ def verify_artifacts(root: Path, dist_dir: Path, version: str) -> dict[str, Any]
         {
             "hulun_guard/__init__.py",
             "hulun_guard/cli.py",
+            "hulun_guard/queue.py",
             "hulun_guard/release_metadata.py",
             "hulun_guard/release_verification.py",
+            "hulun_guard/schema_fixtures/batch_ingest_v1.json",
             "hulun_guard/schema_fixtures/legacy_state_v0.json",
             "hulun_guard/security_docs/THREAT_MODEL.md",
             f"hulun_guard-{version}.dist-info/METADATA",
@@ -174,8 +212,10 @@ def verify_artifacts(root: Path, dist_dir: Path, version: str) -> dict[str, Any]
             f"hulun_guard-{version}/README.md",
             f"hulun_guard-{version}/LICENSE",
             f"hulun_guard-{version}/src/hulun_guard/cli.py",
+            f"hulun_guard-{version}/src/hulun_guard/queue.py",
             f"hulun_guard-{version}/src/hulun_guard/release_metadata.py",
             f"hulun_guard-{version}/src/hulun_guard/release_verification.py",
+            f"hulun_guard-{version}/src/hulun_guard/schema_fixtures/batch_ingest_v1.json",
             f"hulun_guard-{version}/tests/test_hulun_guard.py",
         },
         archive_type="sdist",

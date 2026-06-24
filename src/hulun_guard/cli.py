@@ -49,6 +49,15 @@ from .monitor import (
 )
 from .onboarding import OnboardingError, onboarding_json, run_onboarding
 from .privacy import DEFAULT_RETENTION_DAYS, sanitize_evidence
+from .queue import (
+    BATCH_FLUSH_LIMIT,
+    BatchIngestError,
+    enqueue_observations,
+    enqueue_trace_file,
+    flush_queue,
+    make_observation,
+    queue_status,
+)
 from .release_verification import (
     DEFAULT_REPO as DEFAULT_RELEASE_REPO,
 )
@@ -71,7 +80,7 @@ from .schemas import (
     run_schema_compatibility_check,
     schema_compatibility_json,
 )
-from .sdk import append_project_event
+from .sdk import HulunGuardError, append_observation_to_state, append_project_event
 from .security import run_threat_model_check, threat_model_check_json
 from .storage import (
     criteria,
@@ -356,28 +365,16 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     last_id = None
     sample_events: list[dict[str, Any]] = []
     for observation in iter_observations(args.file, args.format, include_sensitive=args.include_sensitive, max_trace_bytes=args.max_trace_bytes):
-        event = append_event(
-            state,
-            observation.get("type") or "observation",
-            observation.get("summary") or "Imported observation.",
-            result=observation.get("result") or "unknown",
-            refs=observation.get("refs") or [],
-            resolved=observation.get("resolved"),
-            evidence=observation.get("evidence") or [],
-            extra={
-                "phase": require_phase(observation.get("phase")),
-                "claims": observation.get("claims") or [],
-                "source_platform": args.source_platform or observation.get("source_platform"),
-                "action_key": observation.get("action_key"),
-                "prompt_tokens": observation.get("prompt_tokens"),
-                "completion_tokens": observation.get("completion_tokens"),
-                "cost": observation.get("cost"),
-                "latency_ms": observation.get("latency_ms"),
-                "model": observation.get("model"),
-            },
-            include_sensitive=args.include_sensitive,
-            retention_days=args.retention_days,
-        )
+        try:
+            event = append_observation_to_state(
+                state,
+                observation,
+                source_platform=args.source_platform,
+                include_sensitive=args.include_sensitive,
+                retention_days=args.retention_days,
+            )
+        except HulunGuardError as exc:
+            raise SystemExit(str(exc)) from None
         imported_count += 1
         first_id = first_id or event["id"]
         last_id = event["id"]
@@ -401,6 +398,108 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         print(f"Imported {imported_count} observations from {args.file}")
+        if args.scan and payload.get("risk"):
+            risk = payload["risk"]
+            print(f"HulunIndex: {risk['slop_index']} / 100 ({risk['band']})")
+            print(f"Required action: {risk['required_action']}")
+    if args.scan and payload.get("risk"):
+        risk = payload["risk"]
+        return 2 if risk["blocked"] and args.fail_on_threshold else 0
+    return 0
+
+
+def cmd_batch_enqueue(args: argparse.Namespace) -> int:
+    observation = make_observation(
+        event_type=args.type,
+        summary=args.summary,
+        result=args.result,
+        phase=require_phase(args.phase),
+        claims=normalize_list(args.claim),
+        evidence=normalize_list(args.evidence),
+        refs=normalize_list(args.ref),
+        resolved=args.resolved,
+        source_platform=args.source_platform,
+        action_key=args.action_key,
+        prompt_tokens=args.prompt_tokens,
+        completion_tokens=args.completion_tokens,
+        cost=args.cost,
+        latency_ms=args.latency_ms,
+        model=args.model,
+        include_sensitive=args.include_sensitive,
+        retention_days=args.retention_days,
+    )
+    payload = enqueue_observations(
+        args.root,
+        [observation],
+        source_format="cli",
+        source_platform=args.source_platform,
+        include_sensitive=args.include_sensitive,
+        retention_days=args.retention_days,
+    )
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"Queued {payload['queued']} observation.")
+        print(f"Pending queue: {payload['queue']['pending']}")
+    return 0
+
+
+def cmd_batch_ingest_file(args: argparse.Namespace) -> int:
+    payload = enqueue_trace_file(
+        args.root,
+        args.file,
+        args.format,
+        source_platform=args.source_platform,
+        include_sensitive=args.include_sensitive,
+        retention_days=args.retention_days,
+        max_trace_bytes=args.max_trace_bytes,
+    )
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"Queued {payload['queued']} observations from {args.file}")
+        print(f"Pending queue: {payload['queue']['pending']}")
+    return 0
+
+
+def cmd_batch_status(args: argparse.Namespace) -> int:
+    payload = queue_status(args.root)
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"Pending queue: {payload['queue']['pending']}")
+        print(f"Dead letters: {payload['dead_letter']['records']}")
+        print(f"Queue file: {payload['queue']['path']}")
+    return 0 if payload["queue"]["parse_error_count"] == 0 else 2
+
+
+def cmd_batch_flush(args: argparse.Namespace) -> int:
+    try:
+        payload = flush_queue(
+            args.root,
+            limit=args.limit,
+            include_events=args.include_events,
+            init_if_missing=args.init_if_missing,
+            init_objective=args.init_objective,
+            init_criterion=args.init_criterion,
+            init_threshold=args.init_threshold,
+            include_sensitive=args.include_sensitive,
+            retention_days=args.retention_days,
+        )
+    except BatchIngestError as exc:
+        raise SystemExit(str(exc)) from None
+    if args.scan:
+        _state, risk, report_path = run_scan(args, final_attempt=args.final_attempt)
+        payload["risk"] = risk
+        payload["report"] = str(report_path)
+
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"Imported {payload['imported']} queued observations.")
+        print(f"Pending queue: {payload['queue']['pending']}")
+        if payload["dead_lettered"]:
+            print(f"Dead-lettered this run: {payload['dead_lettered']}")
         if args.scan and payload.get("risk"):
             risk = payload["risk"]
             print(f"HulunIndex: {risk['slop_index']} / 100 ({risk['band']})")
@@ -1688,6 +1787,74 @@ def build_parser() -> argparse.ArgumentParser:
     add_privacy_controls(observe)
     observe.add_argument("--json", action="store_true")
     observe.set_defaults(func=cmd_observe)
+
+    batch = sub.add_parser("batch", parents=[root_parent], help="Durably queue runtime observations and flush them into the project ledger in batches.")
+    batch_sub = batch.add_subparsers(dest="batch_command", required=True)
+
+    batch_enqueue = batch_sub.add_parser("enqueue", parents=[root_parent], help="Queue one normalized runtime observation without opening state.json.")
+    batch_enqueue.add_argument("--type", required=True, help="Runtime event type, such as tool_result, llm_call, final_attempt, or summary.")
+    batch_enqueue.add_argument("--summary", required=True)
+    batch_enqueue.add_argument("--result", choices=["pass", "fail", "unknown"], default="pass")
+    batch_enqueue.add_argument("--phase", choices=sorted(VALID_EVENT_PHASES))
+    batch_enqueue.add_argument("--claim", action="append", default=[], help="Completion or verification claim made by the agent.")
+    batch_enqueue.add_argument("--evidence", action="append", default=[], help="Evidence ids that support this observation.")
+    batch_enqueue.add_argument("--ref", action="append", default=[], help="Path, URL, trace id, or command reference.")
+    batch_enqueue.add_argument("--resolved", action="store_true")
+    batch_enqueue.add_argument("--source-platform", help="Adapter source, e.g. sdk, langgraph, swe-agent, openhands, langfuse, phoenix.")
+    batch_enqueue.add_argument("--action-key", help="Stable action fingerprint for retry-loop detection.")
+    batch_enqueue.add_argument("--prompt-tokens", type=int)
+    batch_enqueue.add_argument("--completion-tokens", type=int)
+    batch_enqueue.add_argument("--cost", type=float)
+    batch_enqueue.add_argument("--latency-ms", type=int)
+    batch_enqueue.add_argument("--model")
+    add_privacy_controls(batch_enqueue)
+    batch_enqueue.add_argument("--json", action="store_true")
+    batch_enqueue.set_defaults(func=cmd_batch_enqueue)
+
+    batch_file = batch_sub.add_parser("ingest-file", parents=[root_parent], help="Queue observations from a trace file for later batched flush.")
+    batch_file.add_argument("--file", required=True, help="JSON or JSONL trace file to queue.")
+    batch_file.add_argument(
+        "--format",
+        choices=[
+            "auto",
+            "generic",
+            "opentelemetry",
+            "openinference",
+            "openhands",
+            "swe-agent",
+            "langgraph",
+            "langsmith",
+            "langfuse",
+            "phoenix",
+            "openai-agents",
+        ],
+        default="auto",
+    )
+    batch_file.add_argument("--max-trace-bytes", type=int, default=MAX_TRACE_BYTES, help=f"Reject trace files larger than this many bytes. Defaults to {MAX_TRACE_BYTES}.")
+    batch_file.add_argument("--source-platform", help="Override source platform on queued observations.")
+    add_privacy_controls(batch_file)
+    batch_file.add_argument("--json", action="store_true")
+    batch_file.set_defaults(func=cmd_batch_ingest_file)
+
+    batch_status = batch_sub.add_parser("status", parents=[root_parent], help="Inspect pending and dead-lettered batched ingestion records.")
+    batch_status.add_argument("--json", action="store_true")
+    batch_status.set_defaults(func=cmd_batch_status)
+
+    batch_flush = batch_sub.add_parser("flush", parents=[root_parent], help="Flush queued observations into the project ledger.")
+    batch_flush.add_argument("--limit", type=int, default=BATCH_FLUSH_LIMIT, help=f"Maximum queued observations to flush. Defaults to {BATCH_FLUSH_LIMIT}.")
+    batch_flush.add_argument("--scan", action="store_true", help="Scan immediately after flushing queued observations.")
+    batch_flush.add_argument("--threshold", type=int)
+    batch_flush.add_argument("--checkpoint-stale-minutes", type=int, default=45)
+    batch_flush.add_argument("--final-attempt", action="store_true")
+    batch_flush.add_argument("--fail-on-threshold", action="store_true")
+    batch_flush.add_argument("--include-events", action="store_true")
+    batch_flush.add_argument("--init-if-missing", action="store_true", help="Create a minimal HulunGuard project ledger before flushing if no state exists.")
+    batch_flush.add_argument("--init-objective", help="Objective used with --init-if-missing.")
+    batch_flush.add_argument("--init-criterion", help="Criterion used with --init-if-missing.")
+    batch_flush.add_argument("--init-threshold", type=int, default=66, help="Risk threshold used with --init-if-missing.")
+    add_privacy_controls(batch_flush)
+    batch_flush.add_argument("--json", action="store_true")
+    batch_flush.set_defaults(func=cmd_batch_flush)
 
     ingest = sub.add_parser("ingest", parents=[root_parent])
     ingest.add_argument("--file", required=True, help="JSON or JSONL trace file to import.")

@@ -30,6 +30,9 @@ The adapter conformance test covers:
 - CLI `observe`
 - Python `HulunGuardClient.observe`
 - MCP `hulun_observe`
+- CLI `batch enqueue` plus `batch flush`
+- Python `HulunGuardClient.enqueue` plus `flush_queue`
+- MCP `hulun_batch_enqueue` plus `hulun_batch_flush`
 - `ingest --format generic`
 - `ingest --format opentelemetry`
 - `ingest --format openinference`
@@ -41,7 +44,7 @@ The adapter conformance test covers:
 - `ingest --format phoenix`
 - `ingest --format openai-agents`
 
-Each surface must be able to record the contract event, redact sensitive payloads by default, write `.hulun/risk.json` when scan is requested, and reject malformed SDK/MCP payloads without silently persisting a bad event.
+Each surface must be able to record the contract event, redact sensitive payloads by default, write `.hulun/risk.json` when scan is requested, and reject malformed SDK/MCP payloads without silently persisting a bad event. Batched surfaces must also preserve contract fields after queue flush and must not let malformed queued records block valid records.
 
 Trace-file adapters must reject files above the configured `--max-trace-bytes` limit before parsing or persisting events. The default limit is 5 MiB.
 

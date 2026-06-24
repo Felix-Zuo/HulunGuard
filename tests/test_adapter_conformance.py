@@ -325,6 +325,9 @@ class AdapterConformanceTest(unittest.TestCase):
             ("cli", self._record_cli, True),
             ("sdk", self._record_sdk, True),
             ("mcp", self._record_mcp, True),
+            ("cli-batch", self._record_cli_batch, False),
+            ("sdk-batch", self._record_sdk_batch, False),
+            ("mcp-batch", self._record_mcp_batch, False),
             ("generic", self._record_generic_ingest, True),
             ("opentelemetry", self._record_opentelemetry_ingest, True),
             ("openinference", self._record_openinference_ingest, True),
@@ -361,6 +364,21 @@ class AdapterConformanceTest(unittest.TestCase):
                 }
             )
             self.assertEqual(response["error"]["code"], -32602)
+            with self.assertRaises(HulunGuardError):
+                client.enqueue(event_type="tool_result", summary="bad phase", phase="invalid-phase")
+
+            batch_response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "hulun_batch_enqueue",
+                        "arguments": {"type": "tool_result", "summary": "bad result", "result": "bad-result"},
+                    },
+                }
+            )
+            self.assertEqual(batch_response["error"]["code"], -32602)
             state = json.loads((Path(tmp) / ".hulun" / "state.json").read_text(encoding="utf-8"))
             self.assertEqual(len(state["events"]), 1)
 
@@ -466,6 +484,120 @@ class AdapterConformanceTest(unittest.TestCase):
         self.assertNotIn("error", observe_response)
         payload = observe_response["result"]["structuredContent"]
         return payload["event"], payload
+
+    def _record_cli_batch(self, root: str) -> tuple[dict[str, object], dict[str, object]]:
+        init_cli_project(root)
+        code, out = run_cli(
+            "--root",
+            root,
+            "batch",
+            "enqueue",
+            "--type",
+            "tool_result",
+            "--summary",
+            PUBLIC_SUMMARY,
+            "--result",
+            "fail",
+            "--phase",
+            "verify",
+            "--evidence",
+            EVIDENCE_ID,
+            "--ref",
+            REF_WITH_QUERY,
+            "--action-key",
+            ACTION_KEY,
+            "--prompt-tokens",
+            "123",
+            "--completion-tokens",
+            "45",
+            "--cost",
+            "0.67",
+            "--latency-ms",
+            "890",
+            "--model",
+            "gpt-contract",
+            "--json",
+        )
+        self.assertEqual(code, 0, out)
+        code, out = run_cli("--root", root, "batch", "flush", "--scan", "--include-events", "--json")
+        self.assertEqual(code, 0, out)
+        payload = json.loads(out)
+        self.assertEqual(payload["imported"], 1)
+        return payload["events"][0], payload
+
+    def _record_sdk_batch(self, root: str) -> tuple[dict[str, object], dict[str, object]]:
+        client = HulunGuardClient(root)
+        client.init(objective="adapter contract conformance", criteria=["adapter emits durable runtime semantics"])
+        client.enqueue(
+            event_type="tool_result",
+            summary=PUBLIC_SUMMARY,
+            result="fail",
+            phase="verify",
+            evidence=[EVIDENCE_ID],
+            refs=[REF_WITH_QUERY],
+            action_key=ACTION_KEY,
+            prompt_tokens=123,
+            completion_tokens=45,
+            cost=0.67,
+            latency_ms=890,
+            model="gpt-contract",
+        )
+        payload = client.flush_queue(limit=1, scan=True)
+        return load_last_event(root), payload
+
+    def _record_mcp_batch(self, root: str) -> tuple[dict[str, object], dict[str, object]]:
+        server = HulunMCPServer(root=root)
+        init_response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "hulun_project_init",
+                    "arguments": {
+                        "objective": "adapter contract conformance",
+                        "criteria": ["adapter emits durable runtime semantics"],
+                    },
+                },
+            }
+        )
+        self.assertNotIn("error", init_response)
+        enqueue_response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "hulun_batch_enqueue",
+                    "arguments": {
+                        "type": "tool_result",
+                        "summary": PUBLIC_SUMMARY,
+                        "result": "fail",
+                        "phase": "verify",
+                        "evidence": [EVIDENCE_ID],
+                        "refs": [REF_WITH_QUERY],
+                        "action_key": ACTION_KEY,
+                        "prompt_tokens": 123,
+                        "completion_tokens": 45,
+                        "cost": 0.67,
+                        "latency_ms": 890,
+                        "model": "gpt-contract",
+                    },
+                },
+            }
+        )
+        self.assertNotIn("error", enqueue_response)
+        flush_response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": "hulun_batch_flush", "arguments": {"limit": 1, "scan": True}},
+            }
+        )
+        self.assertNotIn("error", flush_response)
+        payload = flush_response["result"]["structuredContent"]
+        return load_last_event(root), payload
 
     def _record_ingest(self, root: str, fmt: str, writer: Callable[[Path], None]) -> tuple[dict[str, object], dict[str, object]]:
         init_cli_project(root)

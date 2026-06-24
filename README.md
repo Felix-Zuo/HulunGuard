@@ -90,6 +90,17 @@ python .\hulun.py export-otel --output .\hulun-otel.json
 
 For an empty project, add `--init-if-missing` to create the minimal local ledger before import.
 
+Queue high-frequency runtime events and flush them in batches:
+
+```powershell
+python .\hulun.py batch enqueue --type tool_result --phase verify --summary "pytest passed" --result pass
+python .\hulun.py batch ingest-file --file .\trace.jsonl --format generic
+python .\hulun.py batch status
+python .\hulun.py batch flush --limit 500 --scan
+```
+
+`batch` writes a durable local JSONL queue first. `flush` moves queued observations into `.hulun/state.json`; `flush --scan` then recomputes the HulunIndex from those events.
+
 By default, runtime observations and imported traces redact known secrets, emails, URL query strings, private home paths, and raw payload fields such as prompts, completions, outputs, and tool arguments. Use `--include-sensitive --retention-days 7` only for trusted local debugging.
 
 Check mainstream agent compatibility:
