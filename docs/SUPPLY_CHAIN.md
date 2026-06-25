@@ -8,6 +8,7 @@ Tag releases run `.github/workflows/release.yml`.
 
 The workflow:
 
+- Installs development tooling from `uv.lock` with `uv sync --locked --extra dev`.
 - Builds wheel and sdist from the tagged commit.
 - Uploads `dist/*` as workflow artifacts.
 - Generates GitHub build provenance attestations for `dist/*` with `actions/attest`.
@@ -20,6 +21,8 @@ Required workflow permissions:
 - `id-token: write` for OIDC signing.
 - `attestations: write` for artifact attestations.
 - `artifact-metadata: write` for artifact metadata records.
+
+These write permissions are scoped to the release job. Other workflows default to read-only repository contents access unless a job explicitly needs `security-events: write`.
 
 Published releases include:
 
@@ -101,3 +104,5 @@ Do not publish:
 - Local machine paths unless they are intentionally part of a public example.
 
 The threat model for local data, adapters, retention, and release assets is documented in `docs/THREAT_MODEL.md`.
+
+Open source governance controls and owner-side Scorecard actions are documented in `docs/OPEN_SOURCE_GOVERNANCE.md`.
