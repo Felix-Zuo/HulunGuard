@@ -186,6 +186,30 @@
       "failures": []
     }
   },
+  "service_lifecycle": {
+    "schema": "hulun.collector.v1",
+    "generated_at": "2026-06-25T00:00:00Z",
+    "operation": "service_lifecycle",
+    "root": "fixture",
+    "output_dir": ".hulun/collector-service-lifecycle",
+    "target": "all",
+    "targets": ["systemd", "launchd", "windows-task"],
+    "actions": ["install", "start", "stop", "restart", "status", "uninstall"],
+    "command": ["python", "-m", "hulun_guard", "--root", "fixture", "collector", "serve", "--host", "127.0.0.1", "--port", "4318", "--flush-interval-seconds", "5", "--flush-limit", "500", "--scan-on-flush", "--init-if-missing"],
+    "files": [
+      {"target": "systemd", "role": "service", "path": ".hulun/collector-service-lifecycle/systemd/hulun-collector.service"},
+      {"target": "systemd", "role": "lifecycle", "path": ".hulun/collector-service-lifecycle/systemd/hulun-collector-systemd.sh"},
+      {"target": "launchd", "role": "service", "path": ".hulun/collector-service-lifecycle/launchd/dev.hulunguard.collector.plist"},
+      {"target": "launchd", "role": "lifecycle", "path": ".hulun/collector-service-lifecycle/launchd/hulun-collector-launchd.sh"},
+      {"target": "windows-task", "role": "lifecycle", "path": ".hulun/collector-service-lifecycle/windows-task/Register-HulunCollectorLifecycle.ps1"},
+      {"target": "readme", "role": "readme", "path": ".hulun/collector-service-lifecycle/README.md"}
+    ],
+    "gate": {
+      "passed": true,
+      "failure_count": 0,
+      "failures": []
+    }
+  },
   "gate": {
     "passed": true,
     "failure_count": 0,

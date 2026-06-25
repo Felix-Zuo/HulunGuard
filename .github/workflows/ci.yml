@@ -57,6 +57,7 @@ jobs:
           python -m hulun_guard --root "$tmp" collector metrics --require-status-file
           python -m hulun_guard --root "$tmp" collector alert-rules --output "$tmp/alert-rules" --force --json
           python -m hulun_guard --root "$tmp" collector service-template --output "$tmp/service-templates" --force --json
+          python -m hulun_guard --root "$tmp" collector service-lifecycle --output "$tmp/service-lifecycle" --force --json
       - name: HulunGuard batched ingestion smoke
         run: |
           tmp="$(mktemp -d)"

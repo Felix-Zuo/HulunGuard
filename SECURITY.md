@@ -27,7 +27,7 @@ Every release must pass:
 - Managed collector flush/scan smoke gate.
 - Collector Prometheus metrics gate.
 - Collector alert-rule generation gate.
-- Collector operations status and service-template generation gates.
+- Collector operations status, service-template generation, and service-lifecycle generation gates.
 - Schema compatibility fixture gate.
 - Benchmark gate for expected scan latency.
 - Retention cleanup dry-run gate.

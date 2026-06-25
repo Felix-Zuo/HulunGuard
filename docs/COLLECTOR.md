@@ -26,6 +26,7 @@ python -m hulun_guard --root . collector status --require-status-file --json
 python -m hulun_guard --root . collector metrics --require-status-file
 python -m hulun_guard --root . collector alert-rules --force --json
 python -m hulun_guard --root . collector service-template --force --json
+python -m hulun_guard --root . collector service-lifecycle --force --json
 python -m hulun_guard batch status --json
 python -m hulun_guard batch flush --scan --init-if-missing --json
 ```
@@ -141,6 +142,23 @@ Generated targets:
 - `README.md` with the generated command and review notes
 
 Templates are written to `.hulun/collector-service` by default. They do not install anything and do not include authentication tokens. Review paths, users, permissions, and host policy before installing them.
+
+## Service Lifecycle
+
+Generate reviewed lifecycle controls for managed collector services:
+
+```powershell
+python -m hulun_guard collector service-lifecycle --force --json
+```
+
+Generated targets are written to `.hulun/collector-service-lifecycle` by default:
+
+- systemd user service file plus `hulun-collector-systemd.sh`
+- launchd plist plus `hulun-collector-launchd.sh`
+- Windows Scheduled Task lifecycle script
+- `README.md` with generated command and review notes
+
+Each lifecycle script supports `install`, `start`, `stop`, `restart`, `status`, and `uninstall`. The generator does not run those actions. It writes files only, keeps the generated collector command loopback-bound, and does not include authentication tokens. Review paths, users, privileges, and host policy before running `install`.
 
 ## OTLP JSON
 

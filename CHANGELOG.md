@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.39.0 - 2026-06-25
+
+- Added `collector service-lifecycle` to generate reviewed cross-platform lifecycle controls for managed collector operation.
+- Added systemd, launchd, and Windows Scheduled Task install/start/stop/restart/status/uninstall scripts while preserving the default write-only safety boundary.
+- Extended collector tests, CI, release gates, installed-wheel smoke checks, docs, and schema fixture coverage for service lifecycle generation.
+
 ## 0.38.0 - 2026-06-25
 
 - Added `collector alert-rules` to generate reviewed Prometheus alerting rule files for collector health and HulunIndex risk signals.

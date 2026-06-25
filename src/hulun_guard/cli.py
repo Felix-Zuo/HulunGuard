@@ -37,6 +37,7 @@ from .collector import (
     collector_json,
     collector_metrics_report,
     collector_operations_status,
+    collector_service_lifecycle,
     collector_service_templates,
     collector_smoke,
     collector_status_path,
@@ -753,6 +754,44 @@ def cmd_collector_service_template(args: argparse.Namespace) -> int:
         print(f"Collector service templates: {payload['output_dir']}")
         for item in payload["files"]:
             print(f"- {item['target']}: {item['path']}")
+    return 0 if payload["gate"]["passed"] else 2
+
+
+def cmd_collector_service_lifecycle(args: argparse.Namespace) -> int:
+    try:
+        payload = collector_service_lifecycle(
+            args.root,
+            output=args.output,
+            target=args.target,
+            python_executable=args.python,
+            host=args.host,
+            port=args.port,
+            flush_interval_seconds=args.flush_interval_seconds,
+            flush_limit=args.flush_limit,
+            scan_on_flush=args.scan_on_flush,
+            init_if_missing=args.init_if_missing,
+            force=args.force,
+        )
+    except CollectorError as exc:
+        payload = {
+            "schema": "hulun.collector.v1",
+            "generated_at": utc_now(),
+            "operation": "service_lifecycle",
+            "root": str(project_root(args.root)),
+            "gate": {"passed": False, "failure_count": 1, "failures": [str(exc)]},
+        }
+        if args.json:
+            print(collector_json(payload), end="")
+        else:
+            print("Collector service lifecycle: FAIL")
+            print(f"Failure: {exc}")
+        return 2
+    if args.json:
+        print(collector_json(payload), end="")
+    else:
+        print(f"Collector service lifecycle: {payload['output_dir']}")
+        for item in payload["files"]:
+            print(f"- {item['target']} {item['role']}: {item['path']}")
     return 0 if payload["gate"]["passed"] else 2
 
 
@@ -2198,6 +2237,20 @@ def build_parser() -> argparse.ArgumentParser:
     collector_template_cmd.add_argument("--force", action="store_true", help="Overwrite HulunGuard-generated collector service templates.")
     collector_template_cmd.add_argument("--json", action="store_true")
     collector_template_cmd.set_defaults(func=cmd_collector_service_template)
+
+    collector_lifecycle_cmd = collector_sub.add_parser("service-lifecycle", parents=[root_parent], help="Generate reviewed install/start/stop/restart/status/uninstall scripts for managed collector operation.")
+    collector_lifecycle_cmd.add_argument("--target", choices=["all", "systemd", "launchd", "windows-task"], default="all")
+    collector_lifecycle_cmd.add_argument("--output", help="Directory for generated lifecycle files. Defaults to .hulun/collector-service-lifecycle.")
+    collector_lifecycle_cmd.add_argument("--python", default="python", help="Python executable used in generated lifecycle scripts.")
+    collector_lifecycle_cmd.add_argument("--host", default=DEFAULT_COLLECTOR_HOST, help=f"Collector bind host in generated lifecycle scripts. Defaults to {DEFAULT_COLLECTOR_HOST}.")
+    collector_lifecycle_cmd.add_argument("--port", type=int, default=DEFAULT_COLLECTOR_PORT, help=f"Collector bind port in generated lifecycle scripts. Defaults to {DEFAULT_COLLECTOR_PORT}.")
+    collector_lifecycle_cmd.add_argument("--flush-interval-seconds", type=int, default=5, help="Managed flush interval in generated lifecycle scripts. Defaults to 5.")
+    collector_lifecycle_cmd.add_argument("--flush-limit", type=int, default=BATCH_FLUSH_LIMIT, help=f"Managed flush limit in generated lifecycle scripts. Defaults to {BATCH_FLUSH_LIMIT}.")
+    collector_lifecycle_cmd.add_argument("--scan-on-flush", action=argparse.BooleanOptionalAction, default=True, help="Include managed scan-on-flush in generated lifecycle scripts. Enabled by default.")
+    collector_lifecycle_cmd.add_argument("--init-if-missing", action=argparse.BooleanOptionalAction, default=True, help="Include init-if-missing in generated lifecycle scripts. Enabled by default.")
+    collector_lifecycle_cmd.add_argument("--force", action="store_true", help="Overwrite HulunGuard-generated collector lifecycle files.")
+    collector_lifecycle_cmd.add_argument("--json", action="store_true")
+    collector_lifecycle_cmd.set_defaults(func=cmd_collector_service_lifecycle)
 
     ingest = sub.add_parser("ingest", parents=[root_parent])
     ingest.add_argument("--file", required=True, help="JSON or JSONL trace file to import.")
