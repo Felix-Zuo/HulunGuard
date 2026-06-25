@@ -74,9 +74,9 @@ AGENT_COMPATIBILITY: tuple[dict[str, Any], ...] = (
         "category": "direct-adapter",
         "tier": "roundtrip-tested",
         "ingest_format": "phoenix",
-        "command": "python -m hulun_guard ingest --format phoenix --file openinference.json --scan",
-        "source_uri": "https://arize-ai.github.io/openinference/spec/semantic_conventions.html",
-        "guarantee": "Phoenix/OpenInference spans are imported through the OpenInference path and covered by round-trip checks.",
+        "command": "python -m hulun_guard trace-doctor --format auto --file phoenix-trace.json --json && python -m hulun_guard ingest --format auto --file phoenix-trace.json --scan",
+        "source_uri": "https://arize.com/docs/phoenix/tracing/how-to-tracing/importing-and-exporting-traces/retrieve-traces-via-cli",
+        "guarantee": "Phoenix/OpenInference spans and Phoenix CLI trace exports are imported through the Phoenix adapter and covered by round-trip checks.",
     },
     {
         "id": "opentelemetry-genai",

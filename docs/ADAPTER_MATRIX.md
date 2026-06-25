@@ -20,6 +20,7 @@ The gate verifies:
 - OpenInference import to OpenTelemetry export to OTLP re-import preservation.
 - Langfuse OTEL import to HulunGuard persistence to OTLP re-import preservation.
 - Phoenix/OpenInference import to HulunGuard persistence to OTLP re-import preservation.
+- Phoenix CLI trace exports with `traceId`, `spans[]`, `context`, `span_kind`, `status_code`, and span time fields.
 - OpenHands-like event streams with success, retry, recovery, summary, and finalization paths.
 - SWE-agent-like trajectory streams with success, retry, recovery, summary, and finalization paths.
 - LangGraph stream parts with success, retry, recovery, summary, and finalization paths.
@@ -35,9 +36,9 @@ The gate verifies:
 | Tier | Surfaces | Meaning |
 | --- | --- | --- |
 | integration-tested | OpenTelemetry, OpenInference, OpenHands-like, SWE-agent-like, OpenAI Agents SDK | Public-safe fixture streams are imported through adapters and checked by `adapter-matrix`. |
-| hosted-fixture-tested | LangGraph, LangSmith file exports, Langfuse, Phoenix | Hosted platform fixture shapes are checked with synthetic public-safe exports and no private service trace data. |
+| hosted-fixture-tested | LangGraph, LangSmith file exports, Langfuse, Phoenix, Phoenix CLI export | Hosted platform fixture shapes are checked with synthetic public-safe exports and no private service trace data. |
 | native-export-tested | LangSmith service export, Langfuse service export | Mocked service HTTP export checks explicit auth, selected fields, bounded windows, pagination, redaction, and importability without real credentials. |
-| roundtrip-tested | OpenTelemetry, OpenInference, Langfuse, Phoenix | Hulun-compatible fields survive import, HulunGuard persistence, OTLP export, and OTLP re-import. |
+| roundtrip-tested | OpenTelemetry, OpenInference, Langfuse, Phoenix, Phoenix CLI export | Hulun-compatible fields survive import, HulunGuard persistence, OTLP export, and OTLP re-import. |
 | conformance | CLI, Python SDK, MCP, stdin payloads, in-memory payloads, generic JSON | The shared adapter contract test verifies field preservation, redaction, and malformed payload rejection. |
 | best-effort | Custom JSON or provider-specific exports without supported fields | Use generic JSON, OpenTelemetry, or OpenInference fields; unsupported provider-specific payloads are summarized or ignored. |
 
@@ -59,4 +60,5 @@ The command is also included in `doctor --run-validation`, CI, Release, and the 
 - Langfuse OTEL ingestion: `https://langfuse.com/integrations/native/opentelemetry`
 - Langfuse Observations API: `https://langfuse.com/docs/api-and-data-platform/features/observations-api`
 - OpenInference/Phoenix semantic conventions: `https://arize-ai.github.io/openinference/spec/semantic_conventions.html`
+- Phoenix CLI trace retrieval: `https://arize.com/docs/phoenix/tracing/how-to-tracing/importing-and-exporting-traces/retrieve-traces-via-cli`
 - OpenAI Agents SDK tracing: `https://openai.github.io/openai-agents-python/tracing/`

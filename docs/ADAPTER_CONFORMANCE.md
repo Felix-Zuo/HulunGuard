@@ -50,6 +50,7 @@ The adapter conformance test covers:
 - `ingest --format langfuse`
 - `service-export langfuse` then `ingest --format generic`
 - `ingest --format phoenix`
+- Phoenix CLI trace export auto-detection, then `ingest --format auto`
 - `ingest --format openai-agents`
 
 Each surface must be able to record the contract event, redact sensitive payloads by default, write `.hulun/risk.json` when scan is requested, and reject malformed SDK/MCP payloads without silently persisting a bad event. Batched surfaces must also preserve contract fields after queue flush and must not let malformed queued records block valid records.
@@ -68,9 +69,9 @@ Integration coverage is defined in `docs/ADAPTER_MATRIX.md`. The conformance tes
 | --- | --- | --- |
 | integration-tested | OpenTelemetry, OpenInference, OpenHands-like, SWE-agent-like, OpenAI Agents SDK | `python -m hulun_guard adapter-matrix --json` |
 | collector-smoke-tested | OTLP/HTTP JSON, generic HTTP adapter payload path, managed flush/scan, graceful shutdown, grouped diagnostics, Prometheus metrics, alert-rule export, lifecycle export | `python -m hulun_guard collector smoke --json`, `python -m hulun_guard collector smoke --managed --scan --init-if-missing --json`, `python -m hulun_guard collector shutdown-check --json`, `python -m hulun_guard collector status --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0 --json`, `python -m hulun_guard collector metrics --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0`, `python -m hulun_guard collector alert-rules --force --json`, and `python -m hulun_guard collector service-lifecycle --force --json` |
-| hosted-fixture-tested | LangGraph, LangSmith file exports, Langfuse, Phoenix | Synthetic public-safe hosted platform fixture shapes |
+| hosted-fixture-tested | LangGraph, LangSmith file exports, Langfuse, Phoenix, Phoenix CLI export | Synthetic public-safe hosted platform fixture shapes |
 | native-export-tested | LangSmith service export, Langfuse service export | Mocked HTTP service contract, selected fields, bounded windows, pagination, redaction, and adapter importability |
-| roundtrip-tested | OpenTelemetry, OpenInference, Langfuse, Phoenix | Import to persisted events to OTLP export to OTLP re-import |
+| roundtrip-tested | OpenTelemetry, OpenInference, Langfuse, Phoenix, Phoenix CLI export | Import to persisted events to OTLP export to OTLP re-import |
 | conformance | CLI, Python SDK, MCP, generic JSON | `tests/test_adapter_conformance.py` |
 | best-effort | Custom JSON or provider-specific exports without supported fields | Generic JSON, OpenTelemetry, or OpenInference field mapping |
 
@@ -92,6 +93,8 @@ OpenTelemetry and OpenInference imports recognize these Hulun-compatible attribu
 | `hulun.latency_ms` | `latency_ms` |
 
 Generic GenAI fields such as `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.request.model`, `llm.token_count.prompt`, `llm.token_count.completion`, and `llm.model_name` are also mapped when present.
+
+Phoenix CLI exports are accepted when a trace object contains `traceId` or `trace_id`, a `spans[]` array, and span `context.trace_id` / `context.span_id` fields. HulunGuard maps `span_kind` to OpenInference span kind, `status_code` to pass/fail status, and `start_time` / `end_time` to `latency_ms` when no explicit latency field is supplied.
 
 ## OpenAI Agents SDK Fields
 

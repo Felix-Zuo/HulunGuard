@@ -6,7 +6,7 @@ from json import JSONDecodeError
 from pathlib import Path
 from typing import Any
 
-from .adapters import MAX_TRACE_BYTES, iter_observations
+from .adapters import MAX_TRACE_BYTES, _looks_like_phoenix_cli_payload, iter_observations
 from .privacy import DEFAULT_RETENTION_DAYS
 from .schemas import SERVICE_EXPORT_SCHEMA, TRACE_DOCTOR_SCHEMA
 from .util import utc_now
@@ -125,6 +125,9 @@ def detect_trace_format(path: str | Path, payload: Any | None = None) -> str:
         and isinstance(probe.get("observations"), list)
     ):
         return "generic"
+
+    if _looks_like_phoenix_cli_payload(probe):
+        return "phoenix"
 
     if _has_nested_key(probe, "resourceSpans"):
         return name_hint if name_hint in {"langfuse", "opentelemetry"} else "opentelemetry"

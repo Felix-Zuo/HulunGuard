@@ -24,7 +24,7 @@ class AdapterMatrixTest(unittest.TestCase):
         self.assertEqual(result["schema"], ADAPTER_MATRIX_SCHEMA)
         self.assertEqual(result["fixture_policy"], "synthetic-public-safe-no-private-traces")
         self.assertTrue(result["gate"]["passed"], result["gate"]["failures"])
-        self.assertEqual(result["gate"]["case_count"], 11)
+        self.assertEqual(result["gate"]["case_count"], 12)
 
         cases = {case["name"]: case for case in result["cases"]}
         self.assertEqual(
@@ -34,6 +34,7 @@ class AdapterMatrixTest(unittest.TestCase):
                 "openinference_roundtrip",
                 "langfuse_otel_roundtrip",
                 "phoenix_openinference_roundtrip",
+                "phoenix_cli_export",
                 "openhands_stream",
                 "swe_agent_stream",
                 "langgraph_stream",
@@ -47,6 +48,7 @@ class AdapterMatrixTest(unittest.TestCase):
         self.assertEqual(cases["openinference_roundtrip"]["tier"], "roundtrip-tested")
         self.assertEqual(cases["langfuse_otel_roundtrip"]["tier"], "roundtrip-tested")
         self.assertEqual(cases["phoenix_openinference_roundtrip"]["tier"], "roundtrip-tested")
+        self.assertEqual(cases["phoenix_cli_export"]["tier"], "roundtrip-tested")
         self.assertEqual(cases["langgraph_stream"]["tier"], "hosted-fixture-tested")
         self.assertEqual(cases["langsmith_run_export"]["tier"], "hosted-fixture-tested")
         self.assertEqual(cases["langsmith_service_export"]["tier"], "native-export-tested")
@@ -59,6 +61,7 @@ class AdapterMatrixTest(unittest.TestCase):
         self.assertEqual(cases["langsmith_service_export"]["output_events"], 2)
         self.assertEqual(cases["langfuse_service_export"]["output_events"], 2)
         self.assertEqual(cases["openai_agents_trace_export"]["output_events"], 6)
+        self.assertEqual(cases["phoenix_cli_export"]["output_events"], 2)
 
         for case in result["cases"]:
             with self.subTest(case=case["name"]):
@@ -76,6 +79,7 @@ class AdapterMatrixTest(unittest.TestCase):
         self.assertIn("langfuse-service-export", tiers["native-export-tested"])
         self.assertIn("langfuse", tiers["hosted-fixture-tested"])
         self.assertIn("phoenix", tiers["hosted-fixture-tested"])
+        self.assertIn("phoenix-cli-export", tiers["roundtrip-tested"])
         self.assertIn("sdk", tiers["conformance"])
         self.assertIn("custom-json", tiers["best-effort"])
 
