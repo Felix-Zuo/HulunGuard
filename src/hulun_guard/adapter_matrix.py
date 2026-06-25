@@ -1,15 +1,23 @@
 from __future__ import annotations
 
+import base64
 import json
 import tempfile
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import parse_qs, urlsplit
 
 from .adapters import export_opentelemetry, iter_observations
 from .privacy import DEFAULT_RETENTION_DAYS
 from .schemas import ADAPTER_MATRIX_SCHEMA
 from .sdk import append_project_event
-from .service_exports import JsonPostResponse, LangSmithServiceConfig, export_langsmith_runs
+from .service_exports import (
+    JsonPostResponse,
+    LangfuseServiceConfig,
+    LangSmithServiceConfig,
+    export_langfuse_observations,
+    export_langsmith_runs,
+)
 from .storage import initial_state
 from .util import utc_now
 
@@ -56,7 +64,7 @@ def adapter_support_tiers() -> list[dict[str, Any]]:
         },
         {
             "tier": "native-export-tested",
-            "surfaces": ["langsmith-service-export"],
+            "surfaces": ["langsmith-service-export", "langfuse-service-export"],
             "guarantee": "Mocked service HTTP export checks explicit auth, selected fields, pagination, redaction, and importability without real credentials.",
         },
         {
@@ -754,6 +762,89 @@ def _langsmith_service_export_case(tmp: Path) -> dict[str, Any]:
     )
 
 
+def _langfuse_service_export_case(tmp: Path) -> dict[str, Any]:
+    output = tmp / "langfuse-service-export.json"
+    requests: list[dict[str, Any]] = []
+
+    def transport(url: str, headers: dict[str, str], timeout_seconds: float) -> JsonPostResponse:
+        requests.append({"url": url, "headers": dict(headers), "timeout_seconds": timeout_seconds})
+        return JsonPostResponse(
+            status=200,
+            body={
+                "data": [
+                    {
+                        "id": "obs-langfuse-service-a",
+                        "traceId": "trace-langfuse-service",
+                        "type": "GENERATION",
+                        "name": "service export generation",
+                        "level": "DEFAULT",
+                        "startTime": "2026-06-25T00:00:00Z",
+                        "endTime": "2026-06-25T00:00:01Z",
+                        "inputUsage": 123,
+                        "outputUsage": 45,
+                        "totalCost": 0.67,
+                        "providedModelName": "gpt-matrix",
+                        "input": {"prompt": KEY_MARKER},
+                        "output": f"contact {EMAIL_MARKER} {AUTH_MARKER}",
+                    },
+                    {
+                        "id": "obs-langfuse-service-b",
+                        "traceId": "trace-langfuse-service",
+                        "type": "SPAN",
+                        "name": "service export failed tool",
+                        "level": "ERROR",
+                        "statusMessage": f"tool failed with {KEY_MARKER} for {EMAIL_MARKER} and {AUTH_MARKER}",
+                    },
+                ],
+                "meta": {"cursor": None},
+            },
+        )
+
+    report = export_langfuse_observations(
+        LangfuseServiceConfig(
+            endpoint="http://127.0.0.1:1",
+            public_key="pk-matrix-public",
+            secret_key=KEY_MARKER,
+            output=output,
+            from_start_time="2026-06-25T00:00:00Z",
+            to_start_time="2026-06-25T01:00:00Z",
+            limit=2,
+            max_observations=2,
+            overwrite=True,
+        ),
+        transport=transport,
+    )
+    observations = list(iter_observations(output, "generic"))
+    serialized_output = output.read_text(encoding="utf-8")
+    query = parse_qs(urlsplit(requests[0]["url"]).query) if requests else {}
+    expected_auth = "Basic " + base64.b64encode(f"pk-matrix-public:{KEY_MARKER}".encode("utf-8")).decode("ascii")
+    checks = [
+        _check("service_report_schema", report.get("schema") == "hulun.service_export.v1"),
+        _check("explicit_basic_auth_header", requests and requests[0]["headers"].get("Authorization") == expected_auth),
+        _check("selected_fields", query.get("fields") == ["core,basic,usage,trace_context"]),
+        _check("bounded_time_window", query.get("fromStartTime") == ["2026-06-25T00:00:00Z"] and query.get("toStartTime") == ["2026-06-25T01:00:00Z"]),
+        _check("limit", query.get("limit") == ["2"]),
+        _check("observation_count", report.get("exported", {}).get("observation_count") == 2),
+        _check("trace_doctor_next_command", "trace-doctor --format generic" in report.get("exported", {}).get("trace_doctor_command", "")),
+        _check("adapter_importable", len(observations) == 2),
+        _check("source_platform", all(item.get("source_platform") == "langfuse" for item in observations)),
+        _check("privacy_redaction", _has_no_private_content({"report": report, "output": serialized_output, "observations": observations})),
+        _check(
+            "keys_not_persisted",
+            "pk-matrix-public" not in _service_export_serialized_for_matrix(report, serialized_output)
+            and KEY_MARKER not in _service_export_serialized_for_matrix(report, serialized_output),
+        ),
+    ]
+    return _case(
+        "langfuse_service_export",
+        "langfuse-service-export",
+        "native-export-tested",
+        checks,
+        input_events=2,
+        output_events=len(observations),
+    )
+
+
 def _service_export_serialized_for_matrix(report: dict[str, Any], output_text: str) -> str:
     return json.dumps(report, ensure_ascii=False, sort_keys=True) + output_text
 
@@ -817,6 +908,7 @@ def run_adapter_matrix() -> dict[str, Any]:
                 tmp,
             ),
             _safe_case("langsmith_service_export", _langsmith_service_export_case, tmp),
+            _safe_case("langfuse_service_export", _langfuse_service_export_case, tmp),
             _safe_case(
                 "openai_agents_trace_export",
                 lambda workdir: _stream_case("openai_agents_trace_export", "openai-agents", _openai_agents_fixture(), workdir),

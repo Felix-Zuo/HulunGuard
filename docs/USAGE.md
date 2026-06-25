@@ -147,7 +147,17 @@ python .\hulun.py trace-doctor --format langsmith --file .\langsmith-runs.json -
 python .\hulun.py ingest --format langsmith --file .\langsmith-runs.json --scan --init-if-missing
 ```
 
-No service export runs unless the endpoint, project id, credential source, and output path are supplied. API keys are used only for the request header and are not written to reports or exported files. The default selected fields exclude raw inputs, outputs, prompts, completions, attachments, and tool arguments.
+Langfuse exports use the Observations API v2 and require a bounded time window:
+
+```powershell
+$env:LANGFUSE_PUBLIC_KEY = "<public-key>"
+$env:LANGFUSE_SECRET_KEY = "<secret-key>"
+python .\hulun.py service-export langfuse --public-key-env LANGFUSE_PUBLIC_KEY --secret-key-env LANGFUSE_SECRET_KEY --from-start-time "2026-06-25T00:00:00Z" --to-start-time "2026-06-25T01:00:00Z" --output .\langfuse-observations.json --max-observations 100 --json
+python .\hulun.py trace-doctor --format generic --file .\langfuse-observations.json --json
+python .\hulun.py ingest --format generic --file .\langfuse-observations.json --scan --init-if-missing
+```
+
+No service export runs unless the endpoint, credential source, output path, and required service-specific bounds are supplied. Credentials are used only for request headers and are not written to reports or exported files. The default selected fields exclude raw inputs, outputs, prompts, completions, attachments, and tool arguments.
 
 The service export boundary is documented in `docs/SERVICE_EXPORTS.md`.
 

@@ -56,7 +56,7 @@ The loader normalizes older project and conversation ledgers into current schema
 - trace doctor file metadata, selected format, observation counts, field coverage, warnings, next command, and gate fields
 - batched ingestion operation, queue status, imported counts, event ids, and dead-letter counts across enqueue, stdin/payload, status, and flush paths
 - collector health, status, ingest, smoke, shutdown check, managed flush, operations status, grouped diagnostics, Prometheus metrics, alert rules, service template, service lifecycle, endpoint, queue, auth, limit, response, runtime, generated file, and gate fields
-- service export provider, explicit request summary, pagination, output path, privacy mode, exported run counts, next commands, sanitized runs, and gate fields
+- service export provider, explicit request summary, pagination, output path, privacy mode, exported run or observation counts, next commands, sanitized records, and gate fields
 
 Unsupported future schema majors fail the compatibility gate instead of being guessed.
 

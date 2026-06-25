@@ -169,7 +169,7 @@ SUPPORTED_PUBLIC_SCHEMAS: dict[str, dict[str, Any]] = {
     "service_export": {
         "current": SERVICE_EXPORT_SCHEMA,
         "supported": [SERVICE_EXPORT_SCHEMA],
-        "promise": "Service export reports preserve provider, explicit request summary, pagination, output path, privacy mode, exported run counts, next commands, and gate fields.",
+        "promise": "Service export reports preserve provider, explicit request summary, pagination, output path, privacy mode, exported run or observation counts, next commands, and gate fields.",
     },
 }
 
@@ -525,6 +525,7 @@ def infer_fixture_kind(path: Path, payload: dict[str, Any]) -> str:
         ("trace_diagnostic", "trace_doctor"),
         ("service_export", "service_export"),
         ("langsmith_service_export", "service_export"),
+        ("langfuse_service_export", "service_export"),
         ("collector", "collector"),
         ("http_collector", "collector"),
         ("batch_ingest", "batch_ingest"),

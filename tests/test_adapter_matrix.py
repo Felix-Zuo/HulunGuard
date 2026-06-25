@@ -24,7 +24,7 @@ class AdapterMatrixTest(unittest.TestCase):
         self.assertEqual(result["schema"], ADAPTER_MATRIX_SCHEMA)
         self.assertEqual(result["fixture_policy"], "synthetic-public-safe-no-private-traces")
         self.assertTrue(result["gate"]["passed"], result["gate"]["failures"])
-        self.assertEqual(result["gate"]["case_count"], 10)
+        self.assertEqual(result["gate"]["case_count"], 11)
 
         cases = {case["name"]: case for case in result["cases"]}
         self.assertEqual(
@@ -39,6 +39,7 @@ class AdapterMatrixTest(unittest.TestCase):
                 "langgraph_stream",
                 "langsmith_run_export",
                 "langsmith_service_export",
+                "langfuse_service_export",
                 "openai_agents_trace_export",
             },
         )
@@ -49,12 +50,14 @@ class AdapterMatrixTest(unittest.TestCase):
         self.assertEqual(cases["langgraph_stream"]["tier"], "hosted-fixture-tested")
         self.assertEqual(cases["langsmith_run_export"]["tier"], "hosted-fixture-tested")
         self.assertEqual(cases["langsmith_service_export"]["tier"], "native-export-tested")
+        self.assertEqual(cases["langfuse_service_export"]["tier"], "native-export-tested")
         self.assertEqual(cases["openai_agents_trace_export"]["tier"], "integration-tested")
         self.assertEqual(cases["openhands_stream"]["input_events"], 6)
         self.assertEqual(cases["swe_agent_stream"]["output_events"], 6)
         self.assertEqual(cases["langgraph_stream"]["output_events"], 6)
         self.assertEqual(cases["langsmith_run_export"]["input_events"], 6)
         self.assertEqual(cases["langsmith_service_export"]["output_events"], 2)
+        self.assertEqual(cases["langfuse_service_export"]["output_events"], 2)
         self.assertEqual(cases["openai_agents_trace_export"]["output_events"], 6)
 
         for case in result["cases"]:
@@ -70,6 +73,7 @@ class AdapterMatrixTest(unittest.TestCase):
         self.assertIn("langgraph", tiers["hosted-fixture-tested"])
         self.assertIn("langsmith-file-export", tiers["hosted-fixture-tested"])
         self.assertIn("langsmith-service-export", tiers["native-export-tested"])
+        self.assertIn("langfuse-service-export", tiers["native-export-tested"])
         self.assertIn("langfuse", tiers["hosted-fixture-tested"])
         self.assertIn("phoenix", tiers["hosted-fixture-tested"])
         self.assertIn("sdk", tiers["conformance"])

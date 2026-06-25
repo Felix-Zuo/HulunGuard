@@ -18,7 +18,7 @@ using HulunGuard on real work.
 - OpenClaw hook: injects HulunGuard guidance into OpenClaw agent bootstrap.
 - Realtime HulunIndex observations: record phase, claims, failures, tokens, cost, latency, and retry fingerprints.
 - Privacy-safe trace ingestion: import generic JSON/JSONL, OpenTelemetry GenAI, OpenInference, OpenHands-like events, SWE-agent-like trajectories, LangGraph stream parts, LangSmith run exports, Langfuse OTEL traces, and Phoenix/OpenInference spans without persisting raw sensitive payloads by default.
-- Native service export: explicitly export bounded LangSmith run-query results into a redacted local file, then inspect with `trace-doctor` and import with `ingest --format langsmith`.
+- Native service export: explicitly export bounded LangSmith run-query results or Langfuse Observations API v2 rows into a redacted local file, then inspect with `trace-doctor` and import.
 - Runtime payload bridge: SDK, MCP, and stdin ingestion can queue in-memory spans or stream events without writing trace files first.
 - Local HTTP collector: accept live OTLP/HTTP JSON traces at `/v1/traces` and adapter payloads at `/ingest/<format>` into the durable queue, with offline operations status, Prometheus metrics, alert rules, service templates, and lifecycle controls for long-running managed mode.
 - Python SDK and MCP server: agents can record runtime state directly without shell glue.
@@ -100,6 +100,16 @@ $env:LANGSMITH_API_KEY = "<key>"
 python .\hulun.py service-export langsmith --project-id "<project-id>" --api-key-env LANGSMITH_API_KEY --output .\langsmith-runs.json --json
 python .\hulun.py trace-doctor --format langsmith --file .\langsmith-runs.json --json
 python .\hulun.py ingest --format langsmith --file .\langsmith-runs.json --scan --init-if-missing
+```
+
+Export a bounded Langfuse observation slice:
+
+```powershell
+$env:LANGFUSE_PUBLIC_KEY = "<public-key>"
+$env:LANGFUSE_SECRET_KEY = "<secret-key>"
+python .\hulun.py service-export langfuse --public-key-env LANGFUSE_PUBLIC_KEY --secret-key-env LANGFUSE_SECRET_KEY --from-start-time "2026-06-25T00:00:00Z" --to-start-time "2026-06-25T01:00:00Z" --output .\langfuse-observations.json --json
+python .\hulun.py trace-doctor --format generic --file .\langfuse-observations.json --json
+python .\hulun.py ingest --format generic --file .\langfuse-observations.json --scan --init-if-missing
 ```
 
 Service exports require explicit credentials and are documented in `docs/SERVICE_EXPORTS.md`.
