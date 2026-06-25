@@ -8,7 +8,11 @@ HulunGuard is pre-1.0. Security fixes target the latest released minor version o
 
 Do not publish private vulnerability details in a public issue.
 
-Report privately by opening a GitHub security advisory in the repository. Include:
+Report privately by opening a GitHub security advisory in the repository:
+
+https://github.com/Felix-Zuo/HulunGuard/security/advisories/new
+
+Include:
 
 - Affected command, adapter, or file path.
 - Minimal reproduction steps.
@@ -43,6 +47,8 @@ Every release must pass:
 HulunGuard is local-first. Users must not commit `.hulun/`, private traces, credentials, customer data, or production conversation logs.
 
 The full security boundary and threat assumptions are documented in `docs/THREAT_MODEL.md`.
+
+Open source governance controls, Scorecard owner actions, and branch protection requirements are documented in `docs/OPEN_SOURCE_GOVERNANCE.md`.
 
 Runtime observations, conversation events, evidence records, and trace imports are redacted by default. Stored records include privacy metadata with `mode` and `retention_days`.
 

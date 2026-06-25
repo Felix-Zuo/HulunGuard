@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.46.0 - 2026-06-25
+
+- Added locked `uv` dependency synchronization for CI, Security, and Release workflows, removing unpinned `pip install` workflow commands.
+- Pinned all GitHub Actions by immutable commit SHA and moved write permissions from workflow scope to the narrow jobs that need them.
+- Added open source governance documentation for Scorecard owner actions, branch protection, security policy visibility, and remaining non-code maturity signals.
+
 ## 0.45.0 - 2026-06-25
 
 - Added defensive storage-boundary redaction before writing HulunGuard state, resume, risk, and JSON output artifacts.

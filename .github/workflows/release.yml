@@ -7,90 +7,94 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
-  artifact-metadata: write
+  contents: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
-          cache: pip
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          enable-cache: true
       - name: Install
-        run: python -m pip install -e ".[dev]"
+        run: uv sync --locked --extra dev
       - name: Ruff
-        run: python -m ruff check .
+        run: uv run python -m ruff check .
       - name: Tests
-        run: python -m pytest -q
+        run: uv run python -m pytest -q
       - name: HulunGuard validation
-        run: python -m hulun_guard validate
+        run: uv run python -m hulun_guard validate
       - name: HulunGuard calibration
-        run: python -m hulun_guard calibrate
+        run: uv run python -m hulun_guard calibrate
       - name: HulunGuard calibration drift
-        run: python -m hulun_guard calibration-drift
+        run: uv run python -m hulun_guard calibration-drift
       - name: HulunGuard threat model
-        run: python -m hulun_guard threat-model-check --json
+        run: uv run python -m hulun_guard threat-model-check --json
       - name: HulunGuard agent compatibility
-        run: python -m hulun_guard compatibility --json
+        run: uv run python -m hulun_guard compatibility --json
       - name: HulunGuard integration kits
-        run: python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify --json
+        run: uv run python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify --json
       - name: HulunGuard onboarding
-        run: python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json
+        run: uv run python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json
       - name: HulunGuard adapter matrix
-        run: python -m hulun_guard adapter-matrix --json
+        run: uv run python -m hulun_guard adapter-matrix --json
       - name: HulunGuard collector smoke
         run: |
           tmp="$(mktemp -d)"
-          python -m hulun_guard --root "$tmp" collector smoke --json
-          python -m hulun_guard --root "$tmp" collector smoke --managed --scan --init-if-missing --json
-          python -m hulun_guard --root "$tmp" collector shutdown-check --json
-          python -m hulun_guard --root "$tmp" collector status --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0 --json
-          python -m hulun_guard --root "$tmp" collector metrics --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0
-          python -m hulun_guard --root "$tmp" collector alert-rules --output "$tmp/alert-rules" --force --json
-          python -m hulun_guard --root "$tmp" collector service-template --output "$tmp/service-templates" --force --json
-          python -m hulun_guard --root "$tmp" collector service-lifecycle --output "$tmp/service-lifecycle" --force --json
+          uv run python -m hulun_guard --root "$tmp" collector smoke --json
+          uv run python -m hulun_guard --root "$tmp" collector smoke --managed --scan --init-if-missing --json
+          uv run python -m hulun_guard --root "$tmp" collector shutdown-check --json
+          uv run python -m hulun_guard --root "$tmp" collector status --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0 --json
+          uv run python -m hulun_guard --root "$tmp" collector metrics --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0
+          uv run python -m hulun_guard --root "$tmp" collector alert-rules --output "$tmp/alert-rules" --force --json
+          uv run python -m hulun_guard --root "$tmp" collector service-template --output "$tmp/service-templates" --force --json
+          uv run python -m hulun_guard --root "$tmp" collector service-lifecycle --output "$tmp/service-lifecycle" --force --json
       - name: HulunGuard batched ingestion smoke
         run: |
           tmp="$(mktemp -d)"
-          python -m hulun_guard --root "$tmp" batch enqueue --type tool_result --phase verify --summary "batch smoke passed" --result pass --json
-          printf '%s\n' '{"type":"tool_result","phase":"verify","summary":"stdin smoke passed","result":"pass","action_key":"stdin-smoke"}' | python -m hulun_guard --root "$tmp" batch ingest-stdin --format generic --json
-          python -m hulun_guard --root "$tmp" batch status --json
-          python -m hulun_guard --root "$tmp" batch flush --scan --init-if-missing --json
+          uv run python -m hulun_guard --root "$tmp" batch enqueue --type tool_result --phase verify --summary "batch smoke passed" --result pass --json
+          printf '%s\n' '{"type":"tool_result","phase":"verify","summary":"stdin smoke passed","result":"pass","action_key":"stdin-smoke"}' | uv run python -m hulun_guard --root "$tmp" batch ingest-stdin --format generic --json
+          uv run python -m hulun_guard --root "$tmp" batch status --json
+          uv run python -m hulun_guard --root "$tmp" batch flush --scan --init-if-missing --json
       - name: HulunGuard trace doctor
         run: |
           printf '%s\n' '{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass","action_key":"pytest","refs":["command:pytest"]}' > trace-doctor-sample.jsonl
-          python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json
+          uv run python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json
       - name: HulunGuard schema compatibility
-        run: python -m hulun_guard schema-check --json
+        run: uv run python -m hulun_guard schema-check --json
       - name: HulunGuard retention cleanup dry-run
-        run: python -m hulun_guard cleanup --json
+        run: uv run python -m hulun_guard cleanup --json
       - name: HulunGuard benchmark
-        run: python -m hulun_guard benchmark --events 10000 --max-ms 1000
+        run: uv run python -m hulun_guard benchmark --events 10000 --max-ms 1000
       - name: HulunGuard real-world benchmark
-        run: python -m hulun_guard benchmark --suite real-world
+        run: uv run python -m hulun_guard benchmark --suite real-world
       - name: Build package
-        run: python -m build
+        run: uv run python -m build
       - name: Generate release metadata
-        run: python scripts/generate_release_metadata.py --verify --json
+        run: uv run python scripts/generate_release_metadata.py --verify --json
       - name: Verify release artifacts
-        run: python scripts/verify_release_artifacts.py
+        run: uv run python scripts/verify_release_artifacts.py
       - name: Verify GitHub release assets offline
-        run: python -m hulun_guard release-verify --asset-dir dist --skip-attestation --json
+        run: uv run python -m hulun_guard release-verify --asset-dir dist --skip-attestation --json
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: hulun-guard-dist-${{ github.ref_name }}
           path: dist/*
           if-no-files-found: error
       - name: Generate build provenance attestations
-        uses: actions/attest@v4
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
         with:
           subject-path: dist/*
       - name: Upload GitHub Release assets

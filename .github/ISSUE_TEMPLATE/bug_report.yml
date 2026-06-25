@@ -37,7 +37,7 @@ body:
     id: version
     attributes:
       label: HulunGuard version
-      placeholder: "0.45.0"
+      placeholder: "0.46.0"
     validations:
       required: true
   - type: dropdown

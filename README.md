@@ -8,6 +8,8 @@ Public examples are synthetic. Do not publish private conversation logs,
 credentials, customer files, or production records into the repository when
 using HulunGuard on real work.
 
+Security policy: [SECURITY.md](SECURITY.md). Private vulnerability reports should use the GitHub advisory flow: https://github.com/Felix-Zuo/HulunGuard/security/advisories/new
+
 ## What Works Now
 
 - Desktop HulunGauge: small always-on-top progress bar, click-drag to move, double-click to close.

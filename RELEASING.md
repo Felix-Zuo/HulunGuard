@@ -11,37 +11,37 @@ HulunGuard uses semantic versioning while it is pre-1.0:
 Run locally:
 
 ```powershell
-python -m pip install -e ".[dev]"
-python -m ruff check .
-python -m bandit -q -r src
-python -m compileall -q src tests
-python -m pytest -q
-python -m hulun_guard validate
-python -m hulun_guard calibrate
-python -m hulun_guard calibration-drift
-python -m hulun_guard threat-model-check --json
-python -m hulun_guard compatibility --json
-python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify --json
-python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json
-python -m hulun_guard adapter-matrix --json
-python -m hulun_guard collector smoke --json
-python -m hulun_guard collector smoke --managed --scan --init-if-missing --json
-python -m hulun_guard collector shutdown-check --json
-python -m hulun_guard collector status --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0 --json
-python -m hulun_guard collector metrics --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0
-python -m hulun_guard collector alert-rules --output .hulun/collector-alerts --force --json
-python -m hulun_guard collector service-template --output .hulun/collector-service --force --json
-python -m hulun_guard collector service-lifecycle --output .hulun/collector-service-lifecycle --force --json
+uv sync --locked --extra dev
+uv run python -m ruff check .
+uv run python -m bandit -q -r src
+uv run python -m compileall -q src tests
+uv run python -m pytest -q
+uv run python -m hulun_guard validate
+uv run python -m hulun_guard calibrate
+uv run python -m hulun_guard calibration-drift
+uv run python -m hulun_guard threat-model-check --json
+uv run python -m hulun_guard compatibility --json
+uv run python -m hulun_guard integration-kit --agent all --output .hulun/integration-kits --force --verify --json
+uv run python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --json
+uv run python -m hulun_guard adapter-matrix --json
+uv run python -m hulun_guard collector smoke --json
+uv run python -m hulun_guard collector smoke --managed --scan --init-if-missing --json
+uv run python -m hulun_guard collector shutdown-check --json
+uv run python -m hulun_guard collector status --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0 --json
+uv run python -m hulun_guard collector metrics --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0
+uv run python -m hulun_guard collector alert-rules --output .hulun/collector-alerts --force --json
+uv run python -m hulun_guard collector service-template --output .hulun/collector-service --force --json
+uv run python -m hulun_guard collector service-lifecycle --output .hulun/collector-service-lifecycle --force --json
 '{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass","action_key":"pytest","refs":["command:pytest"]}' | Set-Content -Encoding UTF8 trace-doctor-sample.jsonl
-python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json
-python -m hulun_guard schema-check --json
-python -m hulun_guard cleanup --json
-python -m hulun_guard benchmark --events 10000 --max-ms 1000
-python -m hulun_guard benchmark --suite real-world
-python -m build
-python scripts/generate_release_metadata.py --verify --json
-python scripts/verify_release_artifacts.py
-python -m hulun_guard release-verify --asset-dir dist --skip-attestation --json
+uv run python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json
+uv run python -m hulun_guard schema-check --json
+uv run python -m hulun_guard cleanup --json
+uv run python -m hulun_guard benchmark --events 10000 --max-ms 1000
+uv run python -m hulun_guard benchmark --suite real-world
+uv run python -m build
+uv run python scripts/generate_release_metadata.py --verify --json
+uv run python scripts/verify_release_artifacts.py
+uv run python -m hulun_guard release-verify --asset-dir dist --skip-attestation --json
 ```
 
 GitHub must pass:
@@ -70,7 +70,7 @@ Native service export connectors must be release-tested with public-safe mocked 
 12. Run `python -m hulun_guard release-verify vX.Y.Z --json` against the published release.
 13. Create or update GitHub issues for unfinished maturity work.
 
-See `docs/SUPPLY_CHAIN.md` for branch protection and release approval gates. See `docs/THREAT_MODEL.md` for the local-first security boundary.
+See `docs/SUPPLY_CHAIN.md` for branch protection and release approval gates. See `docs/OPEN_SOURCE_GOVERNANCE.md` for Scorecard owner actions. See `docs/THREAT_MODEL.md` for the local-first security boundary.
 
 ## Artifact Policy
 
