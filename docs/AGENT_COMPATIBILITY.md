@@ -29,7 +29,8 @@ These surfaces have explicit ingest formats and fixture coverage:
 | OpenHands | `openhands` | adapter matrix, real-world benchmark |
 | SWE-agent | `swe-agent` | adapter matrix, real-world benchmark |
 | LangGraph | `langgraph` | hosted fixture, real-world benchmark |
-| LangSmith | `langsmith` | hosted fixture, real-world benchmark |
+| LangSmith file export | `langsmith` | hosted fixture, real-world benchmark |
+| LangSmith service export | `service-export langsmith` then `ingest --format langsmith` | native-export-tested, adapter matrix, installed release smoke |
 | Langfuse | `langfuse` | OTEL round-trip, real-world benchmark |
 | Phoenix | `phoenix` | OpenInference round-trip, real-world benchmark |
 | OpenAI Agents SDK | `openai-agents` | adapter matrix, integration kit |
@@ -87,6 +88,7 @@ For host runtimes that already hold events or spans in memory, use `HulunGuardCl
 - A listed framework does not mean HulunGuard controls that framework.
 - Direct adapters mean HulunGuard can ingest compatible exported shapes.
 - Standards paths require the user to export or submit OTLP JSON or OpenInference-compatible spans.
+- Native service exports require explicit endpoint, project id, credentials, output path, and bounded page settings.
 - The generic bridge requires the user to map agent events into HulunGuard event fields.
 - The local HTTP collector accepts JSON/JSONL only; OTLP producers must use OTLP/HTTP JSON rather than protobuf.
 - Raw private prompts, completions, tool arguments, credentials, and customer logs should not be committed.

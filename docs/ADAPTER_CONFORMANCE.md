@@ -46,6 +46,7 @@ The adapter conformance test covers:
 - `ingest --format swe-agent`
 - `ingest --format langgraph`
 - `ingest --format langsmith`
+- `service-export langsmith` then `ingest --format langsmith`
 - `ingest --format langfuse`
 - `ingest --format phoenix`
 - `ingest --format openai-agents`
@@ -66,7 +67,8 @@ Integration coverage is defined in `docs/ADAPTER_MATRIX.md`. The conformance tes
 | --- | --- | --- |
 | integration-tested | OpenTelemetry, OpenInference, OpenHands-like, SWE-agent-like, OpenAI Agents SDK | `python -m hulun_guard adapter-matrix --json` |
 | collector-smoke-tested | OTLP/HTTP JSON, generic HTTP adapter payload path, managed flush/scan, graceful shutdown, grouped diagnostics, Prometheus metrics, alert-rule export, lifecycle export | `python -m hulun_guard collector smoke --json`, `python -m hulun_guard collector smoke --managed --scan --init-if-missing --json`, `python -m hulun_guard collector shutdown-check --json`, `python -m hulun_guard collector status --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0 --json`, `python -m hulun_guard collector metrics --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0`, `python -m hulun_guard collector alert-rules --force --json`, and `python -m hulun_guard collector service-lifecycle --force --json` |
-| hosted-fixture-tested | LangGraph, LangSmith, Langfuse, Phoenix | Synthetic public-safe hosted platform fixture shapes |
+| hosted-fixture-tested | LangGraph, LangSmith file exports, Langfuse, Phoenix | Synthetic public-safe hosted platform fixture shapes |
+| native-export-tested | LangSmith service export | Mocked HTTP service contract, selected fields, pagination, redaction, and adapter importability |
 | roundtrip-tested | OpenTelemetry, OpenInference, Langfuse, Phoenix | Import to persisted events to OTLP export to OTLP re-import |
 | conformance | CLI, Python SDK, MCP, generic JSON | `tests/test_adapter_conformance.py` |
 | best-effort | Custom JSON or provider-specific exports without supported fields | Generic JSON, OpenTelemetry, or OpenInference field mapping |

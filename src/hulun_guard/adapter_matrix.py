@@ -9,6 +9,7 @@ from .adapters import export_opentelemetry, iter_observations
 from .privacy import DEFAULT_RETENTION_DAYS
 from .schemas import ADAPTER_MATRIX_SCHEMA
 from .sdk import append_project_event
+from .service_exports import JsonPostResponse, LangSmithServiceConfig, export_langsmith_runs
 from .storage import initial_state
 from .util import utc_now
 
@@ -50,8 +51,13 @@ def adapter_support_tiers() -> list[dict[str, Any]]:
         },
         {
             "tier": "hosted-fixture-tested",
-            "surfaces": ["langgraph", "langsmith", "langfuse", "phoenix"],
+            "surfaces": ["langgraph", "langsmith-file-export", "langfuse", "phoenix"],
             "guarantee": "Hosted platform fixture shapes are checked with synthetic public-safe exports and no service-specific private trace data.",
+        },
+        {
+            "tier": "native-export-tested",
+            "surfaces": ["langsmith-service-export"],
+            "guarantee": "Mocked service HTTP export checks explicit auth, selected fields, pagination, redaction, and importability without real credentials.",
         },
         {
             "tier": "roundtrip-tested",
@@ -677,6 +683,81 @@ def _stream_case(name: str, source_format: str, fixture: Any, tmp: Path) -> dict
     )
 
 
+def _langsmith_service_export_case(tmp: Path) -> dict[str, Any]:
+    output = tmp / "langsmith-service-export.json"
+    requests: list[dict[str, Any]] = []
+
+    def transport(url: str, headers: dict[str, str], payload: dict[str, Any], timeout_seconds: float) -> JsonPostResponse:
+        requests.append({"url": url, "headers": dict(headers), "payload": dict(payload), "timeout_seconds": timeout_seconds})
+        return JsonPostResponse(
+            status=200,
+            body={
+                "items": [
+                    {
+                        "id": "run-langsmith-service-a",
+                        "trace_id": "trace-langsmith-service",
+                        "run_type": "tool",
+                        "name": "service export failed tool",
+                        "status": "error",
+                        "error": f"tool failed with {KEY_MARKER} for {EMAIL_MARKER} and {AUTH_MARKER}",
+                        "prompt_tokens": 123,
+                        "completion_tokens": 45,
+                        "total_cost": 0.67,
+                        "latency_ms": 890,
+                        "inputs": {"prompt": KEY_MARKER},
+                    },
+                    {
+                        "id": "run-langsmith-service-b",
+                        "trace_id": "trace-langsmith-service",
+                        "run_type": "chain",
+                        "name": "service export recovery summary",
+                        "status": "success",
+                    },
+                ],
+                "next_cursor": None,
+            },
+        )
+
+    report = export_langsmith_runs(
+        LangSmithServiceConfig(
+            endpoint="http://127.0.0.1:1",
+            api_key="matrix-secret-key",
+            project_id="matrix-project",
+            output=output,
+            page_size=2,
+            max_runs=2,
+            overwrite=True,
+        ),
+        transport=transport,
+    )
+    observations = list(iter_observations(output, "langsmith"))
+    serialized_output = output.read_text(encoding="utf-8")
+    checks = [
+        _check("service_report_schema", report.get("schema") == "hulun.service_export.v1"),
+        _check("explicit_auth_header", requests and requests[0]["headers"].get("X-Api-Key") == "matrix-secret-key"),
+        _check("selected_fields", requests and "selects" in requests[0]["payload"] and "INPUTS" not in requests[0]["payload"]["selects"]),
+        _check("page_size", requests and requests[0]["payload"].get("page_size") == 2),
+        _check("run_count", report.get("exported", {}).get("run_count") == 2),
+        _check("trace_doctor_next_command", "trace-doctor --format langsmith" in report.get("exported", {}).get("trace_doctor_command", "")),
+        _check("adapter_importable", len(observations) == 2),
+        _check("source_platform", all(item.get("source_platform") == "langsmith" for item in observations)),
+        _check("privacy_redaction", _has_no_private_content({"report": report, "output": serialized_output, "observations": observations})),
+        _check("api_key_not_persisted", "matrix-secret-key" not in _service_export_serialized_for_matrix(report, serialized_output)),
+    ]
+    return _case(
+        "langsmith_service_export",
+        "langsmith-service-export",
+        "native-export-tested",
+        checks,
+        input_events=2,
+        output_events=len(observations),
+    )
+
+
+def _service_export_serialized_for_matrix(report: dict[str, Any], output_text: str) -> str:
+    return json.dumps(report, ensure_ascii=False, sort_keys=True) + output_text
+
+
 def _safe_case(label: str, runner: Callable[[Path], dict[str, Any]], tmp: Path) -> dict[str, Any]:
     try:
         return runner(tmp)
@@ -735,6 +816,7 @@ def run_adapter_matrix() -> dict[str, Any]:
                 lambda workdir: _stream_case("langsmith_run_export", "langsmith", _langsmith_fixture(), workdir),
                 tmp,
             ),
+            _safe_case("langsmith_service_export", _langsmith_service_export_case, tmp),
             _safe_case(
                 "openai_agents_trace_export",
                 lambda workdir: _stream_case("openai_agents_trace_export", "openai-agents", _openai_agents_fixture(), workdir),

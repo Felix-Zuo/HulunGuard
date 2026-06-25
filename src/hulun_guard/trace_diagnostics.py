@@ -90,7 +90,7 @@ def _dict_items(value: Any) -> list[dict[str, Any]]:
     if isinstance(value, list):
         return [item for item in value if isinstance(item, dict)]
     if isinstance(value, dict):
-        for key in ("events", "steps", "trajectory", "messages", "observations"):
+        for key in ("events", "steps", "trajectory", "messages", "observations", "runs", "items"):
             nested = value.get(key)
             if isinstance(nested, list):
                 return [item for item in nested if isinstance(item, dict)]

@@ -18,6 +18,7 @@ using HulunGuard on real work.
 - OpenClaw hook: injects HulunGuard guidance into OpenClaw agent bootstrap.
 - Realtime HulunIndex observations: record phase, claims, failures, tokens, cost, latency, and retry fingerprints.
 - Privacy-safe trace ingestion: import generic JSON/JSONL, OpenTelemetry GenAI, OpenInference, OpenHands-like events, SWE-agent-like trajectories, LangGraph stream parts, LangSmith run exports, Langfuse OTEL traces, and Phoenix/OpenInference spans without persisting raw sensitive payloads by default.
+- Native service export: explicitly export bounded LangSmith run-query results into a redacted local file, then inspect with `trace-doctor` and import with `ingest --format langsmith`.
 - Runtime payload bridge: SDK, MCP, and stdin ingestion can queue in-memory spans or stream events without writing trace files first.
 - Local HTTP collector: accept live OTLP/HTTP JSON traces at `/v1/traces` and adapter payloads at `/ingest/<format>` into the durable queue, with offline operations status, Prometheus metrics, alert rules, service templates, and lifecycle controls for long-running managed mode.
 - Python SDK and MCP server: agents can record runtime state directly without shell glue.
@@ -91,6 +92,17 @@ python .\hulun.py export-otel --output .\hulun-otel.json
 ```
 
 For an empty project, add `--init-if-missing` to create the minimal local ledger before import.
+
+Export a bounded LangSmith run slice:
+
+```powershell
+$env:LANGSMITH_API_KEY = "<key>"
+python .\hulun.py service-export langsmith --project-id "<project-id>" --api-key-env LANGSMITH_API_KEY --output .\langsmith-runs.json --json
+python .\hulun.py trace-doctor --format langsmith --file .\langsmith-runs.json --json
+python .\hulun.py ingest --format langsmith --file .\langsmith-runs.json --scan --init-if-missing
+```
+
+Service exports require explicit credentials and are documented in `docs/SERVICE_EXPORTS.md`.
 
 Queue high-frequency runtime events and flush them in batches:
 
@@ -291,6 +303,7 @@ The hook should show `hulunguard` as eligible, loadable, enabled, and attached t
 - `docs/ADAPTER_CONFORMANCE.md`: supported adapter contract and unsupported-field policy.
 - `docs/ADAPTER_MATRIX.md`: adapter integration matrix and support tiers.
 - `docs/AGENT_COMPATIBILITY.md`: mainstream agent compatibility paths and bridge boundaries.
+- `docs/SERVICE_EXPORTS.md`: hosted service export commands, privacy boundary, and failure modes.
 - `docs/INTEGRATION_KITS.md`: first-run onboarding kits for supported agent runtimes and trace formats.
 - `docs/ONBOARDING.md`: zero-knowledge onboarding command, output contract, and safety boundary.
 - `docs/THREAT_MODEL.md`: local-first security model, privacy boundaries, and threat assumptions.

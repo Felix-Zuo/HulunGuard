@@ -37,6 +37,7 @@ GITHUB_RELEASE_VERIFICATION_SCHEMA = "hulun.github_release_verification.v1"
 TRACE_DOCTOR_SCHEMA = "hulun.trace_doctor.v1"
 BATCH_INGEST_SCHEMA = "hulun.batch_ingest.v1"
 COLLECTOR_SCHEMA = "hulun.collector.v1"
+SERVICE_EXPORT_SCHEMA = "hulun.service_export.v1"
 DEFAULT_SCHEMA_FIXTURE_DIR = Path(__file__).with_name("schema_fixtures")
 RISK_WEIGHTS = {
     "evidence_gap": 20,
@@ -164,6 +165,11 @@ SUPPORTED_PUBLIC_SCHEMAS: dict[str, dict[str, Any]] = {
         "current": COLLECTOR_SCHEMA,
         "supported": [COLLECTOR_SCHEMA],
         "promise": "Collector reports preserve health, status, ingest, smoke, shutdown check, managed flush, operations status, grouped diagnostics, Prometheus metrics, alert rules, service template, service lifecycle, endpoint, queue, auth, limit, response, runtime, generated file, and gate fields.",
+    },
+    "service_export": {
+        "current": SERVICE_EXPORT_SCHEMA,
+        "supported": [SERVICE_EXPORT_SCHEMA],
+        "promise": "Service export reports preserve provider, explicit request summary, pagination, output path, privacy mode, exported run counts, next commands, and gate fields.",
     },
 }
 
@@ -517,6 +523,8 @@ def infer_fixture_kind(path: Path, payload: dict[str, Any]) -> str:
         ("release_verification", "github_release_verification"),
         ("trace_doctor", "trace_doctor"),
         ("trace_diagnostic", "trace_doctor"),
+        ("service_export", "service_export"),
+        ("langsmith_service_export", "service_export"),
         ("collector", "collector"),
         ("http_collector", "collector"),
         ("batch_ingest", "batch_ingest"),

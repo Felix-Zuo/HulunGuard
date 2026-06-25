@@ -134,6 +134,23 @@ Mainstream agent compatibility paths are documented in `docs/AGENT_COMPATIBILITY
 
 Trace imports reject files larger than the configured `--max-trace-bytes` limit before parsing. The default is 5 MiB. The full security boundary is documented in `docs/THREAT_MODEL.md`.
 
+## Export From Hosted Observability Services
+
+Use `service-export` when traces already live in a hosted observability service and you want a bounded local file for `trace-doctor` and `ingest`.
+
+LangSmith exports are explicit and bounded:
+
+```powershell
+$env:LANGSMITH_API_KEY = "<key>"
+python .\hulun.py service-export langsmith --project-id "<project-id>" --api-key-env LANGSMITH_API_KEY --output .\langsmith-runs.json --max-runs 100 --json
+python .\hulun.py trace-doctor --format langsmith --file .\langsmith-runs.json --json
+python .\hulun.py ingest --format langsmith --file .\langsmith-runs.json --scan --init-if-missing
+```
+
+No service export runs unless the endpoint, project id, credential source, and output path are supplied. API keys are used only for the request header and are not written to reports or exported files. The default selected fields exclude raw inputs, outputs, prompts, completions, attachments, and tool arguments.
+
+The service export boundary is documented in `docs/SERVICE_EXPORTS.md`.
+
 Export HulunGuard events as OTLP-style JSON spans:
 
 ```powershell
