@@ -32,6 +32,7 @@ These surfaces have explicit ingest formats and fixture coverage:
 | LangSmith file export | `langsmith` | hosted fixture, real-world benchmark |
 | LangSmith service export | `service-export langsmith` then `ingest --format langsmith` | native-export-tested, adapter matrix, installed release smoke |
 | Langfuse | `langfuse` | OTEL round-trip, real-world benchmark |
+| Langfuse service export | `service-export langfuse` then `ingest --format generic` | native-export-tested, adapter matrix, installed release smoke |
 | Phoenix | `phoenix` | OpenInference round-trip, real-world benchmark |
 | OpenAI Agents SDK | `openai-agents` | adapter matrix, integration kit |
 

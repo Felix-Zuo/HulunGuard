@@ -59,6 +59,16 @@ AGENT_COMPATIBILITY: tuple[dict[str, Any], ...] = (
         "guarantee": "Langfuse OTEL traces are imported through the OpenTelemetry path and covered by round-trip checks.",
     },
     {
+        "id": "langfuse-service-export",
+        "name": "Langfuse service export",
+        "category": "native-export",
+        "tier": "native-export-tested",
+        "ingest_format": "generic",
+        "command": "python -m hulun_guard service-export langfuse --public-key-env LANGFUSE_PUBLIC_KEY --secret-key-env LANGFUSE_SECRET_KEY --from-start-time <iso> --to-start-time <iso> --output langfuse-observations.json --json",
+        "source_uri": "https://langfuse.com/docs/api-and-data-platform/features/observations-api",
+        "guarantee": "Langfuse Observations API v2 export is tested with a mocked HTTP transport for Basic Auth, bounded time windows, selected field groups, pagination, redaction, and importability through --format generic.",
+    },
+    {
         "id": "phoenix",
         "name": "Phoenix",
         "category": "direct-adapter",

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.43.0 - 2026-06-25
+
+- Added `service-export langfuse` for explicitly configured Langfuse Observations API v2 exports with Basic Auth, bounded time windows, selected field groups, pagination controls, redacted output, and next-step commands.
+- Added Langfuse service export schema fixture coverage, auto trace-doctor detection for Langfuse service-export wrappers, agent compatibility metadata, and a native-export-tested adapter-matrix case.
+- Extended installed-wheel release smoke checks to verify the Langfuse service export contract against a local mock HTTP server without real credentials.
+
 ## 0.42.0 - 2026-06-25
 
 - Added `service-export langsmith` for explicitly configured LangSmith run-query exports with selected fields, pagination controls, redacted output, and next-step commands.

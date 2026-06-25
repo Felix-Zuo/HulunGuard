@@ -8,7 +8,7 @@ from typing import Any
 
 from .adapters import MAX_TRACE_BYTES, iter_observations
 from .privacy import DEFAULT_RETENTION_DAYS
-from .schemas import TRACE_DOCTOR_SCHEMA
+from .schemas import SERVICE_EXPORT_SCHEMA, TRACE_DOCTOR_SCHEMA
 from .util import utc_now
 
 TRACE_FORMATS = (
@@ -117,6 +117,14 @@ def detect_trace_format(path: str | Path, payload: Any | None = None) -> str:
     probe = payload if payload is not None else _read_probe(trace_path)
     dicts = _iter_dicts(probe)
     items = _dict_items(probe)
+
+    if (
+        isinstance(probe, dict)
+        and probe.get("schema") == SERVICE_EXPORT_SCHEMA
+        and probe.get("provider") == "langfuse"
+        and isinstance(probe.get("observations"), list)
+    ):
+        return "generic"
 
     if _has_nested_key(probe, "resourceSpans"):
         return name_hint if name_hint in {"langfuse", "opentelemetry"} else "opentelemetry"

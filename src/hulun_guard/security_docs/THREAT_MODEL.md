@@ -41,7 +41,7 @@ Remote activity can still happen outside HulunGuard when:
 
 - the user runs GitHub, package, or release commands
 - a host agent, MCP client, or OpenClaw hook sends data through its own integrations
-- the user explicitly runs `service-export` with an endpoint, project id, credential source, and output path
+- the user explicitly runs `service-export` with an endpoint, credential source, output path, and service-specific bounds
 - a user publishes release assets, docs, screenshots, or generated reports
 - a user exports local data and uploads it manually
 
@@ -59,7 +59,7 @@ Adapters may import user-provided local trace files in these formats:
 - in-memory or stdin JSON/JSONL payloads from supported runtime adapters
 - local HTTP collector payloads posted to `/v1/traces`, `/ingest`, or `/ingest/<format>`
 - CLI, Python SDK, MCP, and OpenClaw hook events
-- hosted service exports produced through explicit commands such as `service-export langsmith`
+- hosted service exports produced through explicit commands such as `service-export langsmith` or `service-export langfuse`
 
 By default, imported observations preserve only scoring-relevant structure: event type, phase, result, sanitized summary, evidence IDs, sanitized references, action fingerprints, model pressure, latency, and privacy metadata.
 
@@ -74,6 +74,8 @@ Managed collector mode is opt-in through `--flush-interval-seconds`. It uses the
 `collector status` reads local queue, dead-letter, managed status, and risk files without starting the HTTP server. Its grouped `diagnostics` field exposes bounded counters, state names, error codes, and operator action hints without local paths, tokens, or trace contents. `collector metrics` and `GET /metrics` expose numeric health and risk gauges without local filesystem paths as Prometheus labels. `collector alert-rules` only writes Prometheus rule files for those metrics; it does not install Prometheus configuration, restart services, change Alertmanager routing, or embed authentication tokens. `collector service-template` only writes reviewed systemd, launchd, and Windows Scheduled Task template files; it does not install services, change host startup policy, or embed authentication tokens. `collector service-lifecycle` writes reviewed install/start/stop/restart/status/uninstall scripts for those service targets; it does not run lifecycle actions automatically and keeps generated commands loopback-bound without embedded tokens.
 
 `service-export langsmith` is opt-in and bounded. It requires an explicit endpoint, project id, credential source, output path, page size, and max run count. It uses the API key only in the outbound `X-Api-Key` header. It rejects endpoints with embedded credentials, query strings, or fragments. The default selected field list excludes raw inputs, outputs, prompts, completions, attachments, and tool arguments, and the exported local file is sanitized before it can be passed to `trace-doctor` or `ingest`.
+
+`service-export langfuse` is opt-in and bounded. It requires an explicit endpoint, public key, secret key, output path, `fromStartTime`, `toStartTime`, limit, and max observation count. It uses the keys only in the outbound Basic Auth header. It rejects endpoints with embedded credentials, query strings, or fragments. The default Langfuse field groups are `core,basic,usage,trace_context`; raw `io`, `metadata`, and `prompt` groups are rejected. The exported local file contains sanitized HulunGuard generic observations before it can be passed to `trace-doctor` or `ingest`.
 
 ## Sensitive Data
 
@@ -141,7 +143,7 @@ This protects against path traversal, symlink escape, and accidental deletion of
 | Service template generation changes host startup state | `collector service-template` writes files only; operators must review and install them explicitly. |
 | Service lifecycle generation changes host startup state | `collector service-lifecycle` writes install/start/stop/restart/status/uninstall scripts only; operators must review and execute lifecycle actions explicitly. |
 | Hosted service export leaks credentials | `service-export` requires explicit credentials, uses them only in request headers, rejects credential-bearing URLs, and omits keys from reports and files. |
-| Hosted service export pulls too much data | `service-export` requires bounded `--page-size` and `--max-runs`; reports mark truncated pagination when more data remains. |
+| Hosted service export pulls too much data | `service-export` requires bounded `--page-size`/`--max-runs` or `--limit`/`--max-observations`; reports mark truncated pagination when more data remains. |
 | Hosted service export writes raw prompts or outputs | Default selected fields exclude raw payload fields; unexpected raw payload fields are dropped from the sanitized export. |
 | Desktop monitor leaks to a remote service | Monitor state is local JSON/HTML; remote exposure only occurs if the user or host publishes it. |
 
@@ -165,6 +167,7 @@ python -m hulun_guard collector service-template --output .hulun/collector-servi
 python -m hulun_guard collector service-lifecycle --output .hulun/collector-service-lifecycle --force --json
 python -m hulun_guard batch flush --scan
 python -m hulun_guard service-export langsmith --project-id "<project-id>" --api-key-env LANGSMITH_API_KEY --output .\langsmith-runs.json --max-runs 100 --json
+python -m hulun_guard service-export langfuse --public-key-env LANGFUSE_PUBLIC_KEY --secret-key-env LANGFUSE_SECRET_KEY --from-start-time "2026-06-25T00:00:00Z" --to-start-time "2026-06-25T01:00:00Z" --output .\langfuse-observations.json --max-observations 100 --json
 ```
 
 Use sensitive mode only in a trusted local working copy:
@@ -214,7 +217,7 @@ Every release must keep these checks green:
 - `python -m hulun_guard collector service-template --output .hulun/collector-service --force --json`
 - `python -m hulun_guard collector service-lifecycle --output .hulun/collector-service-lifecycle --force --json`
 - `'{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass"}' | python -m hulun_guard batch ingest-stdin --format generic --json`
-- installed-wheel service export smoke with a loopback mock LangSmith server
+- installed-wheel service export smoke with loopback mock LangSmith and Langfuse servers
 - `python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json`
 - `python -m hulun_guard schema-check --json`
 - `python -m hulun_guard cleanup --json`

@@ -103,12 +103,19 @@ from .schemas import (
 from .sdk import HulunGuardError, append_observation_to_state, append_project_event
 from .security import run_threat_model_check, threat_model_check_json
 from .service_exports import (
+    LANGFUSE_DEFAULT_ENDPOINT,
+    LANGFUSE_DEFAULT_FIELDS,
+    LANGFUSE_DEFAULT_LIMIT,
+    LANGFUSE_DEFAULT_MAX_OBSERVATIONS,
+    LANGFUSE_DEFAULT_TIMEOUT_SECONDS,
     LANGSMITH_DEFAULT_ENDPOINT,
     LANGSMITH_DEFAULT_MAX_RUNS,
     LANGSMITH_DEFAULT_PAGE_SIZE,
     LANGSMITH_DEFAULT_TIMEOUT_SECONDS,
+    LangfuseServiceConfig,
     LangSmithServiceConfig,
     ServiceExportError,
+    export_langfuse_observations,
     export_langsmith_runs,
     service_export_json,
 )
@@ -890,6 +897,29 @@ def _langsmith_api_key_from_args(args: argparse.Namespace) -> str:
     raise SystemExit("LangSmith export requires explicit credentials: pass --api-key or --api-key-env.")
 
 
+def _secret_from_args(args: argparse.Namespace, *, value_attr: str, env_attr: str, label: str) -> str:
+    direct = getattr(args, value_attr)
+    env_name = getattr(args, env_attr)
+    if direct and env_name:
+        raise SystemExit(f"Use either --{value_attr.replace('_', '-')} or --{env_attr.replace('_', '-')}, not both.")
+    if direct:
+        return direct
+    if env_name:
+        value = os.environ.get(env_name)
+        if not value:
+            raise SystemExit(f"Environment variable is empty or missing: {env_name}")
+        return value
+    raise SystemExit(f"Langfuse export requires explicit {label}: pass --{value_attr.replace('_', '-')} or --{env_attr.replace('_', '-')}.")
+
+
+def _langfuse_public_key_from_args(args: argparse.Namespace) -> str:
+    return _secret_from_args(args, value_attr="public_key", env_attr="public_key_env", label="public key")
+
+
+def _langfuse_secret_key_from_args(args: argparse.Namespace) -> str:
+    return _secret_from_args(args, value_attr="secret_key", env_attr="secret_key_env", label="secret key")
+
+
 def cmd_service_export_langsmith(args: argparse.Namespace) -> int:
     root = project_root(args.root)
     output = Path(args.output)
@@ -922,6 +952,45 @@ def cmd_service_export_langsmith(args: argparse.Namespace) -> int:
         gate = result["gate"]
         print(f"LangSmith service export: {'pass' if gate['passed'] else 'fail'}")
         print(f"Runs: {result['exported']['run_count']}")
+        print(f"Output: {result['output']}")
+        print(f"Next: {result['exported']['trace_doctor_command']}")
+    return 0 if result["gate"]["passed"] else 2
+
+
+def cmd_service_export_langfuse(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    output = Path(args.output)
+    if not output.is_absolute():
+        output = root / output
+    config = LangfuseServiceConfig(
+        endpoint=args.endpoint,
+        public_key=_langfuse_public_key_from_args(args),
+        secret_key=_langfuse_secret_key_from_args(args),
+        output=output,
+        from_start_time=args.from_start_time,
+        to_start_time=args.to_start_time,
+        fields=args.fields,
+        limit=args.limit,
+        max_observations=args.max_observations,
+        trace_id=args.trace_id,
+        environment=args.environment,
+        filter=args.filter,
+        include_sensitive=args.include_sensitive,
+        retention_days=args.retention_days,
+        timeout_seconds=args.timeout_seconds,
+        overwrite=args.force,
+    )
+    try:
+        result = export_langfuse_observations(config)
+    except ServiceExportError as exc:
+        raise SystemExit(str(exc)) from None
+
+    if args.json:
+        print(service_export_json(result), end="")
+    else:
+        gate = result["gate"]
+        print(f"Langfuse service export: {'pass' if gate['passed'] else 'fail'}")
+        print(f"Observations: {result['exported']['observation_count']}")
         print(f"Output: {result['output']}")
         print(f"Next: {result['exported']['trace_doctor_command']}")
     return 0 if result["gate"]["passed"] else 2
@@ -2427,6 +2496,27 @@ def build_parser() -> argparse.ArgumentParser:
     add_privacy_controls(service_export_langsmith)
     service_export_langsmith.add_argument("--json", action="store_true")
     service_export_langsmith.set_defaults(func=cmd_service_export_langsmith)
+
+    service_export_langfuse = service_export_sub.add_parser("langfuse", parents=[root_parent], help="Export Langfuse observations through the service API.")
+    service_export_langfuse.add_argument("--endpoint", default=LANGFUSE_DEFAULT_ENDPOINT, help=f"Langfuse API endpoint. Defaults to {LANGFUSE_DEFAULT_ENDPOINT}.")
+    service_export_langfuse.add_argument("--public-key", help="Langfuse public key. Prefer --public-key-env for shell history hygiene.")
+    service_export_langfuse.add_argument("--public-key-env", help="Environment variable that contains the Langfuse public key.")
+    service_export_langfuse.add_argument("--secret-key", help="Langfuse secret key. Prefer --secret-key-env for shell history hygiene.")
+    service_export_langfuse.add_argument("--secret-key-env", help="Environment variable that contains the Langfuse secret key.")
+    service_export_langfuse.add_argument("--output", required=True, help="Write the sanitized Langfuse export to this JSON file.")
+    service_export_langfuse.add_argument("--from-start-time", required=True, help="Required Langfuse fromStartTime query value.")
+    service_export_langfuse.add_argument("--to-start-time", required=True, help="Required Langfuse toStartTime query value.")
+    service_export_langfuse.add_argument("--fields", default=LANGFUSE_DEFAULT_FIELDS, help=f"Langfuse observation field groups. Defaults to {LANGFUSE_DEFAULT_FIELDS}.")
+    service_export_langfuse.add_argument("--limit", type=int, default=LANGFUSE_DEFAULT_LIMIT)
+    service_export_langfuse.add_argument("--max-observations", type=int, default=LANGFUSE_DEFAULT_MAX_OBSERVATIONS)
+    service_export_langfuse.add_argument("--trace-id", help="Optional Langfuse traceId filter.")
+    service_export_langfuse.add_argument("--environment", help="Optional Langfuse environment filter.")
+    service_export_langfuse.add_argument("--filter", help="Optional Langfuse API filter expression.")
+    service_export_langfuse.add_argument("--timeout-seconds", type=float, default=LANGFUSE_DEFAULT_TIMEOUT_SECONDS)
+    service_export_langfuse.add_argument("--force", action="store_true", help="Overwrite an existing output file.")
+    add_privacy_controls(service_export_langfuse)
+    service_export_langfuse.add_argument("--json", action="store_true")
+    service_export_langfuse.set_defaults(func=cmd_service_export_langfuse)
 
     export_otel = sub.add_parser("export-otel", parents=[root_parent])
     export_otel.add_argument("--output", required=True, help="Write OpenTelemetry OTLP JSON to this file.")

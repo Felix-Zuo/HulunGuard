@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -14,6 +15,7 @@ import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 
 class ArtifactSmokeError(RuntimeError):
@@ -156,6 +158,68 @@ class LangSmithMockHandler(BaseHTTPRequestHandler):
 
 def start_langsmith_mock_server() -> tuple[ThreadingHTTPServer, threading.Thread, list[dict[str, Any]]]:
     handler = type("ReleaseLangSmithMockHandler", (LangSmithMockHandler,), {"requests": []})
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, thread, handler.requests
+
+
+class LangfuseMockHandler(BaseHTTPRequestHandler):
+    requests: list[dict[str, Any]] = []
+
+    def do_GET(self) -> None:
+        parsed = urlsplit(self.path)
+        query = parse_qs(parsed.query)
+        self.requests.append({"path": parsed.path, "headers": dict(self.headers), "query": query})
+        if parsed.path != "/api/public/v2/observations":
+            self.send_response(404)
+            self.end_headers()
+            return
+        expected_auth = "Basic " + base64.b64encode(b"pk-release-public:sk-release-secret").decode("ascii")
+        if self.headers.get("Authorization") != expected_auth:
+            self.send_response(401)
+            self.end_headers()
+            return
+        response = {
+            "data": [
+                {
+                    "id": "obs-release-smoke-a",
+                    "traceId": "trace-release-smoke",
+                    "type": "GENERATION",
+                    "name": "installed langfuse generation",
+                    "level": "DEFAULT",
+                    "startTime": "2026-06-25T00:00:00Z",
+                    "endTime": "2026-06-25T00:00:02Z",
+                    "inputUsage": 123,
+                    "outputUsage": 45,
+                    "totalCost": 0.67,
+                    "providedModelName": "gpt-release-smoke",
+                    "input": {"prompt": "sk-release-secret012345678901234567890"},
+                },
+                {
+                    "id": "obs-release-smoke-b",
+                    "traceId": "trace-release-smoke",
+                    "type": "SPAN",
+                    "name": "installed langfuse tool",
+                    "level": "ERROR",
+                    "statusMessage": "failed with sk-release-secret012345678901234567890 for service@example.com password=hunter2",
+                },
+            ],
+            "meta": {"cursor": None},
+        }
+        encoded = json.dumps(response).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def log_message(self, _format: str, *_args: Any) -> None:
+        return
+
+
+def start_langfuse_mock_server() -> tuple[ThreadingHTTPServer, threading.Thread, list[dict[str, Any]]]:
+    handler = type("ReleaseLangfuseMockHandler", (LangfuseMockHandler,), {"requests": []})
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -448,6 +512,60 @@ def verify_installed_commands(
     if langsmith_trace_doctor.get("detected_format") != "langsmith" or not langsmith_trace_doctor.get("gate", {}).get("passed"):
         raise ArtifactSmokeError("trace-doctor failed for installed LangSmith service export")
     commands.append({"name": "hulun service-export langsmith --json", "status": "ok", "detail": str(langsmith_output)})
+
+    langfuse_server, langfuse_thread, langfuse_requests = start_langfuse_mock_server()
+    langfuse_output = cwd / "langfuse-service-export.json"
+    langfuse_endpoint = f"http://127.0.0.1:{langfuse_server.server_address[1]}"
+    try:
+        langfuse_export = run_json_command(
+            [
+                str(hulun_path),
+                "service-export",
+                "langfuse",
+                "--endpoint",
+                langfuse_endpoint,
+                "--public-key",
+                "pk-release-public",
+                "--secret-key",
+                "sk-release-secret",
+                "--from-start-time",
+                "2026-06-25T00:00:00Z",
+                "--to-start-time",
+                "2026-06-25T01:00:00Z",
+                "--output",
+                str(langfuse_output),
+                "--json",
+            ],
+            cwd=cwd,
+            env=env,
+        )
+    finally:
+        langfuse_server.shutdown()
+        langfuse_server.server_close()
+        langfuse_thread.join(timeout=5)
+    if (
+        langfuse_export.get("schema") != "hulun.service_export.v1"
+        or not langfuse_export.get("gate", {}).get("passed")
+        or langfuse_export.get("exported", {}).get("observation_count") != 2
+        or langfuse_export.get("exported", {}).get("format") != "generic"
+        or not langfuse_output.exists()
+        or not langfuse_requests
+        or langfuse_requests[0]["query"].get("fields") != ["core,basic,usage,trace_context"]
+        or langfuse_requests[0]["query"].get("fromStartTime") != ["2026-06-25T00:00:00Z"]
+        or langfuse_requests[0]["query"].get("toStartTime") != ["2026-06-25T01:00:00Z"]
+    ):
+        raise ArtifactSmokeError("Langfuse service-export failed from the installed wheel")
+    langfuse_text = langfuse_output.read_text(encoding="utf-8")
+    if "pk-release-public" in langfuse_text or "sk-release-secret" in langfuse_text or "hunter2" in langfuse_text or "input" in langfuse_text:
+        raise ArtifactSmokeError("Langfuse service-export persisted sensitive fixture content")
+    langfuse_trace_doctor = run_json_command(
+        [str(hulun_path), "trace-doctor", "--file", str(langfuse_output), "--format", "generic", "--json"],
+        cwd=cwd,
+        env=env,
+    )
+    if langfuse_trace_doctor.get("detected_format") != "generic" or not langfuse_trace_doctor.get("gate", {}).get("passed"):
+        raise ArtifactSmokeError("trace-doctor failed for installed Langfuse service export")
+    commands.append({"name": "hulun service-export langfuse --json", "status": "ok", "detail": str(langfuse_output)})
 
     release_verify = run_json_command([str(hulun_path), "release-verify", "--asset-dir", str(release_asset_dir), "--skip-attestation", "--json"], cwd=cwd, env=env)
     if release_verify.get("schema") != "hulun.github_release_verification.v1" or not release_verify.get("gate", {}).get("passed"):

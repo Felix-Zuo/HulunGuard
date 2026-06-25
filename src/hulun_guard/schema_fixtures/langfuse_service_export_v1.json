@@ -1,0 +1,56 @@
+{
+  "schema": "hulun.service_export.v1",
+  "generated_at": "2026-06-25T00:00:00+00:00",
+  "provider": "langfuse",
+  "operation": "export",
+  "output": ".hulun/langfuse-observations.json",
+  "request": {
+    "endpoint": "https://cloud.langfuse.com",
+    "path": "/api/public/v2/observations",
+    "fields": "core,basic,usage,trace_context",
+    "limit": 100,
+    "max_observations": 100,
+    "fromStartTime": "2026-06-25T00:00:00Z",
+    "toStartTime": "2026-06-25T01:00:00Z",
+    "auth": "explicit-basic-public-secret-key"
+  },
+  "pagination": {
+    "pages_fetched": 1,
+    "truncated": false,
+    "next_cursor_present": false
+  },
+  "exported": {
+    "observation_count": 1,
+    "format": "generic",
+    "trace_doctor_command": "python -m hulun_guard trace-doctor --format generic --file \".hulun/langfuse-observations.json\" --json",
+    "ingest_command": "python -m hulun_guard ingest --format generic --file \".hulun/langfuse-observations.json\" --scan --init-if-missing"
+  },
+  "privacy": {
+    "mode": "redacted-default",
+    "retention_days": 30
+  },
+  "gate": {
+    "passed": true,
+    "failure_count": 0,
+    "failures": []
+  },
+  "observations": [
+    {
+      "type": "llm_call",
+      "summary": "public fixture generation",
+      "result": "pass",
+      "phase": "orchestrate",
+      "source_platform": "langfuse",
+      "action_key": "langfuse:obs_public_fixture",
+      "prompt_tokens": 12,
+      "completion_tokens": 4,
+      "cost": 0.01,
+      "latency_ms": 800,
+      "model": "public-fixture-model",
+      "refs": [
+        "langfuse:observation:obs_public_fixture",
+        "langfuse:trace:trace_public_fixture"
+      ]
+    }
+  ]
+}
