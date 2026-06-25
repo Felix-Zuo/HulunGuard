@@ -16,6 +16,7 @@
 - [ ] `python -m hulun_guard adapter-matrix --json`
 - [ ] `python -m hulun_guard collector smoke --json`
 - [ ] `python -m hulun_guard collector smoke --managed --scan --init-if-missing --json`
+- [ ] `python -m hulun_guard collector shutdown-check --json`
 - [ ] `python -m hulun_guard collector status --require-status-file --json`
 - [ ] `python -m hulun_guard collector metrics --require-status-file`
 - [ ] `python -m hulun_guard collector alert-rules --output .hulun/collector-alerts --force --json`

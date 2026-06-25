@@ -65,7 +65,7 @@ Integration coverage is defined in `docs/ADAPTER_MATRIX.md`. The conformance tes
 | Tier | Surfaces | Gate |
 | --- | --- | --- |
 | integration-tested | OpenTelemetry, OpenInference, OpenHands-like, SWE-agent-like, OpenAI Agents SDK | `python -m hulun_guard adapter-matrix --json` |
-| collector-smoke-tested | OTLP/HTTP JSON, generic HTTP adapter payload path, managed flush/scan, Prometheus metrics, alert-rule export, lifecycle export | `python -m hulun_guard collector smoke --json`, `python -m hulun_guard collector smoke --managed --scan --init-if-missing --json`, `python -m hulun_guard collector metrics --require-status-file`, `python -m hulun_guard collector alert-rules --force --json`, and `python -m hulun_guard collector service-lifecycle --force --json` |
+| collector-smoke-tested | OTLP/HTTP JSON, generic HTTP adapter payload path, managed flush/scan, graceful shutdown, Prometheus metrics, alert-rule export, lifecycle export | `python -m hulun_guard collector smoke --json`, `python -m hulun_guard collector smoke --managed --scan --init-if-missing --json`, `python -m hulun_guard collector shutdown-check --json`, `python -m hulun_guard collector metrics --require-status-file`, `python -m hulun_guard collector alert-rules --force --json`, and `python -m hulun_guard collector service-lifecycle --force --json` |
 | hosted-fixture-tested | LangGraph, LangSmith, Langfuse, Phoenix | Synthetic public-safe hosted platform fixture shapes |
 | roundtrip-tested | OpenTelemetry, OpenInference, Langfuse, Phoenix | Import to persisted events to OTLP export to OTLP re-import |
 | conformance | CLI, Python SDK, MCP, generic JSON | `tests/test_adapter_conformance.py` |

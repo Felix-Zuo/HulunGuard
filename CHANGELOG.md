@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.40.0 - 2026-06-25
+
+- Added `collector shutdown-check` to verify graceful collector shutdown records a stopped runtime state and final status file.
+- Added collector runtime lifecycle state, stop reason, stop timestamps, and uptime to status output and Prometheus metrics.
+- Extended collector tests, CI, release gates, installed-wheel smoke checks, docs, and schema fixture coverage for graceful shutdown verification.
+
 ## 0.39.0 - 2026-06-25
 
 - Added `collector service-lifecycle` to generate reviewed cross-platform lifecycle controls for managed collector operation.

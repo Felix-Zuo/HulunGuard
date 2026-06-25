@@ -39,6 +39,7 @@ from .collector import (
     collector_operations_status,
     collector_service_lifecycle,
     collector_service_templates,
+    collector_shutdown_check,
     collector_smoke,
     collector_status_path,
     start_collector_manager,
@@ -633,6 +634,32 @@ def cmd_collector_smoke(args: argparse.Namespace) -> int:
         gate = payload["gate"]
         print(f"Collector smoke: {'PASS' if gate['passed'] else 'FAIL'}")
         print(f"Pending queue: {payload['queue']['pending']}")
+        if gate["failures"]:
+            print(f"Failures: {gate['failures']}")
+    return 0 if payload["gate"]["passed"] else 2
+
+
+def cmd_collector_shutdown_check(args: argparse.Namespace) -> int:
+    try:
+        payload = collector_shutdown_check(
+            args.root,
+            token=args.token,
+            max_payload_bytes=args.max_payload_bytes,
+            managed=args.managed,
+            scan=args.scan,
+            init_if_missing=args.init_if_missing,
+        )
+    except CollectorError as exc:
+        raise SystemExit(str(exc)) from None
+    if args.json:
+        print(collector_json(payload), end="")
+    else:
+        gate = payload["gate"]
+        print(f"Collector shutdown check: {'PASS' if gate['passed'] else 'FAIL'}")
+        shutdown = payload.get("shutdown") or {}
+        runtime = shutdown.get("runtime") if isinstance(shutdown, dict) else {}
+        print(f"Lifecycle state: {runtime.get('lifecycle_state') if isinstance(runtime, dict) else 'unknown'}")
+        print(f"Stop reason: {runtime.get('stop_reason') if isinstance(runtime, dict) else 'unknown'}")
         if gate["failures"]:
             print(f"Failures: {gate['failures']}")
     return 0 if payload["gate"]["passed"] else 2
@@ -2197,6 +2224,15 @@ def build_parser() -> argparse.ArgumentParser:
     collector_smoke_cmd.add_argument("--init-if-missing", action="store_true", help="With --managed, initialize a minimal ledger before flush if needed.")
     collector_smoke_cmd.add_argument("--json", action="store_true")
     collector_smoke_cmd.set_defaults(func=cmd_collector_smoke)
+
+    collector_shutdown_cmd = collector_sub.add_parser("shutdown-check", parents=[root_parent], help="Start a temporary collector and verify graceful shutdown status is recorded.")
+    collector_shutdown_cmd.add_argument("--token", help="Exercise shutdown check with a required bearer token.")
+    collector_shutdown_cmd.add_argument("--max-payload-bytes", type=int, default=MAX_TRACE_BYTES, help=f"Reject payloads larger than this many bytes. Defaults to {MAX_TRACE_BYTES}.")
+    collector_shutdown_cmd.add_argument("--managed", action=argparse.BooleanOptionalAction, default=True, help="Exercise managed flush loop shutdown. Enabled by default.")
+    collector_shutdown_cmd.add_argument("--scan", action="store_true", help="With --managed, scan after flush before shutdown.")
+    collector_shutdown_cmd.add_argument("--init-if-missing", action=argparse.BooleanOptionalAction, default=True, help="With --managed, initialize a minimal ledger before flush if needed. Enabled by default.")
+    collector_shutdown_cmd.add_argument("--json", action="store_true")
+    collector_shutdown_cmd.set_defaults(func=cmd_collector_shutdown_check)
 
     collector_status_cmd = collector_sub.add_parser("status", parents=[root_parent], help="Inspect offline collector operations health from local queue, status, and risk files.")
     collector_status_cmd.add_argument("--stale-after-seconds", type=int, default=60, help="Mark the managed status file stale after this many seconds. Defaults to 60.")

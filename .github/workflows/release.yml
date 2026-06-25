@@ -50,6 +50,7 @@ jobs:
           tmp="$(mktemp -d)"
           python -m hulun_guard --root "$tmp" collector smoke --json
           python -m hulun_guard --root "$tmp" collector smoke --managed --scan --init-if-missing --json
+          python -m hulun_guard --root "$tmp" collector shutdown-check --json
           python -m hulun_guard --root "$tmp" collector status --require-status-file --json
           python -m hulun_guard --root "$tmp" collector metrics --require-status-file
           python -m hulun_guard --root "$tmp" collector alert-rules --output "$tmp/alert-rules" --force --json

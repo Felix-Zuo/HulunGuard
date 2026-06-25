@@ -172,8 +172,11 @@ class CollectorTest(unittest.TestCase):
             self.assertIn("hulun_collector_queue_pending", metric_names)
             self.assertIn("hulun_collector_risk_score", metric_names)
             self.assertIn("hulun_collector_risk_band", metric_names)
+            self.assertIn("hulun_collector_runtime_state", metric_names)
+            self.assertIn("hulun_collector_runtime_uptime_seconds", metric_names)
             self.assertIn("hulun_collector_queue_pending 0", payload["text"])
             self.assertIn('hulun_collector_risk_band{band="yellow"} 1', payload["text"])
+            self.assertIn('hulun_collector_runtime_state{state="running"} 1', payload["text"])
             self.assertNotIn(str(Path(tmp)), payload["text"])
 
             code, out = self.run_cli("--root", tmp, "collector", "metrics", "--require-status-file")
@@ -313,6 +316,32 @@ class CollectorTest(unittest.TestCase):
             finally:
                 self.stop_server(server, thread)
 
+    def test_collector_shutdown_check_records_stopped_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.run_cli("--root", tmp, "collector", "shutdown-check", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["operation"], "shutdown_check")
+            self.assertTrue(payload["gate"]["passed"], payload["gate"])
+            self.assertEqual(payload["response_status"], 202)
+            self.assertEqual(payload["managed_flush"]["imported"], 1)
+            shutdown = payload["shutdown"]
+            self.assertEqual(shutdown["operation"], "shutdown")
+            self.assertTrue(shutdown["gate"]["passed"])
+            self.assertTrue(shutdown["server"]["shutdown_requested"])
+            self.assertTrue(shutdown["server"]["shutdown_completed"])
+            self.assertTrue(shutdown["manager"]["stopped"])
+            self.assertTrue(shutdown["serve_thread"]["stopped"])
+            runtime = shutdown["runtime"]
+            self.assertEqual(runtime["lifecycle_state"], "stopped")
+            self.assertEqual(runtime["stop_reason"], "shutdown_check")
+            self.assertIsNotNone(runtime["stopping_at"])
+            self.assertIsNotNone(runtime["stopped_at"])
+            self.assertGreaterEqual(runtime["uptime_seconds"], 0)
+            final_runtime = payload["final_status"]["managed"]["runtime"]
+            self.assertEqual(final_runtime["lifecycle_state"], "stopped")
+            self.assertEqual(final_runtime["stop_reason"], "shutdown_check")
+
     def test_status_reports_managed_runtime_after_flush(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             config = CollectorConfig(root=tmp, port=0, flush_interval_seconds=1, scan_on_flush=True, init_if_missing=True)
@@ -343,6 +372,7 @@ class CollectorTest(unittest.TestCase):
                 self.assertIn("hulun_collector_managed_flush_total 1", text)
                 self.assertIn("hulun_collector_managed_imported_total 1", text)
                 self.assertIn("hulun_collector_queue_pending 0", text)
+                self.assertIn('hulun_collector_runtime_state{state="running"} 1', text)
             finally:
                 self.stop_server(server, thread)
 
