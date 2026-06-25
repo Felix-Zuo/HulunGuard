@@ -567,6 +567,71 @@ def verify_installed_commands(
         raise ArtifactSmokeError("trace-doctor failed for installed Langfuse service export")
     commands.append({"name": "hulun service-export langfuse --json", "status": "ok", "detail": str(langfuse_output)})
 
+    phoenix_output = cwd / "trace-export.json"
+    phoenix_output.write_text(
+        json.dumps(
+            {
+                "traceId": "trace-release-phoenix",
+                "spans": [
+                    {
+                        "name": "installed phoenix cli tool",
+                        "context": {"trace_id": "trace-release-phoenix", "span_id": "span-release-phoenix-a"},
+                        "span_kind": "TOOL",
+                        "start_time": "2026-06-25T00:00:00.000Z",
+                        "end_time": "2026-06-25T00:00:00.890Z",
+                        "status_code": "ERROR",
+                        "attributes": {
+                            "hulun.event.type": "tool_result",
+                            "hulun.event.summary": "installed phoenix cli export failed",
+                            "hulun.event.result": "fail",
+                            "hulun.event.phase": "verify",
+                            "hulun.evidence.ids": ["E-release-smoke"],
+                            "hulun.action_key": "phoenix-release-smoke",
+                            "llm.token_count.prompt": 123,
+                            "llm.token_count.completion": 45,
+                            "hulun.cost": 0.67,
+                            "llm.model_name": "gpt-release-smoke",
+                        },
+                    },
+                    {
+                        "name": "installed phoenix cli recovery",
+                        "context": {"trace_id": "trace-release-phoenix", "span_id": "span-release-phoenix-b"},
+                        "span_kind": "CHAIN",
+                        "parent_id": "span-release-phoenix-a",
+                        "start_time": "2026-06-25T00:00:01.000Z",
+                        "end_time": "2026-06-25T00:00:01.120Z",
+                        "status_code": "OK",
+                        "attributes": {
+                            "hulun.event.type": "summary",
+                            "hulun.event.summary": "installed phoenix cli export recovered",
+                            "hulun.event.result": "pass",
+                            "hulun.event.phase": "recover",
+                            "hulun.evidence.ids": ["E-release-smoke"],
+                        },
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    phoenix_trace_doctor = run_json_command([str(hulun_path), "trace-doctor", "--file", str(phoenix_output), "--format", "auto", "--json"], cwd=cwd, env=env)
+    if (
+        phoenix_trace_doctor.get("detected_format") != "phoenix"
+        or phoenix_trace_doctor.get("selected_format") != "phoenix"
+        or phoenix_trace_doctor.get("observation_count") != 2
+        or not phoenix_trace_doctor.get("gate", {}).get("passed")
+    ):
+        raise ArtifactSmokeError("trace-doctor failed for installed Phoenix CLI export")
+    phoenix_root = cwd / "phoenix-cli-root"
+    phoenix_ingest = run_json_command(
+        [str(hulun_path), "--root", str(phoenix_root), "ingest", "--file", str(phoenix_output), "--format", "auto", "--scan", "--init-if-missing", "--json"],
+        cwd=cwd,
+        env=env,
+    )
+    if phoenix_ingest.get("imported") != 2 or "risk" not in phoenix_ingest:
+        raise ArtifactSmokeError("ingest failed for installed Phoenix CLI export")
+    commands.append({"name": "hulun trace-doctor/ingest Phoenix CLI export", "status": "ok", "detail": str(phoenix_output)})
+
     release_verify = run_json_command([str(hulun_path), "release-verify", "--asset-dir", str(release_asset_dir), "--skip-attestation", "--json"], cwd=cwd, env=env)
     if release_verify.get("schema") != "hulun.github_release_verification.v1" or not release_verify.get("gate", {}).get("passed"):
         raise ArtifactSmokeError("release-verify --asset-dir failed from the installed wheel")

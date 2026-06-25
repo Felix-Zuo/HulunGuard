@@ -17,7 +17,7 @@ using HulunGuard on real work.
 - Universal startup prompt: `#HULUN_ON` for any agent that can run shell commands.
 - OpenClaw hook: injects HulunGuard guidance into OpenClaw agent bootstrap.
 - Realtime HulunIndex observations: record phase, claims, failures, tokens, cost, latency, and retry fingerprints.
-- Privacy-safe trace ingestion: import generic JSON/JSONL, OpenTelemetry GenAI, OpenInference, OpenHands-like events, SWE-agent-like trajectories, LangGraph stream parts, LangSmith run exports, Langfuse OTEL traces, and Phoenix/OpenInference spans without persisting raw sensitive payloads by default.
+- Privacy-safe trace ingestion: import generic JSON/JSONL, OpenTelemetry GenAI, OpenInference, OpenHands-like events, SWE-agent-like trajectories, LangGraph stream parts, LangSmith run exports, Langfuse OTEL traces, Phoenix/OpenInference spans, and Phoenix CLI trace exports without persisting raw sensitive payloads by default.
 - Native service export: explicitly export bounded LangSmith run-query results or Langfuse Observations API v2 rows into a redacted local file, then inspect with `trace-doctor` and import.
 - Runtime payload bridge: SDK, MCP, and stdin ingestion can queue in-memory spans or stream events without writing trace files first.
 - Local HTTP collector: accept live OTLP/HTTP JSON traces at `/v1/traces` and adapter payloads at `/ingest/<format>` into the durable queue, with offline operations status, Prometheus metrics, alert rules, service templates, and lifecycle controls for long-running managed mode.
@@ -87,6 +87,7 @@ python .\hulun.py ingest --file .\langgraph-stream.json --format langgraph --sca
 python .\hulun.py ingest --file .\langsmith-runs.json --format langsmith --scan
 python .\hulun.py ingest --file .\langfuse-otel.json --format langfuse --scan
 python .\hulun.py ingest --file .\phoenix-openinference.json --format phoenix --scan
+python .\hulun.py ingest --file .\phoenix-trace.json --format auto --scan
 python .\hulun.py ingest --file .\openai-agents-trace.json --format openai-agents --scan
 python .\hulun.py export-otel --output .\hulun-otel.json
 ```
@@ -112,7 +113,15 @@ python .\hulun.py trace-doctor --format generic --file .\langfuse-observations.j
 python .\hulun.py ingest --format generic --file .\langfuse-observations.json --scan --init-if-missing
 ```
 
-Service exports require explicit credentials and are documented in `docs/SERVICE_EXPORTS.md`.
+Import a Phoenix CLI trace export:
+
+```powershell
+px trace list --limit 100 --last-n-minutes 60 --format raw --file .\phoenix-trace.json
+python .\hulun.py trace-doctor --format auto --file .\phoenix-trace.json --json
+python .\hulun.py ingest --format auto --file .\phoenix-trace.json --scan --init-if-missing
+```
+
+LangSmith and Langfuse service exports require explicit credentials and are documented in `docs/SERVICE_EXPORTS.md`.
 
 Queue high-frequency runtime events and flush them in batches:
 

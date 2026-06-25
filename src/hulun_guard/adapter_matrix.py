@@ -59,7 +59,7 @@ def adapter_support_tiers() -> list[dict[str, Any]]:
         },
         {
             "tier": "hosted-fixture-tested",
-            "surfaces": ["langgraph", "langsmith-file-export", "langfuse", "phoenix"],
+            "surfaces": ["langgraph", "langsmith-file-export", "langfuse", "phoenix", "phoenix-cli-export"],
             "guarantee": "Hosted platform fixture shapes are checked with synthetic public-safe exports and no service-specific private trace data.",
         },
         {
@@ -69,7 +69,7 @@ def adapter_support_tiers() -> list[dict[str, Any]]:
         },
         {
             "tier": "roundtrip-tested",
-            "surfaces": ["opentelemetry", "openinference", "langfuse", "phoenix"],
+            "surfaces": ["opentelemetry", "openinference", "langfuse", "phoenix", "phoenix-cli-export"],
             "guarantee": "Hulun-compatible attributes survive import, HulunGuard persistence, OTLP export, and OTLP re-import.",
         },
         {
@@ -283,6 +283,53 @@ def _openinference_fixture() -> list[dict[str, Any]]:
             "status": {"code": "STATUS_CODE_OK"},
         },
     ]
+
+
+def _phoenix_cli_fixture() -> dict[str, Any]:
+    return {
+        "traceId": "trace-phoenix-cli-matrix",
+        "spans": [
+            {
+                "name": "tool retry failed",
+                "context": {"trace_id": "trace-phoenix-cli-matrix", "span_id": "span-phoenix-cli-a"},
+                "span_kind": "TOOL",
+                "parent_id": None,
+                "start_time": "2026-06-25T00:00:00.000Z",
+                "end_time": "2026-06-25T00:00:00.890Z",
+                "status_code": "ERROR",
+                "attributes": {
+                    "hulun.event.type": "tool_result",
+                    "hulun.event.summary": "Phoenix CLI tool retry failed after contract mismatch.",
+                    "hulun.event.result": "fail",
+                    "hulun.event.phase": "verify",
+                    "hulun.evidence.ids": [EVIDENCE_ID],
+                    "hulun.refs": [TRACE_REF_WITH_QUERY],
+                    "hulun.action_key": ACTION_KEY,
+                    "llm.token_count.prompt": 123,
+                    "llm.token_count.completion": 45,
+                    "hulun.cost": 0.67,
+                    "llm.model_name": MODEL,
+                },
+            },
+            {
+                "name": "recovery summary",
+                "context": {"trace_id": "trace-phoenix-cli-matrix", "span_id": "span-phoenix-cli-b"},
+                "span_kind": "CHAIN",
+                "parent_id": "span-phoenix-cli-a",
+                "start_time": "2026-06-25T00:00:01.000Z",
+                "end_time": "2026-06-25T00:00:01.120Z",
+                "status_code": "OK",
+                "attributes": {
+                    "hulun.event.type": "summary",
+                    "hulun.event.summary": "Phoenix CLI recovery summary after retry.",
+                    "hulun.event.result": "pass",
+                    "hulun.event.phase": "recover",
+                    "hulun.evidence.ids": [EVIDENCE_ID],
+                    "hulun.refs": [TRACE_REF_WITH_QUERY],
+                },
+            },
+        ],
+    }
 
 
 def _openhands_fixture() -> dict[str, Any]:
@@ -885,6 +932,11 @@ def run_adapter_matrix() -> dict[str, Any]:
             _safe_case(
                 "phoenix_openinference_roundtrip",
                 lambda workdir: _roundtrip_case("phoenix_openinference_roundtrip", "phoenix", _openinference_fixture(), workdir),
+                tmp,
+            ),
+            _safe_case(
+                "phoenix_cli_export",
+                lambda workdir: _roundtrip_case("phoenix_cli_export", "phoenix", _phoenix_cli_fixture(), workdir),
                 tmp,
             ),
             _safe_case(

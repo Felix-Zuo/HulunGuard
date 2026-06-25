@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.44.0 - 2026-06-25
+
+- Added Phoenix CLI trace export hardening for `traceId`, `spans[]`, span `context`, `span_kind`, `status_code`, and `start_time` / `end_time` payloads.
+- Added content-based `--format auto` detection for Phoenix CLI exports without relying on filename hints, plus adapter conformance and `adapter-matrix` coverage.
+- Extended installed-wheel release smoke checks to verify Phoenix CLI export `trace-doctor` and `ingest --format auto` behavior without real credentials or private traces.
+
 ## 0.43.0 - 2026-06-25
 
 - Added `service-export langfuse` for explicitly configured Langfuse Observations API v2 exports with Basic Auth, bounded time windows, selected field groups, pagination controls, redacted output, and next-step commands.

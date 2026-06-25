@@ -323,7 +323,38 @@ def write_langfuse_trace(path: Path) -> None:
 
 
 def write_phoenix_trace(path: Path) -> None:
-    write_openinference_trace(path)
+    path.write_text(
+        json.dumps(
+            {
+                "traceId": "trace-phoenix-contract",
+                "spans": [
+                    {
+                        "name": "pytest contract run",
+                        "context": {"trace_id": "trace-phoenix-contract", "span_id": "span-phoenix-contract"},
+                        "span_kind": "TOOL",
+                        "parent_id": None,
+                        "start_time": "2026-06-25T00:00:00.000Z",
+                        "end_time": "2026-06-25T00:00:00.890Z",
+                        "status_code": "ERROR",
+                        "attributes": {
+                            "hulun.event.type": "tool_result",
+                            "hulun.event.summary": PUBLIC_SUMMARY,
+                            "hulun.event.result": "fail",
+                            "hulun.event.phase": "verify",
+                            "hulun.evidence.ids": [EVIDENCE_ID],
+                            "hulun.refs": [REF_WITH_QUERY],
+                            "hulun.action_key": ACTION_KEY,
+                            "llm.token_count.prompt": 123,
+                            "llm.token_count.completion": 45,
+                            "hulun.cost": 0.67,
+                            "llm.model_name": "gpt-contract",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 class AdapterConformanceTest(unittest.TestCase):
@@ -346,7 +377,7 @@ class AdapterConformanceTest(unittest.TestCase):
             ("langgraph", self._record_langgraph_ingest, False),
             ("langsmith", self._record_langsmith_ingest, False),
             ("langfuse", self._record_langfuse_ingest, True),
-            ("phoenix", self._record_phoenix_ingest, True),
+            ("phoenix", self._record_phoenix_ingest, False),
         ]
         for name, recorder, require_secret_redaction in cases:
             with self.subTest(adapter=name):
@@ -393,6 +424,34 @@ class AdapterConformanceTest(unittest.TestCase):
             self.assertEqual(batch_response["error"]["code"], -32602)
             state = json.loads((Path(tmp) / ".hulun" / "state.json").read_text(encoding="utf-8"))
             self.assertEqual(len(state["events"]), 1)
+
+    def test_phoenix_cli_export_auto_detection_preserves_context_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "trace-export.json"
+            write_phoenix_trace(trace)
+
+            code, out = run_cli("trace-doctor", "--file", str(trace), "--json")
+            self.assertEqual(code, 0, out)
+            doctor = json.loads(out)
+            self.assertEqual(doctor["detected_format"], "phoenix")
+            self.assertEqual(doctor["selected_format"], "phoenix")
+            self.assertEqual(doctor["observation_count"], 1)
+            self.assertTrue(doctor["gate"]["passed"], doctor["gate"]["failures"])
+            self.assertIn("--format phoenix", doctor["next_command"])
+            self.assertFalse((root / ".hulun" / "state.json").exists())
+
+            project = root / "project"
+            init_cli_project(str(project))
+            code, out = run_cli("--root", str(project), "ingest", "--file", str(trace), "--format", "auto", "--scan", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["imported"], 1)
+            event = load_last_event(project)
+            self.assertEqual(event["source_platform"], "phoenix")
+            self.assertEqual(event["latency_ms"], 890)
+            self.assertIn("phoenix:trace:trace-phoenix-contract", event["refs"])
+            self.assertIn("phoenix:span:span-phoenix-contract", event["refs"])
 
     def _record_cli(self, root: str) -> tuple[dict[str, object], dict[str, object]]:
         init_cli_project(root)

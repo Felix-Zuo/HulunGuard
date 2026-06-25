@@ -163,10 +163,19 @@ def _duration_ms(span: dict[str, Any]) -> int | None:
     return None
 
 
+def _time_duration_ms(start_value: Any, end_value: Any) -> int | None:
+    start = parse_time(_as_text(start_value).strip())
+    end = parse_time(_as_text(end_value).strip())
+    if not start or not end:
+        return None
+    return max(0, int(round((end - start).total_seconds() * 1000)))
+
+
 def _span_ref(source: str, span: dict[str, Any]) -> list[str]:
     refs = []
-    trace_id = _as_text(span.get("traceId") or span.get("trace_id")).strip()
-    span_id = _as_text(span.get("spanId") or span.get("span_id")).strip()
+    context = span.get("context") if isinstance(span.get("context"), dict) else {}
+    trace_id = _as_text(span.get("traceId") or span.get("trace_id") or context.get("trace_id") or context.get("traceId")).strip()
+    span_id = _as_text(span.get("spanId") or span.get("span_id") or context.get("span_id") or context.get("spanId")).strip()
     if trace_id:
         refs.append(f"{source}:trace:{trace_id}")
     if span_id:
@@ -181,10 +190,12 @@ def _span_action_key(source: str, span: dict[str, Any], attrs: dict[str, Any], *
     key = _first_attr(attrs, ["gen_ai.tool.call.id", "tool.call.id", "tool_call.id"])
     if key:
         return f"{source}:{redact_text(key, include_sensitive=include_sensitive)}"
-    span_id = _as_text(span.get("spanId") or span.get("span_id")).strip()
+    context = span.get("context") if isinstance(span.get("context"), dict) else {}
+    span_id = _as_text(span.get("spanId") or span.get("span_id") or context.get("span_id") or context.get("spanId")).strip()
     if span_id:
         return f"{source}:{span_id}"
-    seed = f"{span.get('traceId') or span.get('trace_id')}:{span.get('name')}:{json.dumps(attrs, ensure_ascii=False, sort_keys=True)}"
+    trace_id = span.get("traceId") or span.get("trace_id") or context.get("trace_id") or context.get("traceId")
+    seed = f"{trace_id}:{span.get('name')}:{json.dumps(attrs, ensure_ascii=False, sort_keys=True)}"
     return fingerprint_text(seed, prefix=source)
 
 
@@ -309,9 +320,33 @@ def normalize_langfuse(span: dict[str, Any], *, include_sensitive: bool = False)
 
 
 def normalize_phoenix(span: dict[str, Any], *, include_sensitive: bool = False) -> Observation:
+    span = _phoenix_cli_span_as_openinference(span)
+    attrs = _span_attributes(span)
     observation = normalize_openinference(span, include_sensitive=include_sensitive)
     observation["source_platform"] = "phoenix"
+    observation["action_key"] = _span_action_key("phoenix", span, attrs, include_sensitive=include_sensitive)
+    observation["refs"] = redact_refs(
+        _span_ref("phoenix", span) + _list_from_value(_first_attr(attrs, ["hulun.refs", "hulun.event.refs", "hulun.ref"])),
+        include_sensitive=include_sensitive,
+    )
+    observation["latency_ms"] = observation.get("latency_ms") or _time_duration_ms(span.get("start_time"), span.get("end_time"))
     return observation
+
+
+def _phoenix_cli_span_as_openinference(span: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(span)
+    context = normalized.get("context") if isinstance(normalized.get("context"), dict) else {}
+    if context:
+        normalized.setdefault("trace_id", context.get("trace_id") or context.get("traceId"))
+        normalized.setdefault("span_id", context.get("span_id") or context.get("spanId"))
+    if normalized.get("span_kind"):
+        attrs = dict(_span_attributes(normalized))
+        attrs.setdefault("openinference.span.kind", normalized.get("span_kind"))
+        normalized["attributes"] = attrs
+    if normalized.get("status_code") and "status" not in normalized:
+        code = _as_text(normalized.get("status_code")).strip().upper()
+        normalized["status"] = {"code": "STATUS_CODE_ERROR" if code in {"ERROR", "STATUS_CODE_ERROR"} else "STATUS_CODE_OK"}
+    return normalized
 
 
 def _result_from_text(text: str, default: str = "pass") -> str:
@@ -422,6 +457,30 @@ def _looks_like_openai_agents(payload: Any) -> bool:
     return any(True for _ in _iter_openai_agents_payload(payload))
 
 
+def _looks_like_phoenix_cli_trace(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+    spans = item.get("spans")
+    if not isinstance(spans, list):
+        return False
+    if not (item.get("traceId") or item.get("trace_id")):
+        return False
+    return any(isinstance(span, dict) and (span.get("span_kind") or isinstance(span.get("context"), dict)) for span in spans)
+
+
+def _looks_like_phoenix_cli_payload(payload: Any) -> bool:
+    if _looks_like_phoenix_cli_trace(payload):
+        return True
+    if isinstance(payload, list):
+        return any(_looks_like_phoenix_cli_trace(item) for item in payload)
+    if isinstance(payload, dict):
+        for key in ("traces", "data", "items"):
+            value = payload.get(key)
+            if isinstance(value, list) and any(_looks_like_phoenix_cli_trace(item) for item in value):
+                return True
+    return False
+
+
 def _looks_like_openinference_span(span: dict[str, Any]) -> bool:
     attrs = _attrs_from_payload_span(span)
     return "openinference.span.kind" in attrs or any(str(key).startswith("openinference.") for key in attrs)
@@ -451,6 +510,8 @@ def _looks_like_langgraph(payload: Any) -> bool:
 def _detect_payload_format(payload: Any) -> str:
     if _looks_like_openai_agents(payload):
         return "openai-agents"
+    if _looks_like_phoenix_cli_payload(payload):
+        return "phoenix"
     telemetry_format = _looks_like_telemetry(payload)
     if telemetry_format:
         return telemetry_format
@@ -963,7 +1024,7 @@ def iter_observations(
         elif "swe" in lowered or "traj" in lowered:
             fmt = "swe-agent"
         else:
-            fmt = "generic"
+            fmt = _detect_payload_format(parse_trace_text(trace_path.read_text(encoding="utf-8-sig")))
 
     normalizers = {
         "generic": normalize_generic,

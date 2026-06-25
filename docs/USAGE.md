@@ -87,6 +87,7 @@ Use `trace-doctor` before importing a real agent trace. It checks file size, JSO
 ```powershell
 python .\hulun.py trace-doctor --file .\trace.jsonl --json
 python .\hulun.py trace-doctor --file .\otel-trace.json --format opentelemetry --json
+python .\hulun.py trace-doctor --file .\phoenix-trace.json --format auto --json
 python .\hulun.py trace-doctor --file .\trace.jsonl --strict --json
 ```
 
@@ -106,6 +107,7 @@ python .\hulun.py ingest --file .\langgraph-stream.json --format langgraph --sca
 python .\hulun.py ingest --file .\langsmith-runs.json --format langsmith --scan
 python .\hulun.py ingest --file .\langfuse-otel.json --format langfuse --scan
 python .\hulun.py ingest --file .\phoenix-openinference.json --format phoenix --scan
+python .\hulun.py ingest --file .\phoenix-trace.json --format auto --scan
 python .\hulun.py ingest --file .\openai-agents-trace.json --format openai-agents --scan
 ```
 
@@ -125,9 +127,9 @@ Supported formats:
 - `langgraph`: maps stream parts such as updates, values, messages, custom data, checkpoints, tasks, and debug records into runtime observations.
 - `langsmith`: maps run exports into LLM calls, tool results, sources, commands, and agent errors.
 - `langfuse`: maps Langfuse OTEL traces through the OpenTelemetry adapter while preserving `source_platform=langfuse`.
-- `phoenix`: maps Phoenix/OpenInference spans through the OpenInference adapter while preserving `source_platform=phoenix`.
+- `phoenix`: maps Phoenix/OpenInference spans and Phoenix CLI trace exports while preserving `source_platform=phoenix`.
 - `openai-agents`: maps OpenAI Agents SDK trace/span exports into LLM calls, tool results, handoffs, guardrails, commands, and agent errors.
-- `auto`: guesses from the filename.
+- `auto`: detects known formats from the filename first, then from trace content when the filename has no useful hint.
 
 Adapter compatibility guarantees are documented in `docs/ADAPTER_CONFORMANCE.md`. Integration-tested adapter tiers are documented in `docs/ADAPTER_MATRIX.md`.
 Mainstream agent compatibility paths are documented in `docs/AGENT_COMPATIBILITY.md`.
@@ -158,6 +160,17 @@ python .\hulun.py ingest --format generic --file .\langfuse-observations.json --
 ```
 
 No service export runs unless the endpoint, credential source, output path, and required service-specific bounds are supplied. Credentials are used only for request headers and are not written to reports or exported files. The default selected fields exclude raw inputs, outputs, prompts, completions, attachments, and tool arguments.
+
+Phoenix CLI exports are imported from the local file produced by the Phoenix CLI:
+
+```powershell
+$env:PHOENIX_HOST = "https://app.phoenix.arize.com"
+$env:PHOENIX_PROJECT = "<project>"
+$env:PHOENIX_API_KEY = "<key>"
+px trace list --limit 100 --last-n-minutes 60 --format raw --file .\phoenix-trace.json
+python .\hulun.py trace-doctor --format auto --file .\phoenix-trace.json --json
+python .\hulun.py ingest --format auto --file .\phoenix-trace.json --scan --init-if-missing
+```
 
 The service export boundary is documented in `docs/SERVICE_EXPORTS.md`.
 
@@ -341,7 +354,7 @@ python -m pytest -q
 `compatibility` reports direct, standards-based, and bridge-based paths for mainstream agent frameworks.
 `integration-kit` generates first-run onboarding packages and verifies their sample traces through the matching ingest adapters.
 `onboard` verifies generated kits with an isolated sandbox import and returns next-step commands for real traces.
-`adapter-matrix` verifies OpenTelemetry/OpenInference/Langfuse/Phoenix round-trips plus OpenHands-like, SWE-agent-like, LangGraph, and LangSmith stream coverage without committing private traces.
+`adapter-matrix` verifies OpenTelemetry/OpenInference/Langfuse/Phoenix round-trips, Phoenix CLI trace exports, OpenAI Agents SDK traces, and OpenHands-like, SWE-agent-like, LangGraph, and LangSmith stream coverage without committing private traces.
 `collector smoke` starts a temporary local HTTP collector, POSTs one OTLP/HTTP JSON span, and verifies that the queue grows by one record.
 `collector smoke --managed --scan --init-if-missing` verifies that a live POST can be flushed into a fresh project ledger and rescanned without a separate operator command.
 `collector shutdown-check` verifies that a temporary collector records `stopping` and final `stopped` runtime state during graceful shutdown.
