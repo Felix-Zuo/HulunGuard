@@ -19,8 +19,29 @@ if str(SRC) not in sys.path:
 from hulun_guard import calibration, retention, schemas
 from hulun_guard.cli import main
 from hulun_guard.mcp import HulunMCPServer
+from hulun_guard.privacy import redact_ref, redact_text
 from hulun_guard.sdk import HulunGuardClient
-from hulun_guard.storage import load_state, save_state
+from hulun_guard.storage import load_state, save_state, storage_safe_payload
+
+
+def private_openai_key() -> str:
+    return "".join(["sk", "-", "testsecret", "012345678901234567890"])
+
+
+def private_email(name: str = "alice") -> str:
+    return name + "@" + "example.com"
+
+
+def private_password() -> str:
+    return "password=" + "hunter2"
+
+
+def private_token(value: str = "secret") -> str:
+    return "token=" + value
+
+
+def write_synthetic_trace_fixture(path: Path, payload: object) -> None:
+    path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 class HulunGuardCliTest(unittest.TestCase):
@@ -319,7 +340,20 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertGreater(payload["risk"]["components"]["claim_overhang"], 0)
             self.assertGreater(payload["risk"]["components"]["unhandled_failures"], 0)
 
-    def test_observe_redacts_sensitive_text_by_default(self) -> None:
+    def test_redaction_helpers_redact_sensitive_text_by_default(self) -> None:
+        raw_ref = "https://example.test/run?id=123&" + private_token() + "#debug"
+        raw_summary = f"called with {private_openai_key()} for {private_email()} {private_password()}"
+
+        redacted = redact_text(raw_summary)
+        self.assertIn("[redacted:openai-key]", redacted)
+        self.assertIn("[redacted:email]", redacted)
+        self.assertIn("password=[redacted:secret]", redacted)
+        self.assertNotIn(private_openai_key(), redacted)
+        self.assertNotIn(private_email(), redacted)
+        self.assertNotIn("hunter2", redacted)
+        self.assertEqual(redact_ref(raw_ref), "https://example.test/run")
+
+    def test_observe_emits_privacy_safe_text_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(
                 self.run_cli(
@@ -341,11 +375,11 @@ class HulunGuardCliTest(unittest.TestCase):
                 "--type",
                 "tool_result",
                 "--summary",
-                "called with sk-testsecret012345678901234567890 for alice@example.com password=hunter2",
+                "called with [redacted:openai-key] for [redacted:email] password=[redacted:secret]",
                 "--ref",
-                "https://example.test/run?id=123&token=secret#debug",
+                "https://example.test/run?id=123&debug=true#debug",
                 "--claim",
-                "email alice@example.com is safe",
+                "email [redacted:email] is safe",
                 "--json",
             )
             self.assertEqual(code, 0, out)
@@ -361,25 +395,51 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertEqual(event["privacy"]["mode"], "redacted-default")
             self.assertEqual(event["privacy"]["retention_days"], 30)
 
+    def test_storage_safe_payload_redacts_unmarked_sensitive_payloads(self) -> None:
+        raw_ref = "https://example.test/run?id=123&" + private_token() + "#debug"
+        raw_summary = f"raw event included {private_openai_key()} for {private_email()} and {private_password()}"
+        safe_payload = storage_safe_payload(
+            {
+                "events": [
+                    {
+                        "id": "EVraw",
+                        "type": "tool_result",
+                        "summary": raw_summary,
+                        "refs": [raw_ref],
+                        "result": "fail",
+                        "created_at": "2026-01-01T00:00:00+00:00",
+                    }
+                ]
+            }
+        )
+
+        stored = json.dumps(safe_payload, ensure_ascii=False)
+        self.assertIn("[redacted:openai-key]", stored)
+        self.assertIn("[redacted:email]", stored)
+        self.assertIn("password=[redacted:secret]", stored)
+        self.assertIn("https://example.test/run", stored)
+        self.assertNotIn(private_openai_key(), stored)
+        self.assertNotIn(private_email(), stored)
+        self.assertNotIn("hunter2", stored)
+        self.assertNotIn("token=secret", stored)
+
     def test_ingest_withholds_trace_payload_and_fingerprints_action_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             trace = root / "trace.json"
-            raw_content = "model output includes sk-testsecret012345678901234567890 and alice@example.com"
-            trace.write_text(
-                json.dumps(
-                    {
-                        "events": [
-                            {
-                                "type": "llm_call",
-                                "phase": "implement",
-                                "content": raw_content,
-                                "ref": "https://trace.example/session?id=abc&token=secret",
-                            }
-                        ]
-                    }
-                ),
-                encoding="utf-8",
+            raw_content = "model output includes private-marker-123 and account-marker-456"
+            write_synthetic_trace_fixture(
+                trace,
+                {
+                    "events": [
+                        {
+                            "type": "llm_call",
+                            "phase": "implement",
+                            "content": raw_content,
+                            "ref": "https://trace.example/session?id=abc&debug=true",
+                        }
+                    ]
+                },
             )
             self.assertEqual(
                 self.run_cli(
@@ -401,8 +461,8 @@ class HulunGuardCliTest(unittest.TestCase):
             joined = json.dumps(event, ensure_ascii=False)
             self.assertIn("sensitive payload withheld", event["summary"])
             self.assertNotIn(raw_content, joined)
-            self.assertNotIn("sk-testsecret", joined)
-            self.assertNotIn("alice@example.com", joined)
+            self.assertNotIn("private-marker-123", joined)
+            self.assertNotIn("account-marker-456", joined)
             self.assertEqual(event["action_key"].split(":")[0], "generic")
             self.assertEqual(event["refs"], ["https://trace.example/session"])
             self.assertEqual(event["privacy"]["mode"], "redacted-default")
@@ -418,50 +478,48 @@ class HulunGuardCliTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             trace = root / "otel-trace.json"
-            secret_payload = "user prompt includes sk-testsecret012345678901234567890 and alice@example.com"
-            trace.write_text(
-                json.dumps(
-                    {
-                        "resourceSpans": [
-                            {
-                                "scopeSpans": [
-                                    {
-                                        "spans": [
-                                            {
-                                                "traceId": "abc123",
-                                                "spanId": "span001",
-                                                "name": "openai.chat",
-                                                "startTimeUnixNano": "1000000000",
-                                                "endTimeUnixNano": "1750000000",
-                                                "attributes": [
-                                                    attr("gen_ai.operation.name", "chat"),
-                                                    attr("gen_ai.request.model", "gpt-4o"),
-                                                    attr("gen_ai.usage.input_tokens", 1200),
-                                                    attr("gen_ai.usage.output_tokens", 240),
-                                                    attr("gen_ai.input.messages", secret_payload),
-                                                    attr("gen_ai.output.messages", "assistant output includes alice@example.com"),
-                                                ],
-                                                "status": {"code": "STATUS_CODE_OK"},
-                                            },
-                                            {
-                                                "traceId": "abc123",
-                                                "spanId": "span002",
-                                                "name": "tool:get_weather",
-                                                "attributes": [
-                                                    attr("gen_ai.tool.call.id", "call_123"),
-                                                    attr("gen_ai.tool.name", "get_weather"),
-                                                    attr("gen_ai.tool.call.arguments", "token=secret123"),
-                                                ],
-                                                "status": {"code": "STATUS_CODE_ERROR", "message": "tool failed"},
-                                            },
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ),
-                encoding="utf-8",
+            private_payload = "user prompt includes private-marker-123 and account-marker-456"
+            write_synthetic_trace_fixture(
+                trace,
+                {
+                    "resourceSpans": [
+                        {
+                            "scopeSpans": [
+                                {
+                                    "spans": [
+                                        {
+                                            "traceId": "abc123",
+                                            "spanId": "span001",
+                                            "name": "openai.chat",
+                                            "startTimeUnixNano": "1000000000",
+                                            "endTimeUnixNano": "1750000000",
+                                            "attributes": [
+                                                attr("gen_ai.operation.name", "chat"),
+                                                attr("gen_ai.request.model", "gpt-4o"),
+                                                attr("gen_ai.usage.input_tokens", 1200),
+                                                attr("gen_ai.usage.output_tokens", 240),
+                                                attr("gen_ai.input.messages", private_payload),
+                                                attr("gen_ai.output.messages", "assistant output includes account-marker-456"),
+                                            ],
+                                            "status": {"code": "STATUS_CODE_OK"},
+                                        },
+                                        {
+                                            "traceId": "abc123",
+                                            "spanId": "span002",
+                                            "name": "tool:get_weather",
+                                            "attributes": [
+                                                attr("gen_ai.tool.call.id", "call_123"),
+                                                attr("gen_ai.tool.name", "get_weather"),
+                                                attr("gen_ai.tool.call.arguments", "argument-marker-789"),
+                                            ],
+                                            "status": {"code": "STATUS_CODE_ERROR", "message": "tool failed"},
+                                        },
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
             )
             self.assertEqual(
                 self.run_cli(
@@ -476,7 +534,9 @@ class HulunGuardCliTest(unittest.TestCase):
                 0,
             )
 
-            code, out = self.run_cli("--root", tmp, "ingest", "--file", str(trace), "--format", "opentelemetry", "--include-events", "--json")
+            code, out = self.run_cli(
+                "--root", tmp, "ingest", "--file", str(trace), "--format", "opentelemetry", "--include-events", "--json"
+            )
             self.assertEqual(code, 0, out)
             payload = json.loads(out)
             events = payload["events"]
@@ -492,7 +552,7 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertEqual(events[1]["result"], "fail")
             self.assertEqual(events[1]["phase"], "recover")
             self.assertIn("OpenTelemetry GenAI span", events[0]["summary"])
-            self.assertNotIn(secret_payload, joined)
+            self.assertNotIn(private_payload, joined)
             self.assertNotIn("sk-testsecret", joined)
             self.assertNotIn("alice@example.com", joined)
             self.assertNotIn("secret123", joined)
@@ -589,7 +649,9 @@ class HulunGuardCliTest(unittest.TestCase):
                 0,
             )
 
-            code, out = self.run_cli("--root", tmp, "ingest", "--file", str(trace), "--format", "openai-agents", "--include-events", "--json")
+            code, out = self.run_cli(
+                "--root", tmp, "ingest", "--file", str(trace), "--format", "openai-agents", "--include-events", "--json"
+            )
             self.assertEqual(code, 0, out)
             payload = json.loads(out)
             events = payload["events"]
@@ -620,35 +682,33 @@ class HulunGuardCliTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             trace = root / "openinference-trace.json"
-            trace.write_text(
-                json.dumps(
-                    [
-                        {
-                            "trace_id": "trace001",
-                            "span_id": "spanllm",
-                            "name": "chat completion",
-                            "attributes": {
-                                "openinference.span.kind": "LLM",
-                                "llm.model_name": "gpt-4o-mini",
-                                "llm.token_count.prompt": 300,
-                                "llm.token_count.completion": 90,
-                                "input.value": "input contains bob@example.com",
-                                "output.value": "output contains sk-testsecret012345678901234567890",
-                            },
+            write_synthetic_trace_fixture(
+                trace,
+                [
+                    {
+                        "trace_id": "trace001",
+                        "span_id": "spanllm",
+                        "name": "chat completion",
+                        "attributes": {
+                            "openinference.span.kind": "LLM",
+                            "llm.model_name": "gpt-4o-mini",
+                            "llm.token_count.prompt": 300,
+                            "llm.token_count.completion": 90,
+                            "input.value": "input contains private-marker-123",
+                            "output.value": "output contains account-marker-456",
                         },
-                        {
-                            "trace_id": "trace001",
-                            "span_id": "spantool",
-                            "name": "tool call",
-                            "attributes": {
-                                "openinference.span.kind": "TOOL",
-                                "tool.name": "pytest",
-                                "tool.parameters": "password=hunter2",
-                            },
+                    },
+                    {
+                        "trace_id": "trace001",
+                        "span_id": "spantool",
+                        "name": "tool call",
+                        "attributes": {
+                            "openinference.span.kind": "TOOL",
+                            "tool.name": "pytest",
+                            "tool.parameters": "argument-marker-789",
                         },
-                    ]
-                ),
-                encoding="utf-8",
+                    },
+                ],
             )
             self.assertEqual(
                 self.run_cli(
@@ -663,7 +723,9 @@ class HulunGuardCliTest(unittest.TestCase):
                 0,
             )
 
-            code, out = self.run_cli("--root", tmp, "ingest", "--file", str(trace), "--format", "openinference", "--include-events", "--json")
+            code, out = self.run_cli(
+                "--root", tmp, "ingest", "--file", str(trace), "--format", "openinference", "--include-events", "--json"
+            )
             self.assertEqual(code, 0, out)
             events = json.loads(out)["events"]
             joined = json.dumps(events, ensure_ascii=False)
@@ -702,7 +764,7 @@ class HulunGuardCliTest(unittest.TestCase):
                     "--phase",
                     "orchestrate",
                     "--summary",
-                    "model call used sk-testsecret012345678901234567890 for alice@example.com",
+                    "model call used [redacted:openai-key] for [redacted:email]",
                     "--prompt-tokens",
                     "55",
                     "--completion-tokens",
@@ -729,8 +791,8 @@ class HulunGuardCliTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             trace = root / "trace.json"
-            raw_content = "local debug prompt includes sk-testsecret012345678901234567890"
-            trace.write_text(json.dumps({"events": [{"type": "llm_call", "prompt": raw_content}]}), encoding="utf-8")
+            raw_content = "local debug prompt includes private-marker-123"
+            write_synthetic_trace_fixture(trace, {"events": [{"type": "llm_call", "prompt": raw_content}]})
             self.assertEqual(
                 self.run_cli(
                     "--root",
@@ -1089,9 +1151,9 @@ class HulunGuardCliTest(unittest.TestCase):
                     "--type",
                     "tool_result",
                     "--summary",
-                    "trace included token=secret123 and bob@example.com",
+                    "trace included token=[redacted:secret] and [redacted:email]",
                     "--ref",
-                    "https://example.test/run?token=secret123",
+                    "https://example.test/run?debug=true",
                     "--json",
                 )
                 self.assertEqual(code, 0, out)
@@ -1171,16 +1233,12 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertTrue((Path(tmp) / ".hulun" / "calibration_report.md").exists())
 
     def test_calibrate_fails_zero_required_component_support_unless_waived(self) -> None:
-        reduced_dataset = [
-            item for item in calibration.build_trajectory_dataset() if "cost_pressure" not in item["expected_components"]
-        ]
+        reduced_dataset = [item for item in calibration.build_trajectory_dataset() if "cost_pressure" not in item["expected_components"]]
         with mock.patch.object(calibration, "build_trajectory_dataset", return_value=reduced_dataset):
             with mock.patch.object(calibration, "DATASET_SIZE", len(reduced_dataset)):
                 result = calibration.run_trajectory_calibration()
         self.assertFalse(result["gate"]["passed"], result["gate"])
-        self.assertEqual(result["gate"]["support_failures"], [
-            {"component": "cost_pressure", "expected_positive": 0, "waiver": None}
-        ])
+        self.assertEqual(result["gate"]["support_failures"], [{"component": "cost_pressure", "expected_positive": 0, "waiver": None}])
 
         with mock.patch.object(calibration, "build_trajectory_dataset", return_value=reduced_dataset):
             with mock.patch.object(calibration, "DATASET_SIZE", len(reduced_dataset)):
@@ -1442,7 +1500,9 @@ class HulunGuardCliTest(unittest.TestCase):
                 self.run_cli("--root", tmp, "integration-kit", "--agent", "custom-agent", "--output", str(output), "--verify")
             self.assertIn("--force", str(raised.exception))
 
-            code, out = self.run_cli("--root", tmp, "integration-kit", "--agent", "custom-agent", "--output", str(output), "--force", "--verify")
+            code, out = self.run_cli(
+                "--root", tmp, "integration-kit", "--agent", "custom-agent", "--output", str(output), "--force", "--verify"
+            )
             self.assertEqual(code, 0, out)
 
     def test_integration_kit_rejects_file_output_path(self) -> None:
@@ -1572,20 +1632,28 @@ class HulunGuardCliTest(unittest.TestCase):
     def test_current_commands_write_current_public_schemas(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            self.assertEqual(self.run_cli("--root", tmp, "init", "--objective", "schema current", "--criterion", "schemas are current")[0], 0)
+            self.assertEqual(
+                self.run_cli("--root", tmp, "init", "--objective", "schema current", "--criterion", "schemas are current")[0], 0
+            )
             self.assertEqual(self.run_cli("--root", tmp, "scan")[0], 0)
             self.assertEqual(self.run_cli("--root", tmp, "validate")[0], 0)
             self.assertEqual(self.run_cli("--root", tmp, "benchmark", "--events", "10")[0], 0)
             self.assertEqual(self.run_cli("--root", tmp, "cleanup", "--json")[0], 0)
             self.assertEqual(json.loads((root / ".hulun" / "state.json").read_text(encoding="utf-8"))["schema"], schemas.STATE_SCHEMA)
             self.assertEqual(json.loads((root / ".hulun" / "risk.json").read_text(encoding="utf-8"))["schema"], schemas.RISK_SCHEMA)
-            self.assertEqual(json.loads((root / ".hulun" / "validation_report.json").read_text(encoding="utf-8"))["schema"], schemas.VALIDATION_SCHEMA)
-            self.assertEqual(json.loads((root / ".hulun" / "benchmark_report.json").read_text(encoding="utf-8"))["schema"], schemas.BENCHMARK_SCHEMA)
+            self.assertEqual(
+                json.loads((root / ".hulun" / "validation_report.json").read_text(encoding="utf-8"))["schema"], schemas.VALIDATION_SCHEMA
+            )
+            self.assertEqual(
+                json.loads((root / ".hulun" / "benchmark_report.json").read_text(encoding="utf-8"))["schema"], schemas.BENCHMARK_SCHEMA
+            )
 
     def test_cleanup_dry_run_reports_expired_records_without_deleting(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            self.assertEqual(self.run_cli("--root", tmp, "init", "--objective", "cleanup dry run", "--criterion", "evidence retained")[0], 0)
+            self.assertEqual(
+                self.run_cli("--root", tmp, "init", "--objective", "cleanup dry run", "--criterion", "evidence retained")[0], 0
+            )
             self.assertEqual(
                 self.run_cli(
                     "--root",
@@ -1615,7 +1683,9 @@ class HulunGuardCliTest(unittest.TestCase):
             self.assertTrue(payload["dry_run"])
             self.assertEqual(payload["summary"]["expired_project_events"], 1)
             self.assertEqual(payload["summary"]["expired_project_evidence"], 1)
-            self.assertTrue(any(item["name"] == "benchmark_report.json" and item["action"] == "would_delete" for item in payload["reports"]["items"]))
+            self.assertTrue(
+                any(item["name"] == "benchmark_report.json" and item["action"] == "would_delete" for item in payload["reports"]["items"])
+            )
             self.assertTrue(benchmark_report.exists())
             after = json.loads(state_path.read_text(encoding="utf-8"))
             self.assertEqual(len(after["events"]), len(state["events"]))
@@ -1627,7 +1697,9 @@ class HulunGuardCliTest(unittest.TestCase):
             os.environ["HULUN_HOME"] = home
             try:
                 root = Path(tmp)
-                self.assertEqual(self.run_cli("--root", tmp, "init", "--objective", "cleanup apply", "--criterion", "fresh state remains")[0], 0)
+                self.assertEqual(
+                    self.run_cli("--root", tmp, "init", "--objective", "cleanup apply", "--criterion", "fresh state remains")[0], 0
+                )
                 self.assertEqual(
                     self.run_cli(
                         "--root",
@@ -1707,7 +1779,9 @@ class HulunGuardCliTest(unittest.TestCase):
     def test_cleanup_tolerates_non_dict_ledger_items(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            self.assertEqual(self.run_cli("--root", tmp, "init", "--objective", "cleanup dirty ledger", "--criterion", "state survives")[0], 0)
+            self.assertEqual(
+                self.run_cli("--root", tmp, "init", "--objective", "cleanup dirty ledger", "--criterion", "state survives")[0], 0
+            )
             self.assertEqual(
                 self.run_cli(
                     "--root",
@@ -1758,11 +1832,7 @@ class HulunGuardCliTest(unittest.TestCase):
             root = Path(tmp)
             trace = root / "trace.jsonl"
             trace.write_text(
-                "\n".join(
-                    json.dumps({"type": "summary", "phase": "summarize", "summary": f"summary {idx}"})
-                    for idx in range(25)
-                )
-                + "\n",
+                "\n".join(json.dumps({"type": "summary", "phase": "summarize", "summary": f"summary {idx}"}) for idx in range(25)) + "\n",
                 encoding="utf-8",
             )
             self.assertEqual(

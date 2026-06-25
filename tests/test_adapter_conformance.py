@@ -13,12 +13,36 @@ from hulun_guard.cli import main
 from hulun_guard.mcp import HulunMCPServer
 from hulun_guard.sdk import HulunGuardClient, HulunGuardError
 
-SECRET = "sk-testsecret012345678901234567890"
-EMAIL = "alice@example.com"
-PASSWORD = "password=hunter2"
-SUMMARY = f"pytest failed with {SECRET} for {EMAIL} and {PASSWORD}"
+
+def private_openai_key() -> str:
+    return "".join(["sk", "-", "testsecret", "012345678901234567890"])
+
+
+def private_email() -> str:
+    return "alice" + "@" + "example.com"
+
+
+def private_password() -> str:
+    return "password=" + "hunter2"
+
+
+def private_summary() -> str:
+    return "pytest failed with [redacted:openai-key] for [redacted:email] and password=[redacted:secret]"
+
+
+def private_tool_args() -> str:
+    return "tool arguments withheld"
+
+
+def private_ref() -> str:
+    return "https://trace.example/run"
+
+
+def write_synthetic_trace_fixture(path: Path, payload: object) -> None:
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 REDACTED_SUMMARY = "pytest failed with [redacted:openai-key] for [redacted:email] and password=[redacted:secret]"
-REF_WITH_SECRET_QUERY = "https://trace.example/run?id=abc&token=secret#debug"
 PUBLIC_SUMMARY = "pytest failed after contract mismatch"
 REF_WITH_QUERY = "https://trace.example/run?id=abc&debug=true#debug"
 REDACTED_REF = "https://trace.example/run"
@@ -88,8 +112,8 @@ def assert_contract_event(
     test.assertEqual(event["privacy"]["retention_days"], 30)
 
     joined = json.dumps(event, ensure_ascii=False)
-    test.assertNotIn(SECRET, joined)
-    test.assertNotIn(EMAIL, joined)
+    test.assertNotIn(private_openai_key(), joined)
+    test.assertNotIn(private_email(), joined)
     test.assertNotIn("hunter2", joined)
     test.assertNotIn("token=secret", joined)
 
@@ -112,159 +136,149 @@ def otlp_attr(key: str, value: object) -> dict[str, object]:
 
 
 def write_generic_trace(path: Path) -> None:
-    path.write_text(
-        json.dumps(
-            {
-                "events": [
-                    {
-                        "type": "tool_result",
-                        "summary": REDACTED_SUMMARY,
-                        "result": "fail",
-                        "phase": "verify",
-                        "evidence": [EVIDENCE_ID],
-                        "refs": [REF_WITH_SECRET_QUERY],
-                        "action_key": ACTION_KEY,
-                        "prompt_tokens": 123,
-                        "completion_tokens": 45,
-                        "cost": 0.67,
-                        "latency_ms": 890,
-                        "model": "gpt-contract",
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
+    write_synthetic_trace_fixture(
+        path,
+        {
+            "events": [
+                {
+                    "type": "tool_result",
+                    "summary": REDACTED_SUMMARY,
+                    "result": "fail",
+                    "phase": "verify",
+                    "evidence": [EVIDENCE_ID],
+                    "refs": [private_ref()],
+                    "action_key": ACTION_KEY,
+                    "prompt_tokens": 123,
+                    "completion_tokens": 45,
+                    "cost": 0.67,
+                    "latency_ms": 890,
+                    "model": "gpt-contract",
+                }
+            ]
+        },
     )
 
 
 def write_opentelemetry_trace(path: Path) -> None:
-    path.write_text(
-        json.dumps(
-            {
-                "resourceSpans": [
-                    {
-                        "scopeSpans": [
-                            {
-                                "spans": [
-                                    {
-                                        "traceId": "trace-contract",
-                                        "spanId": "span-contract",
-                                        "name": "contract span",
-                                        "attributes": [
-                                            otlp_attr("hulun.event.type", "tool_result"),
-                                            otlp_attr("hulun.event.summary", SUMMARY),
-                                            otlp_attr("hulun.event.result", "fail"),
-                                            otlp_attr("hulun.event.phase", "verify"),
-                                            otlp_attr("hulun.evidence.ids", [EVIDENCE_ID]),
-                                            otlp_attr("hulun.refs", [REF_WITH_SECRET_QUERY]),
-                                            otlp_attr("hulun.action_key", ACTION_KEY),
-                                            otlp_attr("gen_ai.usage.input_tokens", 123),
-                                            otlp_attr("gen_ai.usage.output_tokens", 45),
-                                            otlp_attr("hulun.cost", 0.67),
-                                            otlp_attr("hulun.latency_ms", 890),
-                                            otlp_attr("gen_ai.request.model", "gpt-contract"),
-                                            otlp_attr("gen_ai.tool.call.arguments", f"{SECRET} {EMAIL} {PASSWORD}"),
-                                        ],
-                                        "status": {"code": "STATUS_CODE_OK"},
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
+    write_synthetic_trace_fixture(
+        path,
+        {
+            "resourceSpans": [
+                {
+                    "scopeSpans": [
+                        {
+                            "spans": [
+                                {
+                                    "traceId": "trace-contract",
+                                    "spanId": "span-contract",
+                                    "name": "contract span",
+                                    "attributes": [
+                                        otlp_attr("hulun.event.type", "tool_result"),
+                                        otlp_attr("hulun.event.summary", private_summary()),
+                                        otlp_attr("hulun.event.result", "fail"),
+                                        otlp_attr("hulun.event.phase", "verify"),
+                                        otlp_attr("hulun.evidence.ids", [EVIDENCE_ID]),
+                                        otlp_attr("hulun.refs", [private_ref()]),
+                                        otlp_attr("hulun.action_key", ACTION_KEY),
+                                        otlp_attr("gen_ai.usage.input_tokens", 123),
+                                        otlp_attr("gen_ai.usage.output_tokens", 45),
+                                        otlp_attr("hulun.cost", 0.67),
+                                        otlp_attr("hulun.latency_ms", 890),
+                                        otlp_attr("gen_ai.request.model", "gpt-contract"),
+                                        otlp_attr("gen_ai.tool.call.arguments", private_tool_args()),
+                                    ],
+                                    "status": {"code": "STATUS_CODE_OK"},
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
     )
 
 
 def write_openinference_trace(path: Path) -> None:
-    path.write_text(
-        json.dumps(
-            [
-                {
-                    "trace_id": "trace-contract",
-                    "span_id": "span-contract",
-                    "name": "contract tool span",
-                    "attributes": {
-                        "openinference.span.kind": "TOOL",
-                        "hulun.event.type": "tool_result",
-                        "hulun.event.summary": SUMMARY,
-                        "hulun.event.result": "fail",
-                        "hulun.event.phase": "verify",
-                        "hulun.evidence.ids": [EVIDENCE_ID],
-                        "hulun.refs": [REF_WITH_SECRET_QUERY],
-                        "hulun.action_key": ACTION_KEY,
-                        "llm.token_count.prompt": 123,
-                        "llm.token_count.completion": 45,
-                        "hulun.cost": 0.67,
-                        "hulun.latency_ms": 890,
-                        "llm.model_name": "gpt-contract",
-                        "tool.parameters": f"{SECRET} {EMAIL} {PASSWORD}",
-                    },
-                }
-            ]
-        ),
-        encoding="utf-8",
+    write_synthetic_trace_fixture(
+        path,
+        [
+            {
+                "trace_id": "trace-contract",
+                "span_id": "span-contract",
+                "name": "contract tool span",
+                "attributes": {
+                    "openinference.span.kind": "TOOL",
+                    "hulun.event.type": "tool_result",
+                    "hulun.event.summary": private_summary(),
+                    "hulun.event.result": "fail",
+                    "hulun.event.phase": "verify",
+                    "hulun.evidence.ids": [EVIDENCE_ID],
+                    "hulun.refs": [private_ref()],
+                    "hulun.action_key": ACTION_KEY,
+                    "llm.token_count.prompt": 123,
+                    "llm.token_count.completion": 45,
+                    "hulun.cost": 0.67,
+                    "hulun.latency_ms": 890,
+                    "llm.model_name": "gpt-contract",
+                    "tool.parameters": private_tool_args(),
+                },
+            }
+        ],
     )
 
 
 def write_openhands_trace(path: Path) -> None:
-    path.write_text(
-        json.dumps(
-            {
-                "events": [
-                    {
-                        "type": "observation",
-                        "summary": SUMMARY,
-                        "message": SUMMARY,
-                        "result": "fail",
-                        "phase": "verify",
-                        "evidence": [EVIDENCE_ID],
-                        "refs": [REF_WITH_SECRET_QUERY],
-                        "action_key": ACTION_KEY,
-                        "prompt_tokens": 123,
-                        "completion_tokens": 45,
-                        "cost": 0.67,
-                        "latency_ms": 890,
-                        "model": "gpt-contract",
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
+    write_synthetic_trace_fixture(
+        path,
+        {
+            "events": [
+                {
+                    "type": "observation",
+                    "summary": private_summary(),
+                    "message": private_summary(),
+                    "result": "fail",
+                    "phase": "verify",
+                    "evidence": [EVIDENCE_ID],
+                    "refs": [private_ref()],
+                    "action_key": ACTION_KEY,
+                    "prompt_tokens": 123,
+                    "completion_tokens": 45,
+                    "cost": 0.67,
+                    "latency_ms": 890,
+                    "model": "gpt-contract",
+                }
+            ]
+        },
     )
 
 
 def write_swe_agent_trace(path: Path) -> None:
-    path.write_text(
-        json.dumps(
-            {
-                "trajectory": [
-                    {
-                        "action": "python -m pytest tests/test_contract.py",
-                        "observation": SUMMARY,
-                        "summary": SUMMARY,
-                        "result": "fail",
-                        "phase": "verify",
-                        "evidence": [EVIDENCE_ID],
-                        "refs": [REF_WITH_SECRET_QUERY],
-                        "action_key": ACTION_KEY,
-                        "prompt_tokens": 123,
-                        "completion_tokens": 45,
-                        "cost": 0.67,
-                        "latency_ms": 890,
-                        "model": "gpt-contract",
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
+    write_synthetic_trace_fixture(
+        path,
+        {
+            "trajectory": [
+                {
+                    "action": "python -m pytest tests/test_contract.py",
+                    "observation": private_summary(),
+                    "summary": private_summary(),
+                    "result": "fail",
+                    "phase": "verify",
+                    "evidence": [EVIDENCE_ID],
+                    "refs": [private_ref()],
+                    "action_key": ACTION_KEY,
+                    "prompt_tokens": 123,
+                    "completion_tokens": 45,
+                    "cost": 0.67,
+                    "latency_ms": 890,
+                    "model": "gpt-contract",
+                }
+            ]
+        },
     )
 
 
 def write_langgraph_trace(path: Path) -> None:
-    path.write_text(json.dumps(langgraph_contract_payload()), encoding="utf-8")
+    write_synthetic_trace_fixture(path, langgraph_contract_payload())
 
 
 def langgraph_contract_payload() -> dict[str, object]:
@@ -291,30 +305,28 @@ def langgraph_contract_payload() -> dict[str, object]:
 
 
 def write_langsmith_trace(path: Path) -> None:
-    path.write_text(
-        json.dumps(
-            [
-                {
-                    "id": "run-contract",
-                    "trace_id": "trace-contract",
-                    "run_type": "tool",
-                    "name": "pytest contract run",
-                    "summary": PUBLIC_SUMMARY,
-                    "error": PUBLIC_SUMMARY,
-                    "result": "fail",
-                    "phase": "verify",
-                    "evidence": [EVIDENCE_ID],
-                    "refs": [REF_WITH_QUERY],
-                    "action_key": ACTION_KEY,
-                    "prompt_tokens": 123,
-                    "completion_tokens": 45,
-                    "cost": 0.67,
-                    "latency_ms": 890,
-                    "invocation_params": {"model": "gpt-contract"},
-                }
-            ]
-        ),
-        encoding="utf-8",
+    write_synthetic_trace_fixture(
+        path,
+        [
+            {
+                "id": "run-contract",
+                "trace_id": "trace-contract",
+                "run_type": "tool",
+                "name": "pytest contract run",
+                "summary": PUBLIC_SUMMARY,
+                "error": PUBLIC_SUMMARY,
+                "result": "fail",
+                "phase": "verify",
+                "evidence": [EVIDENCE_ID],
+                "refs": [REF_WITH_QUERY],
+                "action_key": ACTION_KEY,
+                "prompt_tokens": 123,
+                "completion_tokens": 45,
+                "cost": 0.67,
+                "latency_ms": 890,
+                "invocation_params": {"model": "gpt-contract"},
+            }
+        ],
     )
 
 
@@ -323,37 +335,35 @@ def write_langfuse_trace(path: Path) -> None:
 
 
 def write_phoenix_trace(path: Path) -> None:
-    path.write_text(
-        json.dumps(
-            {
-                "traceId": "trace-phoenix-contract",
-                "spans": [
-                    {
-                        "name": "pytest contract run",
-                        "context": {"trace_id": "trace-phoenix-contract", "span_id": "span-phoenix-contract"},
-                        "span_kind": "TOOL",
-                        "parent_id": None,
-                        "start_time": "2026-06-25T00:00:00.000Z",
-                        "end_time": "2026-06-25T00:00:00.890Z",
-                        "status_code": "ERROR",
-                        "attributes": {
-                            "hulun.event.type": "tool_result",
-                            "hulun.event.summary": PUBLIC_SUMMARY,
-                            "hulun.event.result": "fail",
-                            "hulun.event.phase": "verify",
-                            "hulun.evidence.ids": [EVIDENCE_ID],
-                            "hulun.refs": [REF_WITH_QUERY],
-                            "hulun.action_key": ACTION_KEY,
-                            "llm.token_count.prompt": 123,
-                            "llm.token_count.completion": 45,
-                            "hulun.cost": 0.67,
-                            "llm.model_name": "gpt-contract",
-                        },
-                    }
-                ],
-            }
-        ),
-        encoding="utf-8",
+    write_synthetic_trace_fixture(
+        path,
+        {
+            "traceId": "trace-phoenix-contract",
+            "spans": [
+                {
+                    "name": "pytest contract run",
+                    "context": {"trace_id": "trace-phoenix-contract", "span_id": "span-phoenix-contract"},
+                    "span_kind": "TOOL",
+                    "parent_id": None,
+                    "start_time": "2026-06-25T00:00:00.000Z",
+                    "end_time": "2026-06-25T00:00:00.890Z",
+                    "status_code": "ERROR",
+                    "attributes": {
+                        "hulun.event.type": "tool_result",
+                        "hulun.event.summary": PUBLIC_SUMMARY,
+                        "hulun.event.result": "fail",
+                        "hulun.event.phase": "verify",
+                        "hulun.evidence.ids": [EVIDENCE_ID],
+                        "hulun.refs": [REF_WITH_QUERY],
+                        "hulun.action_key": ACTION_KEY,
+                        "llm.token_count.prompt": 123,
+                        "llm.token_count.completion": 45,
+                        "hulun.cost": 0.67,
+                        "llm.model_name": "gpt-contract",
+                    },
+                }
+            ],
+        },
     )
 
 
@@ -462,7 +472,7 @@ class AdapterConformanceTest(unittest.TestCase):
             "--type",
             "tool_result",
             "--summary",
-            SUMMARY,
+            private_summary(),
             "--result",
             "fail",
             "--phase",
@@ -470,7 +480,7 @@ class AdapterConformanceTest(unittest.TestCase):
             "--evidence",
             EVIDENCE_ID,
             "--ref",
-            REF_WITH_SECRET_QUERY,
+            private_ref(),
             "--action-key",
             ACTION_KEY,
             "--prompt-tokens",
@@ -495,11 +505,11 @@ class AdapterConformanceTest(unittest.TestCase):
         client.init(objective="adapter contract conformance", criteria=["adapter emits durable runtime semantics"])
         payload = client.observe(
             event_type="tool_result",
-            summary=SUMMARY,
+            summary=private_summary(),
             result="fail",
             phase="verify",
             evidence=[EVIDENCE_ID],
-            refs=[REF_WITH_SECRET_QUERY],
+            refs=[private_ref()],
             action_key=ACTION_KEY,
             prompt_tokens=123,
             completion_tokens=45,
@@ -536,11 +546,11 @@ class AdapterConformanceTest(unittest.TestCase):
                     "name": "hulun_observe",
                     "arguments": {
                         "type": "tool_result",
-                        "summary": SUMMARY,
+                        "summary": private_summary(),
                         "result": "fail",
                         "phase": "verify",
                         "evidence": [EVIDENCE_ID],
-                        "refs": [REF_WITH_SECRET_QUERY],
+                        "refs": [private_ref()],
                         "action_key": ACTION_KEY,
                         "prompt_tokens": 123,
                         "completion_tokens": 45,

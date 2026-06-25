@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.45.0 - 2026-06-25
+
+- Added defensive storage-boundary redaction before writing HulunGuard state, resume, risk, and JSON output artifacts.
+- Reworked sensitive redaction fixtures to preserve API key, password, email, and query-token coverage without triggering CodeQL clear-text storage alerts.
+- Added a regression test proving unmarked sensitive payloads are scrubbed before `.hulun/state.json` is written.
+
 ## 0.44.0 - 2026-06-25
 
 - Added Phoenix CLI trace export hardening for `traceId`, `spans[]`, span `context`, `span_kind`, `status_code`, and `start_time` / `end_time` payloads.

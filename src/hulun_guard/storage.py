@@ -12,9 +12,13 @@ from .constants import (
     STATE_FILE,
     VERIFY_FILE,
 )
+from .privacy import redact_ref, redact_text
 from .reports import build_resume_markdown
 from .schemas import STATE_SCHEMA, normalize_state
 from .util import utc_now
+
+SENSITIVE_OPT_IN_MODE = "sensitive-opt-in"
+REF_LIKE_KEYS = {"path", "paths", "ref", "refs", "url", "urls"}
 
 
 def project_root(value: str | None) -> Path:
@@ -61,22 +65,45 @@ def load_state(root: Path, allow_legacy: bool = True) -> dict[str, Any]:
     return normalize_state(json.loads(path.read_text(encoding="utf-8")), source=str(path))
 
 
+def _privacy_mode(payload: dict[str, Any]) -> str | None:
+    privacy = payload.get("privacy")
+    if isinstance(privacy, dict):
+        mode = privacy.get("mode")
+        if isinstance(mode, str):
+            return mode
+    return None
+
+
+def storage_safe_payload(payload: Any, *, key: str | None = None, allow_sensitive: bool = False) -> Any:
+    if isinstance(payload, dict):
+        opt_in = allow_sensitive or _privacy_mode(payload) == SENSITIVE_OPT_IN_MODE
+        return {name: storage_safe_payload(value, key=name, allow_sensitive=opt_in) for name, value in payload.items()}
+    if isinstance(payload, list):
+        return [storage_safe_payload(value, key=key, allow_sensitive=allow_sensitive) for value in payload]
+    if isinstance(payload, str) and not allow_sensitive:
+        if key in REF_LIKE_KEYS:
+            return redact_ref(payload)
+        return redact_text(payload)
+    return payload
+
+
 def save_state(root: Path, state: dict[str, Any], write_resume: bool = True) -> None:
     state = normalize_state(state, source=str(state_path(root)))
     state["updated_at"] = utc_now()
     state["schema"] = STATE_SCHEMA
+    payload = storage_safe_payload(state)
     hulun_dir(root).mkdir(parents=True, exist_ok=True)
     state_path(root).write_text(
-        json.dumps(state, ensure_ascii=False, indent=2) + "\n",
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
     if write_resume:
-        resume_path(root).write_text(build_resume_markdown(state), encoding="utf-8")
+        resume_path(root).write_text(build_resume_markdown(payload), encoding="utf-8")
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(storage_safe_payload(payload), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def find_item(items: list[dict[str, Any]], item_id: str, label: str) -> dict[str, Any]:

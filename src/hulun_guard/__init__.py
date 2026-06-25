@@ -2,6 +2,6 @@
 
 from .sdk import HulunGuardClient, HulunGuardError
 
-__version__ = "0.44.0"
+__version__ = "0.45.0"
 
 __all__ = ["HulunGuardClient", "HulunGuardError", "__version__"]
