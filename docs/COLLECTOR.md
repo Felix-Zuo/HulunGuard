@@ -23,8 +23,8 @@ Smoke-test the installed collector without leaving a long-running server:
 python -m hulun_guard --root . collector smoke --json
 python -m hulun_guard --root . collector smoke --managed --scan --init-if-missing --json
 python -m hulun_guard --root . collector shutdown-check --json
-python -m hulun_guard --root . collector status --require-status-file --json
-python -m hulun_guard --root . collector metrics --require-status-file
+python -m hulun_guard --root . collector status --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0 --json
+python -m hulun_guard --root . collector metrics --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0
 python -m hulun_guard --root . collector alert-rules --force --json
 python -m hulun_guard --root . collector service-template --force --json
 python -m hulun_guard --root . collector service-lifecycle --force --json
@@ -99,6 +99,7 @@ Use `collector status` when an operator, service watchdog, or CI job needs to in
 ```powershell
 python -m hulun_guard collector status --json
 python -m hulun_guard collector status --require-status-file --fail-on-stale --stale-after-seconds 60 --json
+python -m hulun_guard collector status --queue-pending-threshold 100 --dead-letter-threshold 0 --json
 ```
 
 The command reads local files only:
@@ -110,16 +111,19 @@ The command reads local files only:
 
 It reports queue parse errors, dead letters, stale managed status, managed runtime `last_error`, and the latest HulunIndex summary. Missing status files are warnings by default; use `--require-status-file` for service health checks.
 
+The JSON output includes `diagnostics.summary` plus grouped diagnostics for `queue`, `status_freshness`, `runtime_lifecycle`, `dead_letter`, `managed_flush`, and `risk`. Each group has a stable `status`, bounded `signals`, a short `message`, and an `action` hint. Diagnostics are operator-facing and do not include local paths, authentication tokens, or trace contents.
+
 ## Prometheus Metrics
 
 Use `collector metrics` or `GET /metrics` when a service monitor should scrape collector health without parsing JSON:
 
 ```powershell
 python -m hulun_guard collector metrics
-python -m hulun_guard collector metrics --require-status-file --json
+python -m hulun_guard collector metrics --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0 --json
+python -m hulun_guard collector metrics --queue-pending-threshold 100 --json
 ```
 
-Metrics include queue depth, queue bytes, parse errors, dead-letter records, status-file presence/staleness, managed flush counters, managed runtime error state, runtime uptime, runtime lifecycle state, latest HulunIndex score, blocked state, and band. Local paths are not exposed as Prometheus labels.
+Metrics include queue depth, queue bytes, parse errors, dead-letter records, status-file presence/staleness, managed flush counters, managed runtime error state, runtime uptime, runtime lifecycle state, latest HulunIndex score, blocked state, and band. Local paths are not exposed as Prometheus labels. JSON metrics output embeds the same status payload and diagnostics as `collector status`.
 
 See `docs/OBSERVABILITY.md` for the full metrics and alerting deployment surface.
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.41.0 - 2026-06-25
+
+- Added grouped collector health diagnostics to `collector status --json` and embedded metrics status output.
+- Added operator action hints for queue backlog, stale status, runtime lifecycle, dead letters, managed flush, and latest HulunIndex risk without exposing local paths in diagnostics.
+- Extended collector tests, release gates, installed-wheel smoke checks, docs, and schema fixture coverage for diagnostic status scenarios.
+
 ## 0.40.0 - 2026-06-25
 
 - Added `collector shutdown-check` to verify graceful collector shutdown records a stopped runtime state and final status file.

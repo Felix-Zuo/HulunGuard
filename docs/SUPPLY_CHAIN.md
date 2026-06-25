@@ -79,7 +79,7 @@ The `main` branch should require:
 
 Before pushing a tag:
 
-1. Local gates pass: Ruff, Bandit, compileall, pytest, validation, calibration, calibration drift, threat model check, agent compatibility, integration kit verification, onboarding verification, adapter matrix, collector smoke, managed collector smoke, collector shutdown check, collector operations status, collector Prometheus metrics, collector alert-rule generation, collector service-template generation, collector service-lifecycle generation, trace doctor, schema compatibility, retention cleanup dry-run, scan benchmark, real-world benchmark, and build.
+1. Local gates pass: Ruff, Bandit, compileall, pytest, validation, calibration, calibration drift, threat model check, agent compatibility, integration kit verification, onboarding verification, adapter matrix, collector smoke, managed collector smoke, collector shutdown check, collector operations status and diagnostics, collector Prometheus metrics, collector alert-rule generation, collector service-template generation, collector service-lifecycle generation, trace doctor, schema compatibility, retention cleanup dry-run, scan benchmark, real-world benchmark, and build.
 2. `CHANGELOG.md`, `pyproject.toml`, and `src/hulun_guard/__init__.py` agree on the release version.
 3. The release commit is on `main`.
 4. The release tag points at the reviewed commit.

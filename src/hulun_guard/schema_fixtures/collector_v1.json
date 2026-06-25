@@ -225,6 +225,91 @@
       "blocked": false,
       "generated_at": "2026-06-25T00:00:01Z"
     },
+    "diagnostics": {
+      "summary": {
+        "status": "ok",
+        "ok_count": 6,
+        "warning_count": 0,
+        "critical_count": 0,
+        "action": "Continue normal collector operation."
+      },
+      "groups": [
+        {
+          "id": "queue",
+          "status": "ok",
+          "message": "Queue depth is within the configured threshold.",
+          "action": "Continue normal collector operation.",
+          "signals": {
+            "pending": 0,
+            "bytes": 0,
+            "parse_error_count": 0,
+            "pending_threshold": 100
+          }
+        },
+        {
+          "id": "status_freshness",
+          "status": "ok",
+          "message": "Collector status freshness is acceptable.",
+          "action": "Continue normal collector operation.",
+          "signals": {
+            "exists": true,
+            "source": "file",
+            "age_seconds": 1.2,
+            "stale_after_seconds": 60,
+            "stale": false,
+            "parse_error": false
+          }
+        },
+        {
+          "id": "runtime_lifecycle",
+          "status": "ok",
+          "message": "Collector runtime is running.",
+          "action": "Continue normal collector operation.",
+          "signals": {
+            "lifecycle_state": "running",
+            "uptime_seconds": 1.2,
+            "stop_reason": null,
+            "last_error_code": null
+          }
+        },
+        {
+          "id": "dead_letter",
+          "status": "ok",
+          "message": "No dead-letter backlog is present.",
+          "action": "Continue normal collector operation.",
+          "signals": {
+            "records": 0,
+            "threshold": 0
+          }
+        },
+        {
+          "id": "managed_flush",
+          "status": "ok",
+          "message": "Managed flush loop is enabled.",
+          "action": "Continue normal collector operation.",
+          "signals": {
+            "enabled": true,
+            "flush_count": 1,
+            "imported_total": 1,
+            "last_error_code": null
+          }
+        },
+        {
+          "id": "risk",
+          "status": "ok",
+          "message": "Latest HulunIndex is healthy.",
+          "action": "Continue normal collector operation.",
+          "signals": {
+            "exists": true,
+            "score": 8,
+            "band": "green",
+            "blocked": false,
+            "required_action": "continue",
+            "parse_error": false
+          }
+        }
+      ]
+    },
     "warnings": [],
     "gate": {
       "passed": true,

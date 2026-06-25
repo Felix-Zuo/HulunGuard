@@ -51,8 +51,8 @@ jobs:
           python -m hulun_guard --root "$tmp" collector smoke --json
           python -m hulun_guard --root "$tmp" collector smoke --managed --scan --init-if-missing --json
           python -m hulun_guard --root "$tmp" collector shutdown-check --json
-          python -m hulun_guard --root "$tmp" collector status --require-status-file --json
-          python -m hulun_guard --root "$tmp" collector metrics --require-status-file
+          python -m hulun_guard --root "$tmp" collector status --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0 --json
+          python -m hulun_guard --root "$tmp" collector metrics --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0
           python -m hulun_guard --root "$tmp" collector alert-rules --output "$tmp/alert-rules" --force --json
           python -m hulun_guard --root "$tmp" collector service-template --output "$tmp/service-templates" --force --json
           python -m hulun_guard --root "$tmp" collector service-lifecycle --output "$tmp/service-lifecycle" --force --json

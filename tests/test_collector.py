@@ -3,9 +3,11 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -26,9 +28,11 @@ from hulun_guard.collector import (
     CollectorRuntimeState,
     build_collector_server,
     collector_flush_once,
+    collector_operations_status,
     collector_status_path,
 )
-from hulun_guard.queue import queue_status
+from hulun_guard.queue import dead_letter_path, enqueue_observations, queue_status
+from hulun_guard.storage import risk_path, write_json
 
 
 def otlp_payload(summary: str = "collector accepted otlp json") -> dict[str, Any]:
@@ -80,6 +84,30 @@ def request_text(url: str, *, headers: dict[str, str] | None = None) -> tuple[in
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8")
         return int(exc.code), body, str(exc.headers.get("Content-Type") or "")
+
+
+def diagnostic_group(payload: dict[str, Any], group_id: str) -> dict[str, Any]:
+    groups = payload["diagnostics"]["groups"]
+    for group in groups:
+        if group["id"] == group_id:
+            return group
+    raise AssertionError(f"Missing diagnostic group: {group_id}")
+
+
+def write_green_risk(root: str) -> None:
+    write_json(
+        risk_path(Path(root)),
+        {
+            "schema": "hulun.risk.v1",
+            "generated_at": "2026-06-25T00:00:00Z",
+            "score": 8,
+            "slop_index": 8,
+            "band": "green",
+            "threshold": 66,
+            "blocked": False,
+            "required_action": "continue",
+        },
+    )
 
 
 class CollectorTest(unittest.TestCase):
@@ -156,6 +184,8 @@ class CollectorTest(unittest.TestCase):
             self.assertEqual(payload["dead_letter"]["records"], 0)
             self.assertTrue(payload["risk"]["exists"])
             self.assertEqual(payload["risk"]["band"], "yellow")
+            self.assertIn("diagnostics", payload)
+            self.assertIn(diagnostic_group(payload, "risk")["status"], {"warning", "critical"})
 
     def test_collector_metrics_reports_prometheus_health(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -174,6 +204,15 @@ class CollectorTest(unittest.TestCase):
             self.assertIn("hulun_collector_risk_band", metric_names)
             self.assertIn("hulun_collector_runtime_state", metric_names)
             self.assertIn("hulun_collector_runtime_uptime_seconds", metric_names)
+            status = payload["status"]
+            diagnostics = status["diagnostics"]
+            self.assertIn(diagnostics["summary"]["status"], {"ok", "warning", "critical"})
+            diagnostic_groups = {group["id"] for group in diagnostics["groups"]}
+            self.assertEqual(
+                diagnostic_groups,
+                {"queue", "status_freshness", "runtime_lifecycle", "dead_letter", "managed_flush", "risk"},
+            )
+            self.assertNotIn(str(Path(tmp)), json.dumps(diagnostics, ensure_ascii=False))
             self.assertIn("hulun_collector_queue_pending 0", payload["text"])
             self.assertIn('hulun_collector_risk_band{band="yellow"} 1', payload["text"])
             self.assertIn('hulun_collector_runtime_state{state="running"} 1', payload["text"])
@@ -183,6 +222,153 @@ class CollectorTest(unittest.TestCase):
             self.assertEqual(code, 0, out)
             self.assertIn("# HELP hulun_collector_up", out)
             self.assertIn("hulun_collector_up 1", out)
+
+    def test_collector_status_reports_green_grouped_diagnostics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = CollectorConfig(root=tmp, port=0, flush_interval_seconds=5)
+            runtime_state = CollectorRuntimeState()
+            collector_module.write_collector_status(config, runtime_state)
+            write_green_risk(tmp)
+
+            payload = collector_operations_status(tmp, require_status_file=True)
+            self.assertTrue(payload["gate"]["passed"], payload["gate"])
+            summary = payload["diagnostics"]["summary"]
+            self.assertEqual(summary["status"], "ok")
+            self.assertEqual(summary["critical_count"], 0)
+            self.assertEqual(summary["warning_count"], 0)
+            groups = {group["id"]: group["status"] for group in payload["diagnostics"]["groups"]}
+            self.assertEqual(
+                groups,
+                {
+                    "queue": "ok",
+                    "status_freshness": "ok",
+                    "runtime_lifecycle": "ok",
+                    "dead_letter": "ok",
+                    "managed_flush": "ok",
+                    "risk": "ok",
+                },
+            )
+            diagnostics_text = json.dumps(payload["diagnostics"], ensure_ascii=False)
+            self.assertNotIn(str(Path(tmp)), diagnostics_text)
+            self.assertNotIn("collector_status.json", diagnostics_text)
+
+    def test_collector_status_diagnoses_stale_status_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = CollectorConfig(root=tmp, port=0, flush_interval_seconds=5)
+            collector_module.write_collector_status(config, CollectorRuntimeState())
+            write_green_risk(tmp)
+            stale_time = time.time() - 120
+            os.utime(collector_status_path(tmp), (stale_time, stale_time))
+
+            payload = collector_operations_status(tmp, require_status_file=True, stale_after_seconds=1)
+            self.assertTrue(payload["gate"]["passed"], payload["gate"])
+            self.assertEqual(payload["diagnostics"]["summary"]["status"], "warning")
+            status_group = diagnostic_group(payload, "status_freshness")
+            self.assertEqual(status_group["status"], "warning")
+            self.assertTrue(status_group["signals"]["stale"])
+
+            failing = collector_operations_status(tmp, require_status_file=True, stale_after_seconds=1, fail_on_stale=True)
+            self.assertFalse(failing["gate"]["passed"])
+            self.assertEqual(diagnostic_group(failing, "status_freshness")["status"], "critical")
+
+    def test_collector_status_diagnoses_runtime_error_without_leaking_message(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = CollectorConfig(root=tmp, port=0, flush_interval_seconds=5)
+            runtime_state = CollectorRuntimeState()
+            runtime_state.last_error = {
+                "code": "managed_loop_failed",
+                "message": f"secret token at {Path(tmp)}",
+                "generated_at": "2026-06-25T00:00:00Z",
+            }
+            collector_module.write_collector_status(config, runtime_state)
+            write_green_risk(tmp)
+
+            payload = collector_operations_status(tmp, require_status_file=True)
+            self.assertFalse(payload["gate"]["passed"])
+            self.assertIn("managed_loop_failed", payload["gate"]["failures"][0])
+            self.assertNotIn("secret token", payload["gate"]["failures"][0])
+            self.assertEqual(diagnostic_group(payload, "runtime_lifecycle")["status"], "critical")
+            self.assertEqual(diagnostic_group(payload, "runtime_lifecycle")["signals"]["last_error_code"], "managed_loop_failed")
+            diagnostics_text = json.dumps(payload["diagnostics"], ensure_ascii=False)
+            self.assertIn("managed_loop_failed", diagnostics_text)
+            self.assertNotIn("secret token", diagnostics_text)
+            self.assertNotIn(str(Path(tmp)), diagnostics_text)
+
+    def test_collector_status_diagnoses_stopped_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = CollectorConfig(root=tmp, port=0, flush_interval_seconds=5)
+            runtime_state = CollectorRuntimeState()
+            collector_module._mark_runtime_stopped(runtime_state, reason="unit_test")  # noqa: SLF001
+            collector_module.write_collector_status(config, runtime_state)
+            write_green_risk(tmp)
+
+            payload = collector_operations_status(tmp, require_status_file=True)
+            self.assertTrue(payload["gate"]["passed"], payload["gate"])
+            self.assertEqual(payload["diagnostics"]["summary"]["status"], "warning")
+            runtime_group = diagnostic_group(payload, "runtime_lifecycle")
+            self.assertEqual(runtime_group["status"], "warning")
+            self.assertEqual(runtime_group["signals"]["lifecycle_state"], "stopped")
+            self.assertEqual(runtime_group["signals"]["stop_reason"], "unit_test")
+
+    def test_collector_status_diagnoses_queue_backlog(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = CollectorConfig(root=tmp, port=0, flush_interval_seconds=5)
+            collector_module.write_collector_status(config, CollectorRuntimeState())
+            write_green_risk(tmp)
+            enqueue_observations(
+                tmp,
+                [
+                    {"type": "tool_result", "phase": "verify", "summary": "queued one", "result": "pass"},
+                    {"type": "tool_result", "phase": "verify", "summary": "queued two", "result": "pass"},
+                ],
+            )
+
+            payload = collector_operations_status(tmp, require_status_file=True, queue_pending_threshold=1)
+            self.assertTrue(payload["gate"]["passed"], payload["gate"])
+            self.assertEqual(payload["diagnostics"]["summary"]["status"], "warning")
+            queue_group = diagnostic_group(payload, "queue")
+            self.assertEqual(queue_group["status"], "warning")
+            self.assertEqual(queue_group["signals"]["pending"], 2)
+            self.assertEqual(queue_group["signals"]["pending_threshold"], 1)
+
+    def test_collector_status_diagnoses_dead_letters(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = CollectorConfig(root=tmp, port=0, flush_interval_seconds=5)
+            collector_module.write_collector_status(config, CollectorRuntimeState())
+            write_green_risk(tmp)
+            path = dead_letter_path(tmp)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('{"schema":"hulun.ingest_dead_letter.v1","reason":"unit-test"}\n', encoding="utf-8")
+
+            payload = collector_operations_status(tmp, require_status_file=True)
+            self.assertFalse(payload["gate"]["passed"])
+            self.assertEqual(payload["diagnostics"]["summary"]["status"], "critical")
+            dead_group = diagnostic_group(payload, "dead_letter")
+            self.assertEqual(dead_group["status"], "critical")
+            self.assertEqual(dead_group["signals"]["records"], 1)
+
+    def test_collector_status_warns_on_unknown_risk_band(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = CollectorConfig(root=tmp, port=0, flush_interval_seconds=5)
+            collector_module.write_collector_status(config, CollectorRuntimeState())
+            write_json(
+                risk_path(Path(tmp)),
+                {
+                    "schema": "hulun.risk.v1",
+                    "generated_at": "2026-06-25T00:00:00Z",
+                    "score": 8,
+                    "slop_index": 8,
+                    "blocked": False,
+                    "required_action": "continue",
+                },
+            )
+
+            payload = collector_operations_status(tmp, require_status_file=True)
+            self.assertTrue(payload["gate"]["passed"], payload["gate"])
+            self.assertEqual(payload["diagnostics"]["summary"]["status"], "warning")
+            risk_group = diagnostic_group(payload, "risk")
+            self.assertEqual(risk_group["status"], "warning")
+            self.assertIsNone(risk_group["signals"]["band"])
 
     def test_collector_alert_rules_generates_prometheus_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

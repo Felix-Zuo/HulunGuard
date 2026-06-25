@@ -26,6 +26,7 @@ Every release must pass:
 - Local HTTP collector smoke gate.
 - Managed collector flush/scan smoke gate.
 - Collector graceful shutdown check gate.
+- Collector grouped diagnostics gate.
 - Collector Prometheus metrics gate.
 - Collector alert-rule generation gate.
 - Collector operations status, service-template generation, and service-lifecycle generation gates.
