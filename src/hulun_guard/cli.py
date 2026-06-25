@@ -671,6 +671,8 @@ def cmd_collector_status(args: argparse.Namespace) -> int:
         stale_after_seconds=args.stale_after_seconds,
         require_status_file=args.require_status_file,
         fail_on_stale=args.fail_on_stale,
+        queue_pending_threshold=args.queue_pending_threshold,
+        dead_letter_threshold=args.dead_letter_threshold,
     )
     if args.json:
         print(collector_json(payload), end="")
@@ -682,6 +684,11 @@ def cmd_collector_status(args: argparse.Namespace) -> int:
         print(f"Collector operations status: {status_label}")
         print(f"Pending queue: {payload['queue']['pending']}")
         print(f"Dead letters: {payload['dead_letter']['records']}")
+        diagnostics = payload.get("diagnostics") if isinstance(payload.get("diagnostics"), dict) else {}
+        summary = diagnostics.get("summary") if isinstance(diagnostics.get("summary"), dict) else {}
+        if summary:
+            print(f"Diagnostics: {summary.get('status', 'unknown')} ({summary.get('critical_count', 0)} critical, {summary.get('warning_count', 0)} warning)")
+            print(f"Action: {summary.get('action', 'Continue normal collector operation.')}")
         status_file = payload["status_file"]
         print(f"Status file: {'present' if status_file['exists'] else 'absent'} ({status_file['path']})")
         if status_file["age_seconds"] is not None:
@@ -702,6 +709,8 @@ def cmd_collector_metrics(args: argparse.Namespace) -> int:
         stale_after_seconds=args.stale_after_seconds,
         require_status_file=args.require_status_file,
         fail_on_stale=args.fail_on_stale,
+        queue_pending_threshold=args.queue_pending_threshold,
+        dead_letter_threshold=args.dead_letter_threshold,
     )
     if args.json:
         print(collector_json(payload), end="")
@@ -2236,6 +2245,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     collector_status_cmd = collector_sub.add_parser("status", parents=[root_parent], help="Inspect offline collector operations health from local queue, status, and risk files.")
     collector_status_cmd.add_argument("--stale-after-seconds", type=int, default=60, help="Mark the managed status file stale after this many seconds. Defaults to 60.")
+    collector_status_cmd.add_argument("--queue-pending-threshold", type=int, default=100, help="Warn when pending collector observations exceed this count. Defaults to 100.")
+    collector_status_cmd.add_argument("--dead-letter-threshold", type=int, default=0, help="Mark dead-letter diagnostics critical when records exceed this count. Defaults to 0.")
     collector_status_cmd.add_argument("--require-status-file", action="store_true", help="Fail when .hulun/collector_status.json is missing.")
     collector_status_cmd.add_argument("--fail-on-stale", action="store_true", help="Fail when the managed status file is older than --stale-after-seconds.")
     collector_status_cmd.add_argument("--json", action="store_true")
@@ -2243,6 +2254,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     collector_metrics_cmd = collector_sub.add_parser("metrics", parents=[root_parent], help="Export collector operations health as Prometheus metrics.")
     collector_metrics_cmd.add_argument("--stale-after-seconds", type=int, default=60, help="Mark the managed status file stale after this many seconds. Defaults to 60.")
+    collector_metrics_cmd.add_argument("--queue-pending-threshold", type=int, default=100, help="Use this pending-queue threshold in the embedded diagnostics. Defaults to 100.")
+    collector_metrics_cmd.add_argument("--dead-letter-threshold", type=int, default=0, help="Use this dead-letter threshold in the embedded diagnostics. Defaults to 0.")
     collector_metrics_cmd.add_argument("--require-status-file", action="store_true", help="Fail when .hulun/collector_status.json is missing.")
     collector_metrics_cmd.add_argument("--fail-on-stale", action="store_true", help="Fail when the managed status file is older than --stale-after-seconds.")
     collector_metrics_cmd.add_argument("--json", action="store_true")

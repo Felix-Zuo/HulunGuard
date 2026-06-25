@@ -112,15 +112,15 @@ python .\hulun.py collector serve --flush-interval-seconds 5 --scan-on-flush --i
 python .\hulun.py collector smoke --json
 python .\hulun.py collector smoke --managed --scan --init-if-missing --json
 python .\hulun.py collector shutdown-check --json
-python .\hulun.py collector status --require-status-file --json
-python .\hulun.py collector metrics --require-status-file
+python .\hulun.py collector status --require-status-file --queue-pending-threshold 100 --json
+python .\hulun.py collector metrics --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0
 python .\hulun.py collector alert-rules --output .\.hulun\collector-alerts --force --json
 python .\hulun.py collector service-template --output .\.hulun\collector-service --force --json
 python .\hulun.py collector service-lifecycle --output .\.hulun\collector-service-lifecycle --force --json
 python .\hulun.py batch flush --scan --init-if-missing
 ```
 
-The collector listens on `127.0.0.1:4318` by default. `POST /v1/traces` accepts OTLP/HTTP JSON, while `POST /ingest/<format>` accepts adapter payloads such as `generic`, `langgraph`, `langsmith`, `langfuse`, `phoenix`, and `openai-agents`. Queue-only mode is the default. Managed mode periodically flushes queued observations and can update `.hulun/risk.json` automatically. `collector shutdown-check` verifies that a temporary collector can stop gracefully and write a final stopped runtime status. `collector status` reads queue, status, and risk files without opening a server. `collector metrics` and `GET /metrics` export Prometheus health metrics without local paths as labels. `collector alert-rules` writes Prometheus alerting rule files for those metrics without installing them or changing Alertmanager routing. `collector service-template` generates systemd, launchd, and Windows Scheduled Task templates without installing them or embedding tokens. `collector service-lifecycle` generates reviewed install/start/stop/restart/status/uninstall controls for those service targets without running them. Non-loopback binds require `--allow-remote --token`.
+The collector listens on `127.0.0.1:4318` by default. `POST /v1/traces` accepts OTLP/HTTP JSON, while `POST /ingest/<format>` accepts adapter payloads such as `generic`, `langgraph`, `langsmith`, `langfuse`, `phoenix`, and `openai-agents`. Queue-only mode is the default. Managed mode periodically flushes queued observations and can update `.hulun/risk.json` automatically. `collector shutdown-check` verifies that a temporary collector can stop gracefully and write a final stopped runtime status. `collector status` reads queue, status, and risk files without opening a server and includes grouped diagnostics with operator actions for queue, status freshness, runtime lifecycle, dead letters, managed flush, and risk. `collector metrics` and `GET /metrics` export Prometheus health metrics without local paths as labels. `collector alert-rules` writes Prometheus alerting rule files for those metrics without installing them or changing Alertmanager routing. `collector service-template` generates systemd, launchd, and Windows Scheduled Task templates without installing them or embedding tokens. `collector service-lifecycle` generates reviewed install/start/stop/restart/status/uninstall controls for those service targets without running them. Non-loopback binds require `--allow-remote --token`.
 
 By default, runtime observations and imported traces redact known secrets, emails, URL query strings, private home paths, and raw payload fields such as prompts, completions, outputs, and tool arguments. Use `--include-sensitive --retention-days 7` only for trusted local debugging.
 
@@ -156,8 +156,8 @@ python .\hulun.py adapter-matrix --json
 python .\hulun.py collector smoke --json
 python .\hulun.py collector smoke --managed --scan --init-if-missing --json
 python .\hulun.py collector shutdown-check --json
-python .\hulun.py collector status --require-status-file --json
-python .\hulun.py collector metrics --require-status-file
+python .\hulun.py collector status --require-status-file --queue-pending-threshold 100 --json
+python .\hulun.py collector metrics --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0
 python .\hulun.py collector alert-rules --output .\.hulun\collector-alerts --force --json
 python .\hulun.py collector service-template --output .\.hulun\collector-service --force --json
 python .\hulun.py collector service-lifecycle --output .\.hulun\collector-service-lifecycle --force --json

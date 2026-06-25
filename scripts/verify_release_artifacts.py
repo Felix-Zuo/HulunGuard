@@ -179,22 +179,65 @@ def verify_installed_commands(
     ):
         raise ArtifactSmokeError("collector shutdown-check failed from the installed wheel")
     collector_status = run_json_command(
-        [str(hulun_path), "--root", str(managed_collector_root), "collector", "status", "--require-status-file", "--json"],
+        [
+            str(hulun_path),
+            "--root",
+            str(managed_collector_root),
+            "collector",
+            "status",
+            "--require-status-file",
+            "--queue-pending-threshold",
+            "100",
+            "--dead-letter-threshold",
+            "0",
+            "--json",
+        ],
         cwd=cwd,
         env=env,
     )
     if collector_status.get("schema") != "hulun.collector.v1" or not collector_status.get("gate", {}).get("passed"):
         raise ArtifactSmokeError("collector status failed from the installed wheel")
+    expected_diagnostic_groups = {"queue", "status_freshness", "runtime_lifecycle", "dead_letter", "managed_flush", "risk"}
+    diagnostics = collector_status.get("diagnostics") if isinstance(collector_status.get("diagnostics"), dict) else {}
+    diagnostic_summary = diagnostics.get("summary") if isinstance(diagnostics.get("summary"), dict) else {}
+    diagnostic_groups = diagnostics.get("groups") if isinstance(diagnostics.get("groups"), list) else []
+    diagnostic_group_ids = {item.get("id") for item in diagnostic_groups if isinstance(item, dict)}
+    if (
+        diagnostic_summary.get("status") not in {"ok", "warning", "critical"}
+        or not expected_diagnostic_groups.issubset(diagnostic_group_ids)
+        or str(managed_collector_root) in json.dumps(diagnostics, ensure_ascii=False)
+    ):
+        raise ArtifactSmokeError("collector status diagnostics failed from the installed wheel")
     collector_metrics = run_json_command(
-        [str(hulun_path), "--root", str(managed_collector_root), "collector", "metrics", "--require-status-file", "--json"],
+        [
+            str(hulun_path),
+            "--root",
+            str(managed_collector_root),
+            "collector",
+            "metrics",
+            "--require-status-file",
+            "--queue-pending-threshold",
+            "100",
+            "--dead-letter-threshold",
+            "0",
+            "--json",
+        ],
         cwd=cwd,
         env=env,
     )
+    metrics_status = collector_metrics.get("status") if isinstance(collector_metrics.get("status"), dict) else {}
+    metrics_diagnostics = metrics_status.get("diagnostics") if isinstance(metrics_status.get("diagnostics"), dict) else {}
+    metrics_diagnostic_summary = metrics_diagnostics.get("summary") if isinstance(metrics_diagnostics.get("summary"), dict) else {}
+    metrics_diagnostic_groups = metrics_diagnostics.get("groups") if isinstance(metrics_diagnostics.get("groups"), list) else []
+    metrics_diagnostic_group_ids = {item.get("id") for item in metrics_diagnostic_groups if isinstance(item, dict)}
     if (
         collector_metrics.get("schema") != "hulun.collector.v1"
         or collector_metrics.get("operation") != "metrics"
         or not collector_metrics.get("gate", {}).get("passed")
         or "hulun_collector_up 1" not in str(collector_metrics.get("text") or "")
+        or metrics_diagnostic_summary.get("status") not in {"ok", "warning", "critical"}
+        or not expected_diagnostic_groups.issubset(metrics_diagnostic_group_ids)
+        or str(managed_collector_root) in json.dumps(metrics_diagnostics, ensure_ascii=False)
     ):
         raise ArtifactSmokeError("collector metrics failed from the installed wheel")
     alert_rule_dir = cwd / "collector-alert-rules"

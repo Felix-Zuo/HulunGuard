@@ -183,8 +183,8 @@ python -m hulun_guard collector serve --flush-interval-seconds 5 --scan-on-flush
 Check operations status without opening the HTTP server, or generate reviewed service templates for a local service manager:
 
 ```powershell
-python -m hulun_guard collector status --require-status-file --json
-python -m hulun_guard collector metrics --require-status-file
+python -m hulun_guard collector status --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0 --json
+python -m hulun_guard collector metrics --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0
 python -m hulun_guard collector shutdown-check --json
 python -m hulun_guard collector alert-rules --output .hulun/collector-alerts --force --json
 python -m hulun_guard collector service-template --output .hulun/collector-service --force --json
@@ -196,8 +196,8 @@ Run the non-blocking smoke and operations checks in CI or release gates:
 ```powershell
 python -m hulun_guard collector smoke --json
 python -m hulun_guard collector smoke --managed --scan --init-if-missing --json
-python -m hulun_guard collector status --require-status-file --json
-python -m hulun_guard collector metrics --require-status-file
+python -m hulun_guard collector status --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0 --json
+python -m hulun_guard collector metrics --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0
 python -m hulun_guard collector shutdown-check --json
 python -m hulun_guard collector alert-rules --output .hulun/collector-alerts --force --json
 python -m hulun_guard collector service-template --output .hulun/collector-service --force --json

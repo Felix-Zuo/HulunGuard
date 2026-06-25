@@ -7,17 +7,19 @@ HulunGuard exposes collector health and HulunIndex risk state through local JSON
 Use status when a supervisor, CI job, or support script needs a structured local health report:
 
 ```powershell
-python -m hulun_guard collector status --require-status-file --json
+python -m hulun_guard collector status --require-status-file --queue-pending-threshold 100 --json
 ```
 
 The command reads `.hulun/ingest_queue.jsonl`, `.hulun/ingest_dead_letter.jsonl`, `.hulun/collector_status.json`, and `.hulun/risk.json`. It does not start a server.
+
+The JSON payload includes `diagnostics.summary` and grouped diagnostics for queue, status freshness, runtime lifecycle, dead letters, managed flush, and latest HulunIndex risk. Diagnostics contain bounded counters, state names, error codes, messages, and action hints. They do not include local paths, tokens, or trace contents.
 
 ## Prometheus Metrics
 
 Use the CLI for offline checks:
 
 ```powershell
-python -m hulun_guard collector metrics --require-status-file
+python -m hulun_guard collector metrics --require-status-file --queue-pending-threshold 100 --dead-letter-threshold 0
 ```
 
 Use the HTTP endpoint when the collector is running:

@@ -344,12 +344,317 @@ def _round_age(value: float | None) -> float | None:
     return None if value is None else round(value, 3)
 
 
+def _int_value(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _diagnostic_group(
+    group_id: str,
+    *,
+    status: str,
+    message: str,
+    action: str,
+    signals: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "id": group_id,
+        "status": status,
+        "message": message,
+        "action": action,
+        "signals": signals,
+    }
+
+
+def _worst_diagnostic_status(groups: list[dict[str, Any]]) -> str:
+    ranks = {"ok": 0, "warning": 1, "critical": 2}
+    worst = "ok"
+    for group in groups:
+        status = str(group.get("status") or "warning")
+        if ranks.get(status, 1) > ranks[worst]:
+            worst = status
+    return worst
+
+
+def _last_error_code(last_error: Any) -> str | None:
+    if isinstance(last_error, dict):
+        code = last_error.get("code")
+        return str(code) if code else "present"
+    return "present" if last_error else None
+
+
+def _collector_health_diagnostics(
+    *,
+    queue: dict[str, Any],
+    dead_letter: dict[str, Any],
+    status_file: dict[str, Any],
+    managed: dict[str, Any] | None,
+    risk: dict[str, Any],
+    queue_pending_threshold: int,
+    dead_letter_threshold: int,
+) -> dict[str, Any]:
+    queue_pending = _int_value(queue.get("pending"))
+    queue_parse_errors = _int_value(queue.get("parse_error_count"))
+    queue_status_value = "critical" if queue_parse_errors > 0 else "warning" if queue_pending > queue_pending_threshold else "ok"
+    queue_message = (
+        "Queue contains malformed records."
+        if queue_parse_errors > 0
+        else "Queue backlog is above the configured threshold."
+        if queue_status_value == "warning"
+        else "Queue depth is within the configured threshold."
+    )
+    queue_action = (
+        "Review local queue records, move malformed records aside, then re-run collector status."
+        if queue_parse_errors > 0
+        else "Increase managed flush cadence or run batch flush before the backlog grows further."
+        if queue_status_value == "warning"
+        else "Continue normal collector operation."
+    )
+
+    dead_letter_records = _int_value(dead_letter.get("records"))
+    dead_letter_status = "critical" if dead_letter_records > dead_letter_threshold else "ok"
+    dead_letter_message = "Dead-letter records require operator review." if dead_letter_status == "critical" else "No dead-letter backlog is present."
+    dead_letter_action = (
+        "Review local dead-letter records, fix malformed payloads, and re-ingest the corrected observations."
+        if dead_letter_status == "critical"
+        else "Continue normal collector operation."
+    )
+
+    status_exists = bool(status_file.get("exists"))
+    status_stale = bool(status_file.get("stale"))
+    status_parse_error = bool(status_file.get("parse_error"))
+    status_required = bool(status_file.get("required"))
+    fail_on_stale = bool(status_file.get("fail_on_stale"))
+    status_source = str(status_file.get("source") or "file")
+    if status_parse_error or (status_required and not status_exists) or (status_stale and fail_on_stale):
+        status_file_status = "critical"
+    elif status_stale or (not status_exists and status_source != "runtime"):
+        status_file_status = "warning"
+    else:
+        status_file_status = "ok"
+    status_file_message = (
+        "Collector status JSON is not readable."
+        if status_parse_error
+        else "Required collector status file is missing."
+        if status_required and not status_exists
+        else "Collector status is stale."
+        if status_stale
+        else "Collector status file is absent."
+        if not status_exists and status_source != "runtime"
+        else "Collector status freshness is acceptable."
+    )
+    status_file_action = (
+        "Regenerate collector status by restarting managed collector mode."
+        if status_parse_error
+        else "Start collector managed mode or disable require-status-file for queue-only checks."
+        if status_required and not status_exists
+        else "Check the collector service scheduler and restart the managed collector if it is not refreshing."
+        if status_stale
+        else "Run collector serve with managed mode when service monitors need runtime counters."
+        if not status_exists and status_source != "runtime"
+        else "Continue normal collector operation."
+    )
+
+    managed_payload = managed if isinstance(managed, dict) else {}
+    runtime = managed_payload.get("runtime") if isinstance(managed_payload.get("runtime"), dict) else {}
+    lifecycle_state = str(runtime.get("lifecycle_state") or "unknown")
+    last_error_code = _last_error_code(runtime.get("last_error"))
+    if last_error_code:
+        runtime_status = "critical"
+    elif lifecycle_state in {"stopping", "stopped", "unknown"}:
+        runtime_status = "warning"
+    else:
+        runtime_status = "ok"
+    runtime_message = (
+        "Collector runtime recorded an error."
+        if last_error_code
+        else "Collector runtime is stopped."
+        if lifecycle_state == "stopped"
+        else "Collector runtime is stopping."
+        if lifecycle_state == "stopping"
+        else "Collector runtime state is unavailable."
+        if lifecycle_state == "unknown"
+        else "Collector runtime is running."
+    )
+    runtime_action = (
+        "Check collector service logs and run collector status after the next managed flush."
+        if last_error_code
+        else "Start or restart the collector service if monitoring should be active."
+        if lifecycle_state == "stopped"
+        else "Wait for shutdown to complete, then confirm the service supervisor state."
+        if lifecycle_state == "stopping"
+        else "Run managed collector mode to publish runtime lifecycle counters."
+        if lifecycle_state == "unknown"
+        else "Continue normal collector operation."
+    )
+
+    managed_enabled = bool(managed_payload.get("enabled"))
+    flush_count = _int_value(runtime.get("flush_count"))
+    imported_total = _int_value(runtime.get("imported_total"))
+    if last_error_code:
+        managed_status = "critical"
+    elif managed_enabled and queue_pending > 0 and flush_count == 0:
+        managed_status = "warning"
+    else:
+        managed_status = "ok"
+    managed_message = (
+        "Managed flush loop has a recorded error."
+        if last_error_code
+        else "Managed flush has not imported the pending queue yet."
+        if managed_status == "warning"
+        else "Managed flush loop is enabled."
+        if managed_enabled
+        else "Collector is running in queue-only mode."
+    )
+    managed_action = (
+        "Check service logs, fix the flush failure, and rerun collector status."
+        if last_error_code
+        else "Wait for the next flush interval or run batch flush manually."
+        if managed_status == "warning"
+        else "Continue normal collector operation."
+    )
+
+    risk_exists = bool(risk.get("exists"))
+    risk_parse_error = bool(risk.get("parse_error"))
+    risk_blocked = bool(risk.get("blocked"))
+    risk_band = str(risk.get("band") or "unknown")
+    if risk_parse_error or risk_blocked or risk_band == "red":
+        risk_status = "critical"
+    elif not risk_exists or risk_band in {"yellow", "unknown"}:
+        risk_status = "warning"
+    else:
+        risk_status = "ok"
+    risk_message = (
+        "Latest HulunIndex risk JSON is not readable."
+        if risk_parse_error
+        else "Latest HulunIndex blocks agent continuation."
+        if risk_blocked
+        else "Latest HulunIndex is red."
+        if risk_band == "red"
+        else "No latest HulunIndex risk file is available."
+        if not risk_exists
+        else "Latest HulunIndex band is unavailable."
+        if risk_band == "unknown"
+        else "Latest HulunIndex requests a checkpoint."
+        if risk_band == "yellow"
+        else "Latest HulunIndex is healthy."
+    )
+    risk_action = (
+        "Regenerate the risk file with a scan after confirming the local ledger is readable."
+        if risk_parse_error
+        else "Recover the monitored agent state before continuing work."
+        if risk_blocked or risk_band == "red"
+        else "Run a checkpoint or add missing evidence before finalizing the monitored work."
+        if risk_band == "yellow"
+        else "Regenerate the risk file with a scan before relying on the health signal."
+        if risk_band == "unknown"
+        else "Run managed flush with scan or batch flush --scan when a risk signal is required."
+        if not risk_exists
+        else "Continue normal collector operation."
+    )
+
+    groups = [
+        _diagnostic_group(
+            "queue",
+            status=queue_status_value,
+            message=queue_message,
+            action=queue_action,
+            signals={
+                "pending": queue_pending,
+                "bytes": _int_value(queue.get("bytes")),
+                "parse_error_count": queue_parse_errors,
+                "pending_threshold": int(queue_pending_threshold),
+            },
+        ),
+        _diagnostic_group(
+            "status_freshness",
+            status=status_file_status,
+            message=status_file_message,
+            action=status_file_action,
+            signals={
+                "exists": status_exists,
+                "source": status_source,
+                "age_seconds": status_file.get("age_seconds"),
+                "stale_after_seconds": status_file.get("stale_after_seconds"),
+                "stale": status_stale,
+                "parse_error": status_parse_error,
+            },
+        ),
+        _diagnostic_group(
+            "runtime_lifecycle",
+            status=runtime_status,
+            message=runtime_message,
+            action=runtime_action,
+            signals={
+                "lifecycle_state": lifecycle_state,
+                "uptime_seconds": runtime.get("uptime_seconds"),
+                "stop_reason": runtime.get("stop_reason"),
+                "last_error_code": last_error_code,
+            },
+        ),
+        _diagnostic_group(
+            "dead_letter",
+            status=dead_letter_status,
+            message=dead_letter_message,
+            action=dead_letter_action,
+            signals={"records": dead_letter_records, "threshold": int(dead_letter_threshold)},
+        ),
+        _diagnostic_group(
+            "managed_flush",
+            status=managed_status,
+            message=managed_message,
+            action=managed_action,
+            signals={
+                "enabled": managed_enabled,
+                "flush_count": flush_count,
+                "imported_total": imported_total,
+                "last_error_code": last_error_code,
+            },
+        ),
+        _diagnostic_group(
+            "risk",
+            status=risk_status,
+            message=risk_message,
+            action=risk_action,
+            signals={
+                "exists": risk_exists,
+                "score": risk.get("score"),
+                "band": risk.get("band"),
+                "blocked": risk_blocked,
+                "required_action": risk.get("required_action"),
+                "parse_error": risk_parse_error,
+            },
+        ),
+    ]
+    summary_status = _worst_diagnostic_status(groups)
+    counts = {
+        "ok": sum(1 for group in groups if group["status"] == "ok"),
+        "warning": sum(1 for group in groups if group["status"] == "warning"),
+        "critical": sum(1 for group in groups if group["status"] == "critical"),
+    }
+    first_action = next((str(group["action"]) for group in groups if group["status"] == summary_status and group["action"]), "Continue normal collector operation.")
+    return {
+        "summary": {
+            "status": summary_status,
+            "ok_count": counts["ok"],
+            "warning_count": counts["warning"],
+            "critical_count": counts["critical"],
+            "action": first_action,
+        },
+        "groups": groups,
+    }
+
+
 def collector_operations_status(
     root: str | Path | None = None,
     *,
     stale_after_seconds: int = 60,
     require_status_file: bool = False,
     fail_on_stale: bool = False,
+    queue_pending_threshold: int = 100,
+    dead_letter_threshold: int = 0,
     live_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     root_path = _resolved_root(root)
@@ -385,11 +690,42 @@ def collector_operations_status(
         else:
             warnings.append(message)
     if last_error:
-        failures.append(f"Managed collector reported last_error: {last_error}.")
+        failures.append(f"Managed collector reported last_error: {_last_error_code(last_error)}.")
     if risk_payload and risk_payload.get("blocked"):
         warnings.append(f"HulunIndex is blocked: {risk_payload.get('score')} >= {risk_payload.get('threshold')}.")
     if not status_file.exists() and not require_status_file and live_status is None:
         warnings.append("Collector status file is absent; run managed collector mode to publish runtime counters.")
+
+    status_file_summary = {
+        "path": str(status_file),
+        "exists": status_file.exists(),
+        "source": "runtime" if live_status is not None else "file",
+        "age_seconds": _round_age(status_age),
+        "stale_after_seconds": stale_limit,
+        "stale": status_stale,
+        "parse_error": status_parse_error,
+        "required": bool(require_status_file),
+        "fail_on_stale": bool(fail_on_stale),
+    }
+    risk_summary = {
+        "path": str(risk_file),
+        "exists": risk_file.exists(),
+        "parse_error": risk_parse_error,
+        "score": risk_payload.get("score") if risk_payload else None,
+        "slop_index": risk_payload.get("slop_index") if risk_payload else None,
+        "band": risk_payload.get("band") if risk_payload else None,
+        "blocked": risk_payload.get("blocked") if risk_payload else None,
+        "required_action": risk_payload.get("required_action") if risk_payload else None,
+    }
+    diagnostics = _collector_health_diagnostics(
+        queue=queue["queue"],
+        dead_letter=queue["dead_letter"],
+        status_file=status_file_summary,
+        managed=managed if isinstance(managed, dict) else None,
+        risk=risk_summary,
+        queue_pending_threshold=max(0, int(queue_pending_threshold)),
+        dead_letter_threshold=max(0, int(dead_letter_threshold)),
+    )
 
     return {
         "schema": COLLECTOR_SCHEMA,
@@ -398,26 +734,10 @@ def collector_operations_status(
         "root": str(root_path),
         "queue": queue["queue"],
         "dead_letter": queue["dead_letter"],
-        "status_file": {
-            "path": str(status_file),
-            "exists": status_file.exists(),
-            "source": "runtime" if live_status is not None else "file",
-            "age_seconds": _round_age(status_age),
-            "stale_after_seconds": stale_limit,
-            "stale": status_stale,
-            "parse_error": status_parse_error,
-        },
+        "status_file": {key: value for key, value in status_file_summary.items() if key not in {"required", "fail_on_stale"}},
         "managed": managed,
-        "risk": {
-            "path": str(risk_file),
-            "exists": risk_file.exists(),
-            "parse_error": risk_parse_error,
-            "score": risk_payload.get("score") if risk_payload else None,
-            "slop_index": risk_payload.get("slop_index") if risk_payload else None,
-            "band": risk_payload.get("band") if risk_payload else None,
-            "blocked": risk_payload.get("blocked") if risk_payload else None,
-            "required_action": risk_payload.get("required_action") if risk_payload else None,
-        },
+        "risk": risk_summary,
+        "diagnostics": diagnostics,
         "warnings": warnings,
         "gate": {"passed": not failures, "failure_count": len(failures), "failures": failures},
     }
@@ -525,6 +845,8 @@ def collector_metrics_report(
     stale_after_seconds: int = 60,
     require_status_file: bool = False,
     fail_on_stale: bool = False,
+    queue_pending_threshold: int = 100,
+    dead_letter_threshold: int = 0,
     live_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     status = collector_operations_status(
@@ -532,6 +854,8 @@ def collector_metrics_report(
         stale_after_seconds=stale_after_seconds,
         require_status_file=require_status_file,
         fail_on_stale=fail_on_stale,
+        queue_pending_threshold=queue_pending_threshold,
+        dead_letter_threshold=dead_letter_threshold,
         live_status=live_status,
     )
     metrics = collector_metrics_from_status(status)
