@@ -61,7 +61,7 @@ Adapters may import user-provided local trace files in these formats:
 - CLI, Python SDK, MCP, and OpenClaw hook events
 - hosted service exports produced through explicit commands such as `service-export langsmith` or `service-export langfuse`
 
-By default, imported observations preserve only scoring-relevant structure: event type, phase, result, sanitized summary, evidence IDs, sanitized references, action fingerprints, model pressure, latency, and privacy metadata.
+By default, imported observations preserve only scoring-relevant structure: event type, phase, result, sanitized summary, evidence IDs, sanitized references, action fingerprints, model pressure, latency, and privacy metadata. State, resume, risk, and JSON artifact writes also pass through a storage-boundary redaction layer so unmarked private values are scrubbed before they reach disk.
 
 Trace files are capped by `MAX_TRACE_BYTES`, currently 5 MiB, unless the user explicitly passes `--max-trace-bytes`. Oversized trace files fail before JSON parsing or persistence.
 
@@ -92,7 +92,7 @@ HulunGuard redacts or withholds:
 
 Redaction is best-effort pattern-based protection. It cannot guarantee removal of every private value, regulated identifier, or domain-specific secret. Users must still review artifacts before publication.
 
-Use `--include-sensitive` only for trusted local debugging. Pair it with a short retention period, for example `--retention-days 7`.
+Use `--include-sensitive` only for trusted local debugging. Pair it with a short retention period, for example `--retention-days 7`. Records marked with `privacy.mode=sensitive-opt-in` are treated as explicit local opt-in; unmarked records are redacted at the storage boundary.
 
 ## Retention And Cleanup
 
