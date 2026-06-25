@@ -26,7 +26,7 @@ Use the HTTP endpoint when the collector is running:
 GET http://127.0.0.1:4318/metrics
 ```
 
-Metrics include queue depth, queue bytes, parse errors, dead-letter records, status-file presence and age, managed flush counters, runtime error state, latest HulunIndex score, blocked state, and one-hot risk band gauges. Local filesystem paths are not exported as metric labels.
+Metrics include queue depth, queue bytes, parse errors, dead-letter records, status-file presence and age, managed flush counters, runtime error state, runtime uptime, one-hot runtime lifecycle state, latest HulunIndex score, blocked state, and one-hot risk band gauges. Local filesystem paths are not exported as metric labels.
 
 If the collector is started with `--token`, `/metrics` requires `Authorization: Bearer <token>` or `X-Hulun-Token`.
 

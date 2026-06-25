@@ -22,6 +22,7 @@ Smoke-test the installed collector without leaving a long-running server:
 ```powershell
 python -m hulun_guard --root . collector smoke --json
 python -m hulun_guard --root . collector smoke --managed --scan --init-if-missing --json
+python -m hulun_guard --root . collector shutdown-check --json
 python -m hulun_guard --root . collector status --require-status-file --json
 python -m hulun_guard --root . collector metrics --require-status-file
 python -m hulun_guard --root . collector alert-rules --force --json
@@ -79,6 +80,18 @@ Managed mode:
 
 Use `GET /status` to inspect queue state and managed runtime counters.
 
+## Graceful Shutdown
+
+`collector serve` records runtime lifecycle state in `.hulun/collector_status.json`. During shutdown it writes `stopping`, stops the managed flush loop, closes the HTTP server, then writes `stopped` with `stop_reason`, `stopping_at`, `stopped_at`, and `uptime_seconds`.
+
+Run the executable shutdown gate:
+
+```powershell
+python -m hulun_guard collector shutdown-check --json
+```
+
+The check starts a temporary collector, posts one OTLP/HTTP JSON span, runs a managed flush, requests shutdown with a bounded timeout, waits for the server thread and manager to stop, and verifies the final status file. The JSON payload reports `shutdown.server.shutdown_completed`, `shutdown.manager.stopped`, and `shutdown.serve_thread.stopped` so service wrappers can gate on the exact shutdown layer that failed.
+
 ## Operations Status
 
 Use `collector status` when an operator, service watchdog, or CI job needs to inspect collector health without opening the HTTP server:
@@ -106,7 +119,7 @@ python -m hulun_guard collector metrics
 python -m hulun_guard collector metrics --require-status-file --json
 ```
 
-Metrics include queue depth, queue bytes, parse errors, dead-letter records, status-file presence/staleness, managed flush counters, managed runtime error state, latest HulunIndex score, blocked state, and band. Local paths are not exposed as Prometheus labels.
+Metrics include queue depth, queue bytes, parse errors, dead-letter records, status-file presence/staleness, managed flush counters, managed runtime error state, runtime uptime, runtime lifecycle state, latest HulunIndex score, blocked state, and band. Local paths are not exposed as Prometheus labels.
 
 See `docs/OBSERVABILITY.md` for the full metrics and alerting deployment surface.
 

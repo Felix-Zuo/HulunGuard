@@ -63,6 +63,130 @@
       "failures": []
     }
   },
+  "shutdown_check": {
+    "schema": "hulun.collector.v1",
+    "generated_at": "2026-06-25T00:00:00Z",
+    "operation": "shutdown_check",
+    "root": "fixture",
+    "endpoint": "/v1/traces",
+    "managed": true,
+    "response_status": 202,
+    "response": {
+      "schema": "hulun.collector.v1",
+      "operation": "ingest",
+      "endpoint": "/v1/traces",
+      "format": "opentelemetry",
+      "accepted": 1,
+      "queued": 1,
+      "record_ids": ["Qshutdown"],
+      "queue": {
+        "path": ".hulun/ingest_queue.jsonl",
+        "pending": 1,
+        "bytes": 512,
+        "oldest_queued_at": "2026-06-25T00:00:00Z",
+        "newest_queued_at": "2026-06-25T00:00:00Z",
+        "parse_error_count": 0
+      },
+      "dead_letter": {
+        "path": ".hulun/ingest_dead_letter.jsonl",
+        "records": 0
+      },
+      "batch_schema": "hulun.batch_ingest.v1"
+    },
+    "managed_flush": {
+      "schema": "hulun.collector.v1",
+      "generated_at": "2026-06-25T00:00:01Z",
+      "operation": "managed_flush",
+      "root": "fixture",
+      "requested_limit": 500,
+      "pending_before": 1,
+      "imported": 1,
+      "scanned": true,
+      "gate": {
+        "passed": true,
+        "failure_count": 0,
+        "failures": []
+      }
+    },
+    "shutdown": {
+      "schema": "hulun.collector.v1",
+      "generated_at": "2026-06-25T00:00:03Z",
+      "operation": "shutdown",
+      "root": "fixture",
+      "reason": "shutdown_check",
+      "status_file": ".hulun/collector_status.json",
+      "runtime": {
+        "lifecycle_state": "stopped",
+        "started_at": "2026-06-25T00:00:00Z",
+        "stopping_at": "2026-06-25T00:00:02Z",
+        "stopped_at": "2026-06-25T00:00:03Z",
+        "stop_reason": "shutdown_check",
+        "uptime_seconds": 3.0,
+        "flush_count": 1,
+        "imported_total": 1,
+        "last_flush": null,
+        "last_error": null
+      },
+      "manager": {
+        "enabled": true,
+        "stopped": true
+      },
+      "server": {
+        "shutdown_requested": true,
+        "shutdown_completed": true
+      },
+      "serve_thread": {
+        "provided": true,
+        "stopped": true
+      },
+      "gate": {
+        "passed": true,
+        "failure_count": 0,
+        "failures": []
+      }
+    },
+    "final_status": {
+      "schema": "hulun.collector.v1",
+      "generated_at": "2026-06-25T00:00:03Z",
+      "operation": "operations_status",
+      "root": "fixture",
+      "status_file": ".hulun/collector_status.json",
+      "status_file_exists": true,
+      "runtime": {
+        "managed": true,
+        "lifecycle_state": "stopped",
+        "started_at": "2026-06-25T00:00:00Z",
+        "stopping_at": "2026-06-25T00:00:02Z",
+        "stopped_at": "2026-06-25T00:00:03Z",
+        "stop_reason": "shutdown_check",
+        "uptime_seconds": 3.0,
+        "last_flush_at": "2026-06-25T00:00:01Z",
+        "last_error": null
+      },
+      "gate": {
+        "passed": true,
+        "failure_count": 0,
+        "failures": []
+      }
+    },
+    "queue": {
+      "path": ".hulun/ingest_queue.jsonl",
+      "pending": 0,
+      "bytes": 0,
+      "oldest_queued_at": null,
+      "newest_queued_at": null,
+      "parse_error_count": 0
+    },
+    "dead_letter": {
+      "path": ".hulun/ingest_dead_letter.jsonl",
+      "records": 0
+    },
+    "gate": {
+      "passed": true,
+      "failure_count": 0,
+      "failures": []
+    }
+  },
   "operations_status": {
     "schema": "hulun.collector.v1",
     "generated_at": "2026-06-25T00:00:00Z",
@@ -85,7 +209,12 @@
     },
     "runtime": {
       "managed": true,
+      "lifecycle_state": "running",
       "started_at": "2026-06-25T00:00:00Z",
+      "stopping_at": null,
+      "stopped_at": null,
+      "stop_reason": null,
+      "uptime_seconds": 1.2,
       "last_flush_at": "2026-06-25T00:00:01Z",
       "last_error": null
     },
@@ -113,10 +242,13 @@
       {"name": "hulun_collector_up", "value": 1.0},
       {"name": "hulun_collector_queue_pending", "value": 0.0},
       {"name": "hulun_collector_managed_flush_total", "value": 1.0},
+      {"name": "hulun_collector_runtime_uptime_seconds", "value": 1.2},
+      {"name": "hulun_collector_runtime_state", "value": 1.0, "labels": {"state": "running"}},
+      {"name": "hulun_collector_runtime_state", "value": 0.0, "labels": {"state": "stopped"}},
       {"name": "hulun_collector_risk_score", "value": 8.0},
       {"name": "hulun_collector_risk_band", "value": 1.0, "labels": {"band": "green"}}
     ],
-    "text": "# HELP hulun_collector_up Collector operations gate status, 1 when passing.\n# TYPE hulun_collector_up gauge\nhulun_collector_up 1\n",
+    "text": "# HELP hulun_collector_up Collector operations gate status, 1 when passing.\n# TYPE hulun_collector_up gauge\nhulun_collector_up 1\n# HELP hulun_collector_runtime_uptime_seconds Collector runtime uptime in seconds.\n# TYPE hulun_collector_runtime_uptime_seconds gauge\nhulun_collector_runtime_uptime_seconds 1.2\n# HELP hulun_collector_runtime_state Collector runtime lifecycle state as one-hot labelled gauges.\n# TYPE hulun_collector_runtime_state gauge\nhulun_collector_runtime_state{state=\"running\"} 1\nhulun_collector_runtime_state{state=\"stopped\"} 0\n",
     "gate": {
       "passed": true,
       "failure_count": 0,

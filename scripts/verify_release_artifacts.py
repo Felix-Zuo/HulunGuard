@@ -165,6 +165,19 @@ def verify_installed_commands(
         or not managed_collector.get("managed_flush", {}).get("scanned")
     ):
         raise ArtifactSmokeError("managed collector smoke failed from the installed wheel")
+    shutdown_collector_root = cwd / "shutdown-collector-root"
+    shutdown_collector = run_json_command(
+        [str(hulun_path), "--root", str(shutdown_collector_root), "collector", "shutdown-check", "--json"],
+        cwd=cwd,
+        env=env,
+    )
+    if (
+        shutdown_collector.get("schema") != "hulun.collector.v1"
+        or shutdown_collector.get("operation") != "shutdown_check"
+        or not shutdown_collector.get("gate", {}).get("passed")
+        or shutdown_collector.get("shutdown", {}).get("runtime", {}).get("lifecycle_state") != "stopped"
+    ):
+        raise ArtifactSmokeError("collector shutdown-check failed from the installed wheel")
     collector_status = run_json_command(
         [str(hulun_path), "--root", str(managed_collector_root), "collector", "status", "--require-status-file", "--json"],
         cwd=cwd,
@@ -220,6 +233,7 @@ def verify_installed_commands(
         raise ArtifactSmokeError("collector service-lifecycle failed from the installed wheel")
     commands.append({"name": "hulun collector smoke --json", "status": "ok", "detail": str(collector_root)})
     commands.append({"name": "hulun collector smoke --managed --scan --json", "status": "ok", "detail": str(managed_collector_root)})
+    commands.append({"name": "hulun collector shutdown-check --json", "status": "ok", "detail": str(shutdown_collector_root)})
     commands.append({"name": "hulun collector status --json", "status": "ok", "detail": str(managed_collector_root)})
     commands.append({"name": "hulun collector metrics --json", "status": "ok", "detail": str(managed_collector_root)})
     commands.append({"name": "hulun collector alert-rules --json", "status": "ok", "detail": str(alert_rule_dir)})

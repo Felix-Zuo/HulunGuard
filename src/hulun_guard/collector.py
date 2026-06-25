@@ -4,6 +4,7 @@ import hmac
 import http.client
 import json
 import shlex
+import signal
 import tempfile
 import threading
 import time
@@ -22,7 +23,7 @@ from .queue import BATCH_FLUSH_LIMIT, BatchIngestError, enqueue_payload, flush_q
 from .risk import scan_state
 from .schemas import COLLECTOR_SCHEMA
 from .storage import hulun_dir, load_state, project_root, risk_path, save_state, write_json
-from .util import utc_now
+from .util import parse_time, utc_now
 
 DEFAULT_COLLECTOR_HOST = "127.0.0.1"
 DEFAULT_COLLECTOR_PORT = 4318
@@ -81,6 +82,10 @@ class CollectorConfig:
 class CollectorRuntimeState:
     lock: threading.Lock = field(default_factory=threading.Lock)
     started_at: str = field(default_factory=utc_now)
+    lifecycle_state: str = "running"
+    stopping_at: str | None = None
+    stopped_at: str | None = None
+    stop_reason: str | None = None
     flush_count: int = 0
     imported_total: int = 0
     last_flush: dict[str, Any] | None = None
@@ -238,18 +243,39 @@ def _health_payload(config: CollectorConfig) -> dict[str, Any]:
     }
 
 
+def _elapsed_seconds(started_at: str | None, ended_at: str | None = None) -> float | None:
+    start = parse_time(started_at)
+    end = parse_time(ended_at) or parse_time(utc_now())
+    if not start or not end:
+        return None
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=end.tzinfo)
+    return round(max(0.0, (end - start).total_seconds()), 3)
+
+
 def _runtime_snapshot(runtime_state: CollectorRuntimeState | None) -> dict[str, Any]:
     if runtime_state is None:
         return {
+            "lifecycle_state": "unknown",
             "started_at": None,
+            "stopping_at": None,
+            "stopped_at": None,
+            "stop_reason": None,
+            "uptime_seconds": None,
             "flush_count": 0,
             "imported_total": 0,
             "last_flush": None,
             "last_error": None,
         }
     with runtime_state.lock:
+        uptime_end = runtime_state.stopped_at if runtime_state.lifecycle_state == "stopped" else None
         return {
+            "lifecycle_state": runtime_state.lifecycle_state,
             "started_at": runtime_state.started_at,
+            "stopping_at": runtime_state.stopping_at,
+            "stopped_at": runtime_state.stopped_at,
+            "stop_reason": runtime_state.stop_reason,
+            "uptime_seconds": _elapsed_seconds(runtime_state.started_at, uptime_end),
             "flush_count": runtime_state.flush_count,
             "imported_total": runtime_state.imported_total,
             "last_flush": runtime_state.last_flush,
@@ -412,6 +438,8 @@ PROMETHEUS_METRIC_HELP = {
     "hulun_collector_managed_flush_total": "Managed collector flush count.",
     "hulun_collector_managed_imported_total": "Total observations imported by managed collector flushes.",
     "hulun_collector_managed_last_error": "Managed collector runtime error flag, 1 when the last flush recorded an error.",
+    "hulun_collector_runtime_uptime_seconds": "Collector runtime uptime in seconds.",
+    "hulun_collector_runtime_state": "Collector runtime lifecycle state as one-hot labelled gauges.",
     "hulun_collector_risk_present": "Latest HulunIndex risk file presence, 1 when present.",
     "hulun_collector_risk_score": "Latest HulunIndex risk score.",
     "hulun_collector_risk_blocked": "Latest HulunIndex blocked flag, 1 when blocked.",
@@ -461,9 +489,13 @@ def collector_metrics_from_status(status: dict[str, Any]) -> list[dict[str, Any]
         {"name": "hulun_collector_managed_flush_total", "value": _metric_number(runtime.get("flush_count"))},
         {"name": "hulun_collector_managed_imported_total", "value": _metric_number(runtime.get("imported_total"))},
         {"name": "hulun_collector_managed_last_error", "value": 1.0 if runtime.get("last_error") else 0.0},
+        {"name": "hulun_collector_runtime_uptime_seconds", "value": _metric_number(runtime.get("uptime_seconds"))},
         {"name": "hulun_collector_risk_present", "value": _metric_number(risk.get("exists"))},
         {"name": "hulun_collector_risk_blocked", "value": _metric_number(risk.get("blocked"))},
     ]
+    active_state = str(runtime.get("lifecycle_state") or "unknown")
+    for lifecycle_state in ("running", "stopping", "stopped", "unknown"):
+        metrics.append({"name": "hulun_collector_runtime_state", "value": 1.0 if lifecycle_state == active_state else 0.0, "labels": {"state": lifecycle_state}})
     if status_file.get("age_seconds") is not None:
         metrics.append({"name": "hulun_collector_status_file_age_seconds", "value": _metric_number(status_file.get("age_seconds"))})
     if risk.get("score") is not None:
@@ -1258,6 +1290,26 @@ def _record_runtime_error(runtime_state: CollectorRuntimeState | None, *, code: 
         runtime_state.last_error = {"code": code, "message": message, "generated_at": utc_now()}
 
 
+def _mark_runtime_stopping(runtime_state: CollectorRuntimeState | None, *, reason: str) -> None:
+    if runtime_state is None:
+        return
+    with runtime_state.lock:
+        if runtime_state.lifecycle_state != "stopped":
+            runtime_state.lifecycle_state = "stopping"
+        runtime_state.stop_reason = runtime_state.stop_reason or reason
+        runtime_state.stopping_at = runtime_state.stopping_at or utc_now()
+
+
+def _mark_runtime_stopped(runtime_state: CollectorRuntimeState | None, *, reason: str) -> None:
+    if runtime_state is None:
+        return
+    with runtime_state.lock:
+        runtime_state.lifecycle_state = "stopped"
+        runtime_state.stop_reason = runtime_state.stop_reason or reason
+        runtime_state.stopping_at = runtime_state.stopping_at or utc_now()
+        runtime_state.stopped_at = runtime_state.stopped_at or utc_now()
+
+
 def collector_flush_once(config: CollectorConfig, runtime_state: CollectorRuntimeState | None = None) -> dict[str, Any]:
     root = _resolved_root(config.root)
     pending_before = int(queue_status(root)["queue"]["pending"])
@@ -1464,16 +1516,114 @@ def build_collector_server(config: CollectorConfig, runtime_state: CollectorRunt
     return ThreadingHTTPServer((config.host, int(config.port)), handler)
 
 
+def request_collector_shutdown(config: CollectorConfig, runtime_state: CollectorRuntimeState, server: ThreadingHTTPServer, *, reason: str) -> None:
+    _mark_runtime_stopping(runtime_state, reason=reason)
+    try:
+        write_collector_status(config, runtime_state)
+    except OSError:
+        pass
+    threading.Thread(target=server.shutdown, name="hulun-collector-shutdown", daemon=True).start()
+
+
+def _request_server_shutdown(server: ThreadingHTTPServer, *, timeout_seconds: float) -> bool:
+    thread = threading.Thread(target=server.shutdown, name="hulun-collector-shutdown", daemon=True)
+    thread.start()
+    thread.join(timeout=max(0.1, float(timeout_seconds)))
+    return not thread.is_alive()
+
+
+def _close_collector_runtime(
+    config: CollectorConfig,
+    runtime_state: CollectorRuntimeState,
+    server: ThreadingHTTPServer,
+    manager: CollectorManager | None,
+    *,
+    reason: str,
+    request_shutdown: bool = False,
+    serve_thread: threading.Thread | None = None,
+    timeout_seconds: float = 5.0,
+) -> dict[str, Any]:
+    _mark_runtime_stopping(runtime_state, reason=reason)
+    try:
+        write_collector_status(config, runtime_state)
+    except OSError:
+        pass
+    shutdown_completed = True
+    if request_shutdown:
+        if serve_thread is not None and not serve_thread.is_alive():
+            shutdown_completed = True
+        else:
+            shutdown_completed = _request_server_shutdown(server, timeout_seconds=timeout_seconds)
+    if serve_thread:
+        serve_thread.join(timeout=max(0.1, float(timeout_seconds)))
+    if manager:
+        manager.stop()
+    server.server_close()
+    _mark_runtime_stopped(runtime_state, reason=reason)
+    status_path = write_collector_status(config, runtime_state)
+    runtime = _runtime_snapshot(runtime_state)
+    failures: list[str] = []
+    if request_shutdown and not shutdown_completed:
+        failures.append("collector server shutdown request did not finish before timeout.")
+    if serve_thread and serve_thread.is_alive():
+        failures.append("collector serve thread did not stop before timeout.")
+    if runtime.get("lifecycle_state") != "stopped":
+        failures.append(f"expected runtime lifecycle_state stopped, got {runtime.get('lifecycle_state')}.")
+    return {
+        "schema": COLLECTOR_SCHEMA,
+        "generated_at": utc_now(),
+        "operation": "shutdown",
+        "root": str(_resolved_root(config.root)),
+        "reason": runtime.get("stop_reason") or reason,
+        "status_file": str(status_path) if status_path else None,
+        "runtime": runtime,
+        "server": {"shutdown_requested": bool(request_shutdown), "shutdown_completed": bool(shutdown_completed)},
+        "manager": {"enabled": manager is not None, "stopped": manager is None or not manager.thread.is_alive()},
+        "serve_thread": {"provided": serve_thread is not None, "stopped": serve_thread is None or not serve_thread.is_alive()},
+        "gate": {"passed": not failures, "failure_count": len(failures), "failures": failures},
+    }
+
+
+def _install_collector_signal_handlers(config: CollectorConfig, runtime_state: CollectorRuntimeState, server: ThreadingHTTPServer) -> dict[int, Any]:
+    if threading.current_thread() is not threading.main_thread():
+        return {}
+    previous: dict[int, Any] = {}
+    for signal_name in ("SIGINT", "SIGTERM"):
+        signum = getattr(signal, signal_name, None)
+        if signum is None:
+            continue
+        previous[signum] = signal.getsignal(signum)
+
+        def _handler(_signum: int, _frame: Any, *, reason: str = f"signal:{signal_name.lower()}") -> None:
+            request_collector_shutdown(config, runtime_state, server, reason=reason)
+
+        signal.signal(signum, _handler)
+    return previous
+
+
+def _restore_signal_handlers(previous: dict[int, Any]) -> None:
+    for signum, handler in previous.items():
+        signal.signal(signum, handler)
+
+
 def serve_collector(config: CollectorConfig) -> None:
     runtime_state = CollectorRuntimeState()
     server = build_collector_server(config, runtime_state)
     manager = start_collector_manager(config, runtime_state)
+    previous_handlers = _install_collector_signal_handlers(config, runtime_state, server)
     try:
+        write_collector_status(config, runtime_state)
         server.serve_forever()
     finally:
-        if manager:
-            manager.stop()
-        server.server_close()
+        _restore_signal_handlers(previous_handlers)
+        _close_collector_runtime(
+            config,
+            runtime_state,
+            server,
+            manager,
+            reason=runtime_state.stop_reason or "serve_exit",
+            request_shutdown=False,
+        )
 
 
 def _smoke_payload() -> dict[str, Any]:
@@ -1603,6 +1753,105 @@ def collector_smoke(
         "response": response_body,
         "managed_flush": managed_flush,
         "queue_before": before["queue"],
+        "queue": after["queue"],
+        "dead_letter": after["dead_letter"],
+        "gate": {"passed": not failures, "failure_count": len(failures), "failures": failures},
+    }
+
+
+def collector_shutdown_check(
+    root: str | Path | None = None,
+    *,
+    token: str | None = None,
+    max_payload_bytes: int = MAX_TRACE_BYTES,
+    managed: bool = True,
+    scan: bool = False,
+    init_if_missing: bool = True,
+) -> dict[str, Any]:
+    if root is None:
+        with tempfile.TemporaryDirectory(prefix="hulun-collector-shutdown-") as tmp:
+            return collector_shutdown_check(tmp, token=token, max_payload_bytes=max_payload_bytes, managed=managed, scan=scan, init_if_missing=init_if_missing)
+
+    root_path = _resolved_root(root)
+    config = CollectorConfig(
+        root=root_path,
+        host=DEFAULT_COLLECTOR_HOST,
+        port=0,
+        token=token,
+        max_payload_bytes=max_payload_bytes,
+        flush_interval_seconds=1 if managed else 0,
+        scan_on_flush=scan,
+        init_if_missing=init_if_missing,
+        init_objective="Monitor collector graceful shutdown",
+        init_criterion="Collector writes a stopped runtime status after shutdown.",
+    )
+    runtime_state = CollectorRuntimeState()
+    server = build_collector_server(config, runtime_state)
+    manager = start_collector_manager(config, runtime_state)
+    thread = threading.Thread(target=server.serve_forever, name="hulun-collector-shutdown-check", daemon=True)
+    thread.start()
+    response_status = 0
+    response_body: dict[str, Any] = {}
+    managed_flush: dict[str, Any] | None = None
+    failures: list[str] = []
+    try:
+        write_collector_status(config, runtime_state)
+        host, port = server.server_address[:2]
+        response_status, response_body = _post_json(f"http://{host}:{port}/v1/traces", _smoke_payload(), token=token)
+        if managed:
+            managed_flush = collector_flush_once(config, runtime_state)
+    except (OSError, TimeoutError, http.client.HTTPException, json.JSONDecodeError) as exc:
+        failures.append(str(exc))
+    shutdown = _close_collector_runtime(
+        config,
+        runtime_state,
+        server,
+        manager,
+        reason="shutdown_check",
+        request_shutdown=True,
+        serve_thread=thread,
+    )
+    final_status, final_status_error = _read_json_payload(collector_status_path(root_path))
+    final_runtime = (
+        final_status.get("managed", {}).get("runtime")
+        if isinstance(final_status, dict) and isinstance(final_status.get("managed"), dict)
+        else None
+    )
+    after = queue_status(root_path)
+    if response_status != 202:
+        failures.append(f"expected HTTP 202, got {response_status}")
+    if int(response_body.get("queued") or 0) != 1:
+        failures.append("collector response did not queue exactly one observation")
+    if managed:
+        if not managed_flush or not managed_flush.get("gate", {}).get("passed"):
+            failures.append("managed collector flush did not pass before shutdown")
+        expected_pending = int((managed_flush or {}).get("queue", {}).get("pending") or 0)
+        if int(after["queue"]["pending"]) != expected_pending:
+            failures.append(f"expected pending queue {expected_pending}, got {after['queue']['pending']}")
+    if not shutdown.get("gate", {}).get("passed"):
+        failures.extend(str(item) for item in shutdown.get("gate", {}).get("failures", []))
+    if final_status_error:
+        failures.append(f"final collector status file is not valid JSON: {final_status_error}")
+    if not isinstance(final_runtime, dict):
+        failures.append("final collector status does not include runtime state")
+    else:
+        if final_runtime.get("lifecycle_state") != "stopped":
+            failures.append(f"expected final lifecycle_state stopped, got {final_runtime.get('lifecycle_state')}")
+        if final_runtime.get("stop_reason") != "shutdown_check":
+            failures.append(f"expected final stop_reason shutdown_check, got {final_runtime.get('stop_reason')}")
+        if not final_runtime.get("stopped_at"):
+            failures.append("final runtime state did not record stopped_at")
+    return {
+        "schema": COLLECTOR_SCHEMA,
+        "generated_at": utc_now(),
+        "operation": "shutdown_check",
+        "root": str(root_path),
+        "managed": managed,
+        "response_status": response_status,
+        "response": response_body,
+        "managed_flush": managed_flush,
+        "shutdown": shutdown,
+        "final_status": final_status,
         "queue": after["queue"],
         "dead_letter": after["dead_letter"],
         "gate": {"passed": not failures, "failure_count": len(failures), "failures": failures},

@@ -186,6 +186,7 @@ Machine-check the collector path without leaving a server running:
 ```powershell
 python .\hulun.py collector smoke --json
 python .\hulun.py collector smoke --managed --scan --init-if-missing --json
+python .\hulun.py collector shutdown-check --json
 python .\hulun.py collector status --require-status-file --json
 python .\hulun.py collector metrics --require-status-file
 python .\hulun.py collector alert-rules --output .\.hulun\collector-alerts --force --json
@@ -201,7 +202,7 @@ Supported POST routes:
 - `/ingest`: auto-detected JSON or JSONL runtime payload.
 - `/ingest/<format>`: explicit adapter payload, such as `generic`, `langgraph`, `langsmith`, `langfuse`, `phoenix`, or `openai-agents`.
 
-The collector writes to the same durable queue as `batch`. Queue-only mode does not update `.hulun/state.json` on every request; run `batch flush --scan` to import queued observations and recompute risk. Managed mode enables a periodic flush loop, writes `.hulun/collector_status.json`, and can update `.hulun/risk.json` automatically after successful flushes. Use `collector status` for offline service checks, `collector metrics` or `GET /metrics` for Prometheus monitoring, `collector alert-rules` for reviewed Prometheus alerting rules, `collector service-template` to generate service files, and `collector service-lifecycle` to generate reviewed install/start/stop/restart/status/uninstall controls for managed mode.
+The collector writes to the same durable queue as `batch`. Queue-only mode does not update `.hulun/state.json` on every request; run `batch flush --scan` to import queued observations and recompute risk. Managed mode enables a periodic flush loop, writes `.hulun/collector_status.json`, and can update `.hulun/risk.json` automatically after successful flushes. Use `collector shutdown-check` to verify graceful stop handling, `collector status` for offline service checks, `collector metrics` or `GET /metrics` for Prometheus monitoring, `collector alert-rules` for reviewed Prometheus alerting rules, `collector service-template` to generate service files, and `collector service-lifecycle` to generate reviewed install/start/stop/restart/status/uninstall controls for managed mode.
 
 Security defaults:
 
@@ -293,6 +294,7 @@ python .\hulun.py onboard --agent all --output .\.hulun\onboarding --force --jso
 python .\hulun.py adapter-matrix --json
 python .\hulun.py collector smoke --json
 python .\hulun.py collector smoke --managed --scan --init-if-missing --json
+python .\hulun.py collector shutdown-check --json
 python .\hulun.py collector status --require-status-file --json
 python .\hulun.py collector metrics --require-status-file
 python .\hulun.py collector alert-rules --output .\.hulun\collector-alerts --force --json
@@ -315,6 +317,7 @@ python -m pytest -q
 `adapter-matrix` verifies OpenTelemetry/OpenInference/Langfuse/Phoenix round-trips plus OpenHands-like, SWE-agent-like, LangGraph, and LangSmith stream coverage without committing private traces.
 `collector smoke` starts a temporary local HTTP collector, POSTs one OTLP/HTTP JSON span, and verifies that the queue grows by one record.
 `collector smoke --managed --scan --init-if-missing` verifies that a live POST can be flushed into a fresh project ledger and rescanned without a separate operator command.
+`collector shutdown-check` verifies that a temporary collector records `stopping` and final `stopped` runtime state during graceful shutdown.
 `collector status` verifies queue, dead-letter, managed status, and last risk state without starting the HTTP server.
 `collector metrics` verifies the Prometheus health export path used by external service monitors.
 `collector alert-rules` verifies that Prometheus alerting rules can be generated for collector health and HulunIndex risk signals.

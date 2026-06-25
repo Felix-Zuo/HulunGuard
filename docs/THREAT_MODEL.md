@@ -66,7 +66,7 @@ Runtime payloads submitted through SDK, MCP, or stdin are capped by the same def
 
 Runtime payloads submitted through `hulun collector serve` use the same default payload cap and redaction path. The collector binds to `127.0.0.1` by default. Binding to a non-loopback host requires both `--allow-remote` and `--token`. `/healthz` exposes only liveness and supported-format metadata; `/status`, `/metrics`, and POST ingestion require the configured token. The collector accepts JSON and JSONL payloads and rejects protobuf or opaque binary OTLP bodies.
 
-Managed collector mode is opt-in through `--flush-interval-seconds`. It uses the existing batch flush path to move queued observations into `.hulun/state.json`, optionally initializes a minimal project ledger with `--init-if-missing`, writes `.hulun/collector_status.json`, and recomputes `.hulun/risk.json` only when `--scan-on-flush` is enabled. Flush or scan failures are reported in status output and do not stop HTTP ingestion.
+Managed collector mode is opt-in through `--flush-interval-seconds`. It uses the existing batch flush path to move queued observations into `.hulun/state.json`, optionally initializes a minimal project ledger with `--init-if-missing`, writes `.hulun/collector_status.json`, and recomputes `.hulun/risk.json` only when `--scan-on-flush` is enabled. Flush or scan failures are reported in status output and do not stop HTTP ingestion. Graceful shutdown records `stopping` and final `stopped` runtime state in the status file before the process exits.
 
 `collector status` reads local queue, dead-letter, managed status, and risk files without starting the HTTP server. `collector metrics` and `GET /metrics` expose numeric health and risk gauges without local filesystem paths as Prometheus labels. `collector alert-rules` only writes Prometheus rule files for those metrics; it does not install Prometheus configuration, restart services, change Alertmanager routing, or embed authentication tokens. `collector service-template` only writes reviewed systemd, launchd, and Windows Scheduled Task template files; it does not install services, change host startup policy, or embed authentication tokens. `collector service-lifecycle` writes reviewed install/start/stop/restart/status/uninstall scripts for those service targets; it does not run lifecycle actions automatically and keeps generated commands loopback-bound without embedded tokens.
 
@@ -130,6 +130,7 @@ This protects against path traversal, symlink escape, and accidental deletion of
 | Alert-rule generation changes monitoring infrastructure | `collector alert-rules` writes reviewed rule files only; operators must validate and install them explicitly. |
 | OTLP producer sends protobuf or binary payloads | Collector rejects protobuf and `application/octet-stream`; configure the producer for OTLP/HTTP JSON. |
 | Managed collector writes project state unexpectedly | Managed flush is off by default and requires explicit `--flush-interval-seconds`; scan is separate through `--scan-on-flush`. |
+| Collector exits without a final status marker | Signal-driven and checked shutdown paths write `stopping`, stop the managed loop, close the server, and write final `stopped` runtime state. |
 | Service template generation changes host startup state | `collector service-template` writes files only; operators must review and install them explicitly. |
 | Service lifecycle generation changes host startup state | `collector service-lifecycle` writes install/start/stop/restart/status/uninstall scripts only; operators must review and execute lifecycle actions explicitly. |
 | Desktop monitor leaks to a remote service | Monitor state is local JSON/HTML; remote exposure only occurs if the user or host publishes it. |
@@ -146,6 +147,7 @@ python -m hulun_guard batch enqueue --type tool_result --summary "pytest passed"
 '{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass"}' | python -m hulun_guard batch ingest-stdin --format generic
 python -m hulun_guard collector smoke --json
 python -m hulun_guard collector smoke --managed --scan --init-if-missing --json
+python -m hulun_guard collector shutdown-check --json
 python -m hulun_guard collector status --require-status-file --json
 python -m hulun_guard collector metrics --require-status-file
 python -m hulun_guard collector alert-rules --output .hulun/collector-alerts --force --json
@@ -170,6 +172,7 @@ python -m hulun_guard onboard --agent all --output .hulun/onboarding --force --j
 python -m hulun_guard adapter-matrix --json
 python -m hulun_guard collector smoke --json
 python -m hulun_guard collector smoke --managed --scan --init-if-missing --json
+python -m hulun_guard collector shutdown-check --json
 python -m hulun_guard collector status --require-status-file --json
 python -m hulun_guard collector metrics --require-status-file
 python -m hulun_guard collector alert-rules --output .hulun/collector-alerts --force --json
@@ -193,6 +196,7 @@ Every release must keep these checks green:
 - `python -m hulun_guard adapter-matrix --json`
 - `python -m hulun_guard collector smoke --json`
 - `python -m hulun_guard collector smoke --managed --scan --init-if-missing --json`
+- `python -m hulun_guard collector shutdown-check --json`
 - `python -m hulun_guard collector status --require-status-file --json`
 - `python -m hulun_guard collector metrics --require-status-file`
 - `python -m hulun_guard collector alert-rules --output .hulun/collector-alerts --force --json`
