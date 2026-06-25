@@ -76,6 +76,7 @@ python -m hulun_guard collector status --require-status-file --json
 python -m hulun_guard collector metrics --require-status-file
 python -m hulun_guard collector alert-rules --output .hulun/collector-alerts --force --json
 python -m hulun_guard collector service-template --output .hulun/collector-service --force --json
+python -m hulun_guard collector service-lifecycle --output .hulun/collector-service-lifecycle --force --json
 ```
 
 For host runtimes that already hold events or spans in memory, use `HulunGuardClient.enqueue_payload(...)`, MCP `hulun_batch_ingest_payload`, `batch ingest-stdin`, or `collector serve`, and then flush the durable queue. This is the preferred path for live stream integrations where writing a trace file first would add latency or operational friction.

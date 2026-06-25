@@ -28,9 +28,11 @@ DEFAULT_COLLECTOR_HOST = "127.0.0.1"
 DEFAULT_COLLECTOR_PORT = 4318
 COLLECTOR_STATUS_FILE = "collector_status.json"
 COLLECTOR_SERVICE_TEMPLATE_DIR = "collector-service"
+COLLECTOR_SERVICE_LIFECYCLE_DIR = "collector-service-lifecycle"
 COLLECTOR_ALERT_RULE_DIR = "collector-alerts"
 COLLECTOR_ALERT_RULE_FILE = "hulunguard-collector.rules.yml"
 SERVICE_TEMPLATE_TARGETS = ("systemd", "launchd", "windows-task")
+SERVICE_LIFECYCLE_ACTIONS = ("install", "start", "stop", "restart", "status", "uninstall")
 OVERSIZE_DRAIN_HARD_LIMIT_BYTES = 8 * 1024 * 1024
 TRACE_PAYLOAD_FORMATS = (
     "auto",
@@ -892,6 +894,14 @@ def _service_template_readme(command: list[str], targets: list[str]) -> str:
     )
 
 
+def _selected_service_targets(target: str) -> list[str]:
+    targets = list(SERVICE_TEMPLATE_TARGETS) if target == "all" else [target]
+    unknown = [value for value in targets if value not in SERVICE_TEMPLATE_TARGETS]
+    if unknown:
+        raise CollectorError(f"Unsupported collector service target: {', '.join(unknown)}.")
+    return targets
+
+
 def collector_service_templates(
     root: str | Path | None = None,
     *,
@@ -913,10 +923,7 @@ def collector_service_templates(
         raise CollectorError("collector service templates require --flush-limit >= 1.")
     if not _is_loopback_host(host):
         raise CollectorError("collector service templates only generate loopback-bound commands because templates do not embed tokens.")
-    targets = list(SERVICE_TEMPLATE_TARGETS) if target == "all" else [target]
-    unknown = [value for value in targets if value not in SERVICE_TEMPLATE_TARGETS]
-    if unknown:
-        raise CollectorError(f"Unsupported collector service template target: {', '.join(unknown)}.")
+    targets = _selected_service_targets(target)
 
     output_dir = Path(output) if output else hulun_dir(root_path) / COLLECTOR_SERVICE_TEMPLATE_DIR
     if not output_dir.is_absolute():
@@ -954,6 +961,248 @@ def collector_service_templates(
         "output_dir": str(output_dir),
         "target": target,
         "targets": targets,
+        "command": command,
+        "files": files,
+        "gate": {"passed": True, "failure_count": 0, "failures": []},
+    }
+
+
+def _systemd_lifecycle_script() -> str:
+    return "\n".join(
+        [
+            "#!/usr/bin/env sh",
+            "set -eu",
+            'SERVICE_NAME="hulun-collector.service"',
+            'SOURCE_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"',
+            'SOURCE_UNIT="$SOURCE_DIR/hulun-collector.service"',
+            'TARGET_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"',
+            'TARGET_UNIT="$TARGET_DIR/$SERVICE_NAME"',
+            'ACTION="${1:-status}"',
+            "",
+            "case \"$ACTION\" in",
+            "  install)",
+            '    mkdir -p "$TARGET_DIR"',
+            '    cp "$SOURCE_UNIT" "$TARGET_UNIT"',
+            "    systemctl --user daemon-reload",
+            '    systemctl --user enable "$SERVICE_NAME"',
+            '    systemctl --user start "$SERVICE_NAME"',
+            "    ;;",
+            "  start)",
+            '    systemctl --user start "$SERVICE_NAME"',
+            "    ;;",
+            "  stop)",
+            '    systemctl --user stop "$SERVICE_NAME"',
+            "    ;;",
+            "  restart)",
+            '    systemctl --user restart "$SERVICE_NAME"',
+            "    ;;",
+            "  status)",
+            '    systemctl --user status "$SERVICE_NAME"',
+            "    ;;",
+            "  uninstall)",
+            '    systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true',
+            '    systemctl --user disable "$SERVICE_NAME" 2>/dev/null || true',
+            '    rm -f "$TARGET_UNIT"',
+            "    systemctl --user daemon-reload",
+            "    ;;",
+            "  *)",
+            '    echo "Usage: $0 {install|start|stop|restart|status|uninstall}" >&2',
+            "    exit 2",
+            "    ;;",
+            "esac",
+            "",
+        ]
+    )
+
+
+def _launchd_lifecycle_script() -> str:
+    return "\n".join(
+        [
+            "#!/usr/bin/env sh",
+            "set -eu",
+            'LABEL="dev.hulunguard.collector"',
+            'SOURCE_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"',
+            'SOURCE_PLIST="$SOURCE_DIR/dev.hulunguard.collector.plist"',
+            'TARGET_DIR="$HOME/Library/LaunchAgents"',
+            'TARGET_PLIST="$TARGET_DIR/$LABEL.plist"',
+            'DOMAIN="gui/$(id -u)"',
+            'ACTION="${1:-status}"',
+            "",
+            "case \"$ACTION\" in",
+            "  install)",
+            '    mkdir -p "$TARGET_DIR"',
+            '    cp "$SOURCE_PLIST" "$TARGET_PLIST"',
+            '    launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true',
+            '    launchctl bootstrap "$DOMAIN" "$TARGET_PLIST"',
+            '    launchctl kickstart -k "$DOMAIN/$LABEL"',
+            "    ;;",
+            "  start)",
+            '    launchctl kickstart -k "$DOMAIN/$LABEL"',
+            "    ;;",
+            "  stop)",
+            '    launchctl kill TERM "$DOMAIN/$LABEL"',
+            "    ;;",
+            "  restart)",
+            '    launchctl kill TERM "$DOMAIN/$LABEL" 2>/dev/null || true',
+            '    launchctl kickstart -k "$DOMAIN/$LABEL"',
+            "    ;;",
+            "  status)",
+            '    launchctl print "$DOMAIN/$LABEL"',
+            "    ;;",
+            "  uninstall)",
+            '    launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true',
+            '    rm -f "$TARGET_PLIST"',
+            "    ;;",
+            "  *)",
+            '    echo "Usage: $0 {install|start|stop|restart|status|uninstall}" >&2',
+            "    exit 2",
+            "    ;;",
+            "esac",
+            "",
+        ]
+    )
+
+
+def _windows_lifecycle_script(command: list[str], root_path: Path) -> str:
+    execute = command[0]
+    arguments = " ".join(_cmd_arg(value) for value in command[1:])
+    return "\n".join(
+        [
+            "param(",
+            "  [ValidateSet('install','start','stop','restart','status','uninstall')]",
+            "  [string]$Action = 'status',",
+            "  [switch]$Force",
+            ")",
+            "$ErrorActionPreference = 'Stop'",
+            "$TaskName = 'HulunGuard Collector'",
+            f"$Execute = {_ps_literal(execute)}",
+            f"$Arguments = {_ps_literal(arguments)}",
+            f"$WorkingDirectory = {_ps_literal(str(root_path))}",
+            "",
+            "function Get-HulunTask {",
+            "  Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue",
+            "}",
+            "",
+            "function Install-HulunTask {",
+            "  $Existing = Get-HulunTask",
+            "  if ($Existing -and -not $Force) {",
+            "    throw \"Scheduled task '$TaskName' already exists. Re-run with -Force to replace it.\"",
+            "  }",
+            "  if ($Existing) {",
+            "    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false",
+            "  }",
+            "  $ActionDef = New-ScheduledTaskAction -Execute $Execute -Argument $Arguments -WorkingDirectory $WorkingDirectory",
+            "  $Trigger = New-ScheduledTaskTrigger -AtLogOn",
+            "  $Settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -StartWhenAvailable",
+            "  Register-ScheduledTask -TaskName $TaskName -Action $ActionDef -Trigger $Trigger -Settings $Settings -Description 'Run the local HulunGuard collector in managed mode.' | Out-Null",
+            "  Start-ScheduledTask -TaskName $TaskName",
+            "}",
+            "",
+            "switch ($Action) {",
+            "  'install' { Install-HulunTask }",
+            "  'start' { Start-ScheduledTask -TaskName $TaskName }",
+            "  'stop' { Stop-ScheduledTask -TaskName $TaskName }",
+            "  'restart' { Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue; Start-ScheduledTask -TaskName $TaskName }",
+            "  'status' { Get-ScheduledTask -TaskName $TaskName | Format-List TaskName,State,TaskPath }",
+            "  'uninstall' { Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false }",
+            "}",
+            "",
+        ]
+    )
+
+
+def _service_lifecycle_readme(command: list[str], targets: list[str]) -> str:
+    return "\n".join(
+        [
+            "# HulunGuard Collector Service Lifecycle",
+            "",
+            "These files provide reviewed lifecycle controls for running HulunGuard collector as a local managed service.",
+            "",
+            "Generated command:",
+            "",
+            "```text",
+            shlex.join(command),
+            "```",
+            "",
+            "Actions:",
+            *[f"- `{action}`" for action in SERVICE_LIFECYCLE_ACTIONS],
+            "",
+            "Targets:",
+            *[f"- {target}" for target in targets],
+            "",
+            "The lifecycle scripts do not embed authentication tokens and keep the collector bound to loopback. Review paths, users, privileges, and host policy before running an install action.",
+            "",
+        ]
+    )
+
+
+def collector_service_lifecycle(
+    root: str | Path | None = None,
+    *,
+    output: str | Path | None = None,
+    target: str = "all",
+    python_executable: str = "python",
+    host: str = DEFAULT_COLLECTOR_HOST,
+    port: int = DEFAULT_COLLECTOR_PORT,
+    flush_interval_seconds: int = 5,
+    flush_limit: int = BATCH_FLUSH_LIMIT,
+    scan_on_flush: bool = True,
+    init_if_missing: bool = True,
+    force: bool = False,
+) -> dict[str, Any]:
+    root_path = _resolved_root(root)
+    if int(flush_interval_seconds) < 1:
+        raise CollectorError("collector service lifecycle requires --flush-interval-seconds >= 1.")
+    if int(flush_limit) < 1:
+        raise CollectorError("collector service lifecycle requires --flush-limit >= 1.")
+    if not _is_loopback_host(host):
+        raise CollectorError("collector service lifecycle only generates loopback-bound commands because lifecycle scripts do not embed tokens.")
+    targets = _selected_service_targets(target)
+    output_dir = Path(output) if output else hulun_dir(root_path) / COLLECTOR_SERVICE_LIFECYCLE_DIR
+    if not output_dir.is_absolute():
+        output_dir = root_path / output_dir
+    output_dir = output_dir.resolve()
+    command = _collector_service_command(
+        python_executable=python_executable,
+        root_path=root_path,
+        host=host,
+        port=port,
+        flush_interval_seconds=flush_interval_seconds,
+        flush_limit=flush_limit,
+        scan_on_flush=scan_on_flush,
+        init_if_missing=init_if_missing,
+    )
+    writers = {
+        "systemd": [
+            ("systemd/hulun-collector.service", _systemd_template(command, root_path), "service"),
+            ("systemd/hulun-collector-systemd.sh", _systemd_lifecycle_script(), "lifecycle"),
+        ],
+        "launchd": [
+            ("launchd/dev.hulunguard.collector.plist", _launchd_template(command, root_path), "service"),
+            ("launchd/hulun-collector-launchd.sh", _launchd_lifecycle_script(), "lifecycle"),
+        ],
+        "windows-task": [
+            ("windows-task/Register-HulunCollectorLifecycle.ps1", _windows_lifecycle_script(command, root_path), "lifecycle"),
+        ],
+    }
+    files: list[dict[str, str]] = []
+    for template_target in targets:
+        for relative_path, text, role in writers[template_target]:
+            path = output_dir / relative_path
+            _write_template(path, text, force=force)
+            files.append({"target": template_target, "role": role, "path": str(path)})
+    readme_path = output_dir / "README.md"
+    _write_template(readme_path, _service_lifecycle_readme(command, targets), force=force)
+    files.append({"target": "readme", "role": "readme", "path": str(readme_path)})
+    return {
+        "schema": COLLECTOR_SCHEMA,
+        "generated_at": utc_now(),
+        "operation": "service_lifecycle",
+        "root": str(root_path),
+        "output_dir": str(output_dir),
+        "target": target,
+        "targets": targets,
+        "actions": list(SERVICE_LIFECYCLE_ACTIONS),
         "command": command,
         "files": files,
         "gate": {"passed": True, "failure_count": 0, "failures": []},

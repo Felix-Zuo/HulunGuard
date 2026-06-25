@@ -20,6 +20,7 @@
 - [ ] `python -m hulun_guard collector metrics --require-status-file`
 - [ ] `python -m hulun_guard collector alert-rules --output .hulun/collector-alerts --force --json`
 - [ ] `python -m hulun_guard collector service-template --output .hulun/collector-service --force --json`
+- [ ] `python -m hulun_guard collector service-lifecycle --output .hulun/collector-service-lifecycle --force --json`
 - [ ] Batched ingestion smoke: enqueue, status, flush with `--init-if-missing`
 - [ ] Public-safe `trace-doctor-sample.jsonl` created for trace diagnostics
 - [ ] `python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json`

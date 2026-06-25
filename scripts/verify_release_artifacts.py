@@ -205,12 +205,26 @@ def verify_installed_commands(
     )
     if service_template.get("schema") != "hulun.collector.v1" or len(service_template.get("files", [])) < 4:
         raise ArtifactSmokeError("collector service-template failed from the installed wheel")
+    service_lifecycle_dir = cwd / "collector-service-lifecycle"
+    service_lifecycle = run_json_command(
+        [str(hulun_path), "--root", str(managed_collector_root), "collector", "service-lifecycle", "--output", str(service_lifecycle_dir), "--force", "--json"],
+        cwd=cwd,
+        env=env,
+    )
+    if (
+        service_lifecycle.get("schema") != "hulun.collector.v1"
+        or service_lifecycle.get("operation") != "service_lifecycle"
+        or len(service_lifecycle.get("files", [])) < 6
+        or "uninstall" not in service_lifecycle.get("actions", [])
+    ):
+        raise ArtifactSmokeError("collector service-lifecycle failed from the installed wheel")
     commands.append({"name": "hulun collector smoke --json", "status": "ok", "detail": str(collector_root)})
     commands.append({"name": "hulun collector smoke --managed --scan --json", "status": "ok", "detail": str(managed_collector_root)})
     commands.append({"name": "hulun collector status --json", "status": "ok", "detail": str(managed_collector_root)})
     commands.append({"name": "hulun collector metrics --json", "status": "ok", "detail": str(managed_collector_root)})
     commands.append({"name": "hulun collector alert-rules --json", "status": "ok", "detail": str(alert_rule_dir)})
     commands.append({"name": "hulun collector service-template --json", "status": "ok", "detail": str(service_template_dir)})
+    commands.append({"name": "hulun collector service-lifecycle --json", "status": "ok", "detail": str(service_lifecycle_dir)})
 
     batch_root = cwd / "batch-root"
     batch_root.mkdir()

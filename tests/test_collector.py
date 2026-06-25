@@ -256,6 +256,50 @@ class CollectorTest(unittest.TestCase):
             self.assertNotEqual(code, 0, out)
             self.assertIn("loopback-bound", out)
 
+    def test_collector_service_lifecycle_generates_cross_platform_controls(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "service-lifecycle"
+            code, out = self.run_cli("--root", tmp, "collector", "service-lifecycle", "--output", str(output_dir), "--force", "--json")
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["operation"], "service_lifecycle")
+            self.assertTrue(payload["gate"]["passed"])
+            self.assertEqual(payload["actions"], ["install", "start", "stop", "restart", "status", "uninstall"])
+            targets = {item["target"] for item in payload["files"]}
+            self.assertEqual(targets, {"systemd", "launchd", "windows-task", "readme"})
+            roles = {item["role"] for item in payload["files"]}
+            self.assertEqual(roles, {"service", "lifecycle", "readme"})
+            for item in payload["files"]:
+                self.assertTrue(Path(item["path"]).exists(), item)
+            systemd_script = (output_dir / "systemd" / "hulun-collector-systemd.sh").read_text(encoding="utf-8")
+            launchd_script = (output_dir / "launchd" / "hulun-collector-launchd.sh").read_text(encoding="utf-8")
+            windows_script = (output_dir / "windows-task" / "Register-HulunCollectorLifecycle.ps1").read_text(encoding="utf-8")
+            for action in ("install", "start", "stop", "restart", "status", "uninstall"):
+                self.assertIn(action, systemd_script)
+                self.assertIn(action, launchd_script)
+                self.assertIn(action, windows_script)
+            self.assertIn("systemctl --user", systemd_script)
+            self.assertIn("launchctl", launchd_script)
+            self.assertIn("ScheduledTask", windows_script)
+            combined = "\n".join([systemd_script, launchd_script, windows_script, (output_dir / "README.md").read_text(encoding="utf-8")])
+            self.assertIn("127.0.0.1", " ".join(payload["command"]))
+            self.assertNotIn("--token", combined)
+            self.assertNotIn("0.0.0.0", combined)
+
+    def test_collector_service_lifecycle_rejects_remote_host_and_overwrite(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.run_cli("--root", tmp, "collector", "service-lifecycle", "--host", "0.0.0.0", "--json")
+            self.assertEqual(code, 2, out)
+            self.assertIn("loopback-bound", out)
+
+            code, out = self.run_cli("--root", tmp, "collector", "service-lifecycle", "--json")
+            self.assertEqual(code, 0, out)
+            code, out = self.run_cli("--root", tmp, "collector", "service-lifecycle", "--json")
+            self.assertEqual(code, 2, out)
+            payload = json.loads(out)
+            self.assertEqual(payload["operation"], "service_lifecycle")
+            self.assertIn("Refusing to overwrite", payload["gate"]["failures"][0])
+
     def test_otlp_endpoint_queues_span(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             server, thread, base_url = self.start_server(CollectorConfig(root=tmp, port=0))

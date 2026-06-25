@@ -22,6 +22,7 @@ python .\hulun.py collector status --require-status-file --json
 python .\hulun.py collector metrics --require-status-file
 python .\hulun.py collector alert-rules --output .\.hulun\collector-alerts --force --json
 python .\hulun.py collector service-template --output .\.hulun\collector-service --force --json
+python .\hulun.py collector service-lifecycle --output .\.hulun\collector-service-lifecycle --force --json
 python .\hulun.py batch enqueue --type tool_result --phase verify --summary "release batch smoke" --result pass --json
 @'
 {"type":"tool_result","phase":"verify","summary":"release stdin smoke","result":"pass","action_key":"stdin-smoke"}
@@ -46,7 +47,7 @@ python .\hulun.py release-verify --asset-dir .\dist --skip-attestation --json
 1. Update `pyproject.toml`.
 2. Update `src/hulun_guard/__init__.py`.
 3. Update docs for new commands, parameters, or product meaning.
-4. Run tests, validation, calibration, calibration drift review, threat model check, agent compatibility, integration kit verification, onboarding verification, adapter matrix, collector smoke, managed collector smoke, collector operations status, collector Prometheus metrics, collector alert-rule generation, collector service-template generation, batched ingestion and stdin payload smoke, trace doctor, schema compatibility, and retention cleanup dry-run.
+4. Run tests, validation, calibration, calibration drift review, threat model check, agent compatibility, integration kit verification, onboarding verification, adapter matrix, collector smoke, managed collector smoke, collector operations status, collector Prometheus metrics, collector alert-rule generation, collector service-template generation, collector service-lifecycle generation, batched ingestion and stdin payload smoke, trace doctor, schema compatibility, and retention cleanup dry-run.
 5. Run scan benchmark, real-world benchmark, doctor, security, build, release metadata, release artifact smoke, and offline release verifier checks.
 6. Commit with a versioned message.
 7. Tag the version.
