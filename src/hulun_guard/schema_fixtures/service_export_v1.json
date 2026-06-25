@@ -1,0 +1,51 @@
+{
+  "schema": "hulun.service_export.v1",
+  "generated_at": "2026-06-25T00:00:00+00:00",
+  "provider": "langsmith",
+  "operation": "export",
+  "output": ".hulun/langsmith-runs.json",
+  "request": {
+    "endpoint": "https://api.smith.langchain.com",
+    "path": "/v2/runs/query",
+    "project_id": "project_public_fixture",
+    "page_size": 100,
+    "max_runs": 100,
+    "selects": [
+      "ID",
+      "NAME",
+      "RUN_TYPE",
+      "STATUS",
+      "TRACE_ID"
+    ],
+    "auth": "explicit-api-key"
+  },
+  "pagination": {
+    "pages_fetched": 1,
+    "truncated": false,
+    "next_cursor_present": false
+  },
+  "exported": {
+    "run_count": 1,
+    "format": "langsmith",
+    "trace_doctor_command": "python -m hulun_guard trace-doctor --format langsmith --file \".hulun/langsmith-runs.json\" --json",
+    "ingest_command": "python -m hulun_guard ingest --format langsmith --file \".hulun/langsmith-runs.json\" --scan --init-if-missing"
+  },
+  "privacy": {
+    "mode": "redacted-default",
+    "retention_days": 30
+  },
+  "gate": {
+    "passed": true,
+    "failure_count": 0,
+    "failures": []
+  },
+  "runs": [
+    {
+      "id": "run_public_fixture",
+      "trace_id": "trace_public_fixture",
+      "run_type": "llm",
+      "name": "public fixture run",
+      "result": "pass"
+    }
+  ]
+}

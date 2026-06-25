@@ -8,8 +8,10 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import venv
 import zipfile
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +97,69 @@ def run_json_command(command: list[str], *, cwd: Path, env: dict[str, str], inpu
     if not isinstance(payload, dict):
         raise ArtifactSmokeError(f"Expected JSON object from {' '.join(command)}")
     return payload
+
+
+class LangSmithMockHandler(BaseHTTPRequestHandler):
+    requests: list[dict[str, Any]] = []
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        body = self.rfile.read(length)
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except json.JSONDecodeError:
+            payload = {}
+        self.requests.append({"path": self.path, "headers": dict(self.headers), "payload": payload})
+        if self.path != "/v2/runs/query":
+            self.send_response(404)
+            self.end_headers()
+            return
+        if self.headers.get("X-Api-Key") != "fixture-langsmith-key":
+            self.send_response(401)
+            self.end_headers()
+            return
+        response = {
+            "items": [
+                {
+                    "id": "run-release-smoke-a",
+                    "trace_id": "trace-release-smoke",
+                    "run_type": "llm",
+                    "name": "installed service export llm",
+                    "status": "success",
+                    "prompt_tokens": 123,
+                    "completion_tokens": 45,
+                    "total_cost": 0.67,
+                    "latency_ms": 890,
+                    "inputs": {"prompt": "sk-release-secret012345678901234567890"},
+                },
+                {
+                    "id": "run-release-smoke-b",
+                    "trace_id": "trace-release-smoke",
+                    "run_type": "tool",
+                    "name": "installed service export tool",
+                    "status": "error",
+                    "error": "failed with sk-release-secret012345678901234567890 for service@example.com password=hunter2",
+                },
+            ],
+            "next_cursor": None,
+        }
+        encoded = json.dumps(response).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def log_message(self, _format: str, *_args: Any) -> None:
+        return
+
+
+def start_langsmith_mock_server() -> tuple[ThreadingHTTPServer, threading.Thread, list[dict[str, Any]]]:
+    handler = type("ReleaseLangSmithMockHandler", (LangSmithMockHandler,), {"requests": []})
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, thread, handler.requests
 
 
 def verify_installed_commands(
@@ -336,6 +401,54 @@ def verify_installed_commands(
         raise ArtifactSmokeError("batch flush failed from the installed wheel")
     commands.append({"name": "hulun batch enqueue/ingest-stdin/status/flush", "status": "ok", "detail": str(batch_root)})
 
+    langsmith_server, langsmith_thread, langsmith_requests = start_langsmith_mock_server()
+    langsmith_output = cwd / "langsmith-service-export.json"
+    langsmith_endpoint = f"http://127.0.0.1:{langsmith_server.server_address[1]}"
+    try:
+        langsmith_export = run_json_command(
+            [
+                str(hulun_path),
+                "service-export",
+                "langsmith",
+                "--endpoint",
+                langsmith_endpoint,
+                "--project-id",
+                "project-release-smoke",
+                "--api-key",
+                "fixture-langsmith-key",
+                "--output",
+                str(langsmith_output),
+                "--json",
+            ],
+            cwd=cwd,
+            env=env,
+        )
+    finally:
+        langsmith_server.shutdown()
+        langsmith_server.server_close()
+        langsmith_thread.join(timeout=5)
+    if (
+        langsmith_export.get("schema") != "hulun.service_export.v1"
+        or not langsmith_export.get("gate", {}).get("passed")
+        or langsmith_export.get("exported", {}).get("run_count") != 2
+        or not langsmith_output.exists()
+        or not langsmith_requests
+        or langsmith_requests[0]["payload"].get("project_ids") != ["project-release-smoke"]
+        or "INPUTS" in langsmith_requests[0]["payload"].get("selects", [])
+    ):
+        raise ArtifactSmokeError("LangSmith service-export failed from the installed wheel")
+    langsmith_text = langsmith_output.read_text(encoding="utf-8")
+    if "fixture-langsmith-key" in langsmith_text or "sk-release-secret" in langsmith_text or "hunter2" in langsmith_text or "inputs" in langsmith_text:
+        raise ArtifactSmokeError("LangSmith service-export persisted sensitive fixture content")
+    langsmith_trace_doctor = run_json_command(
+        [str(hulun_path), "trace-doctor", "--file", str(langsmith_output), "--format", "langsmith", "--json"],
+        cwd=cwd,
+        env=env,
+    )
+    if langsmith_trace_doctor.get("detected_format") != "langsmith" or not langsmith_trace_doctor.get("gate", {}).get("passed"):
+        raise ArtifactSmokeError("trace-doctor failed for installed LangSmith service export")
+    commands.append({"name": "hulun service-export langsmith --json", "status": "ok", "detail": str(langsmith_output)})
+
     release_verify = run_json_command([str(hulun_path), "release-verify", "--asset-dir", str(release_asset_dir), "--skip-attestation", "--json"], cwd=cwd, env=env)
     if release_verify.get("schema") != "hulun.github_release_verification.v1" or not release_verify.get("gate", {}).get("passed"):
         raise ArtifactSmokeError("release-verify --asset-dir failed from the installed wheel")
@@ -359,9 +472,11 @@ def verify_artifacts(root: Path, dist_dir: Path, version: str) -> dict[str, Any]
             "hulun_guard/queue.py",
             "hulun_guard/release_metadata.py",
             "hulun_guard/release_verification.py",
+            "hulun_guard/service_exports.py",
             "hulun_guard/schema_fixtures/batch_ingest_v1.json",
             "hulun_guard/schema_fixtures/collector_v1.json",
             "hulun_guard/schema_fixtures/legacy_state_v0.json",
+            "hulun_guard/schema_fixtures/service_export_v1.json",
             "hulun_guard/security_docs/THREAT_MODEL.md",
             f"hulun_guard-{version}.dist-info/METADATA",
             f"hulun_guard-{version}.dist-info/entry_points.txt",
@@ -379,10 +494,13 @@ def verify_artifacts(root: Path, dist_dir: Path, version: str) -> dict[str, Any]
             f"hulun_guard-{version}/src/hulun_guard/queue.py",
             f"hulun_guard-{version}/src/hulun_guard/release_metadata.py",
             f"hulun_guard-{version}/src/hulun_guard/release_verification.py",
+            f"hulun_guard-{version}/src/hulun_guard/service_exports.py",
             f"hulun_guard-{version}/src/hulun_guard/schema_fixtures/batch_ingest_v1.json",
             f"hulun_guard-{version}/src/hulun_guard/schema_fixtures/collector_v1.json",
+            f"hulun_guard-{version}/src/hulun_guard/schema_fixtures/service_export_v1.json",
             f"hulun_guard-{version}/tests/test_collector.py",
             f"hulun_guard-{version}/tests/test_hulun_guard.py",
+            f"hulun_guard-{version}/tests/test_service_exports.py",
         },
         archive_type="sdist",
     )

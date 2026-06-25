@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.42.0 - 2026-06-25
+
+- Added `service-export langsmith` for explicitly configured LangSmith run-query exports with selected fields, pagination controls, redacted output, and next-step commands.
+- Added `hulun.service_export.v1`, service export schema fixtures, trace-doctor/import support for `runs` and `items` wrappers, and a native-export-tested adapter-matrix case.
+- Extended installed-wheel release smoke checks to verify the LangSmith service export contract against a local mock HTTP server without real credentials.
+
 ## 0.41.0 - 2026-06-25
 
 - Added grouped collector health diagnostics to `collector status --json` and embedded metrics status output.

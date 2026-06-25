@@ -52,6 +52,8 @@ GitHub must pass:
 - Release workflow with artifact provenance on tags.
 - Dependabot has no unresolved critical updates.
 
+Native service export connectors must be release-tested with public-safe mocked transports or loopback mock servers. CI and artifact smoke tests must not require real hosted service credentials.
+
 ## Version Checklist
 
 1. Update `pyproject.toml`.

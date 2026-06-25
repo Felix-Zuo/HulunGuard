@@ -31,6 +31,7 @@ Current public schemas:
 | trace doctor report | `hulun.trace_doctor.v1` |
 | batched ingestion report | `hulun.batch_ingest.v1` |
 | local HTTP collector report | `hulun.collector.v1` |
+| service export report and sanitized export file | `hulun.service_export.v1` |
 
 The OpenTelemetry export file itself follows OTLP JSON. The HulunGuard command report around that export is versioned.
 
@@ -55,6 +56,7 @@ The loader normalizes older project and conversation ledgers into current schema
 - trace doctor file metadata, selected format, observation counts, field coverage, warnings, next command, and gate fields
 - batched ingestion operation, queue status, imported counts, event ids, and dead-letter counts across enqueue, stdin/payload, status, and flush paths
 - collector health, status, ingest, smoke, shutdown check, managed flush, operations status, grouped diagnostics, Prometheus metrics, alert rules, service template, service lifecycle, endpoint, queue, auth, limit, response, runtime, generated file, and gate fields
+- service export provider, explicit request summary, pagination, output path, privacy mode, exported run counts, next commands, sanitized runs, and gate fields
 
 Unsupported future schema majors fail the compatibility gate instead of being guessed.
 
@@ -86,6 +88,7 @@ Use a minor version bump when a change:
 - changes trace doctor report fields
 - changes batched ingestion report fields
 - changes collector report fields, including diagnostics, metrics, alert rules, service templates, service lifecycle outputs, shutdown-check outputs, status, and smoke outputs
+- changes service export report fields or sanitized export file fields
 - changes release gate behavior for schemas
 
 Use a patch version only for documentation, packaging metadata, or implementation fixes that do not change public JSON shape or compatibility behavior.

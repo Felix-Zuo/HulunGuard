@@ -41,12 +41,12 @@ AGENT_COMPATIBILITY: tuple[dict[str, Any], ...] = (
     {
         "id": "langsmith",
         "name": "LangSmith",
-        "category": "direct-adapter",
-        "tier": "hosted-fixture-tested",
+        "category": "native-export",
+        "tier": "native-export-tested",
         "ingest_format": "langsmith",
-        "command": "python -m hulun_guard ingest --format langsmith --file runs.json --scan",
+        "command": "python -m hulun_guard service-export langsmith --project-id <project-id> --api-key-env LANGSMITH_API_KEY --output langsmith-runs.json --json",
         "source_uri": "https://docs.langchain.com/langsmith/export-traces",
-        "guarantee": "LangSmith run exports are fixture-tested for hosted-platform run and span metadata coverage.",
+        "guarantee": "LangSmith run query export is tested with a mocked HTTP transport for explicit auth, pagination, redaction, and importability; exported files ingest with --format langsmith.",
     },
     {
         "id": "langfuse",
@@ -164,13 +164,13 @@ AGENT_COMPATIBILITY: tuple[dict[str, Any], ...] = (
 def compatibility_report() -> dict[str, Any]:
     category_counts = Counter(item["category"] for item in AGENT_COMPATIBILITY)
     tier_counts = Counter(item["tier"] for item in AGENT_COMPATIBILITY)
-    direct_or_standard = sum(1 for item in AGENT_COMPATIBILITY if item["category"] in {"direct-adapter", "standard"})
+    direct_or_standard = sum(1 for item in AGENT_COMPATIBILITY if item["category"] in {"direct-adapter", "native-export", "standard"})
     return {
         "schema": AGENT_COMPATIBILITY_SCHEMA,
         "generated_at": utc_now(),
         "coverage_statement": (
             "Most mainstream agents can use HulunGuard through a direct adapter, OpenTelemetry/OpenInference, "
-            "the local HTTP collector, or the generic JSON/JSONL bridge; native exporter guarantees remain limited to tested formats."
+            "the local HTTP collector, native service exports, or the generic JSON/JSONL bridge; native exporter guarantees remain limited to tested formats."
         ),
         "entry_count": len(AGENT_COMPATIBILITY),
         "direct_or_standard_count": direct_or_standard,

@@ -65,4 +65,6 @@ python .\hulun.py release-verify --asset-dir .\dist --skip-attestation --json
 - Minor versions: new CLI commands, adapters, validation suites, scoring dimensions, public JSON fields, schema migration behavior, or release gates.
 - Major versions: incompatible CLI or schema changes once 1.0 compatibility rules are declared.
 
+Native service export connectors must be release-tested with public-safe mocked transports or loopback mock servers. Do not require real hosted service credentials for CI or release artifact verification.
+
 Supply-chain controls are defined in `docs/SUPPLY_CHAIN.md`. The local-first security boundary is defined in `docs/THREAT_MODEL.md`.

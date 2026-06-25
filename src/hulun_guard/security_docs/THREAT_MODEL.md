@@ -16,6 +16,7 @@ The product boundary is:
 - user-provided trace files passed to `hulun ingest`
 - runtime payloads submitted through SDK, MCP, or `batch ingest-stdin`
 - runtime payloads submitted to the local HTTP collector
+- sanitized trace files produced by explicit hosted service export commands
 - explicit export paths passed to commands such as `export-otel`
 
 Any agent, hook, or adapter that can write to those locations can affect HulunGuard state. Treat adapter processes as trusted local producers unless they are isolated by the host application.
@@ -40,6 +41,7 @@ Remote activity can still happen outside HulunGuard when:
 
 - the user runs GitHub, package, or release commands
 - a host agent, MCP client, or OpenClaw hook sends data through its own integrations
+- the user explicitly runs `service-export` with an endpoint, project id, credential source, and output path
 - a user publishes release assets, docs, screenshots, or generated reports
 - a user exports local data and uploads it manually
 
@@ -57,6 +59,7 @@ Adapters may import user-provided local trace files in these formats:
 - in-memory or stdin JSON/JSONL payloads from supported runtime adapters
 - local HTTP collector payloads posted to `/v1/traces`, `/ingest`, or `/ingest/<format>`
 - CLI, Python SDK, MCP, and OpenClaw hook events
+- hosted service exports produced through explicit commands such as `service-export langsmith`
 
 By default, imported observations preserve only scoring-relevant structure: event type, phase, result, sanitized summary, evidence IDs, sanitized references, action fingerprints, model pressure, latency, and privacy metadata.
 
@@ -70,6 +73,8 @@ Managed collector mode is opt-in through `--flush-interval-seconds`. It uses the
 
 `collector status` reads local queue, dead-letter, managed status, and risk files without starting the HTTP server. Its grouped `diagnostics` field exposes bounded counters, state names, error codes, and operator action hints without local paths, tokens, or trace contents. `collector metrics` and `GET /metrics` expose numeric health and risk gauges without local filesystem paths as Prometheus labels. `collector alert-rules` only writes Prometheus rule files for those metrics; it does not install Prometheus configuration, restart services, change Alertmanager routing, or embed authentication tokens. `collector service-template` only writes reviewed systemd, launchd, and Windows Scheduled Task template files; it does not install services, change host startup policy, or embed authentication tokens. `collector service-lifecycle` writes reviewed install/start/stop/restart/status/uninstall scripts for those service targets; it does not run lifecycle actions automatically and keeps generated commands loopback-bound without embedded tokens.
 
+`service-export langsmith` is opt-in and bounded. It requires an explicit endpoint, project id, credential source, output path, page size, and max run count. It uses the API key only in the outbound `X-Api-Key` header. It rejects endpoints with embedded credentials, query strings, or fragments. The default selected field list excludes raw inputs, outputs, prompts, completions, attachments, and tool arguments, and the exported local file is sanitized before it can be passed to `trace-doctor` or `ingest`.
+
 ## Sensitive Data
 
 Default mode is `redacted-default`.
@@ -81,6 +86,7 @@ HulunGuard redacts or withholds:
 - local home directory paths
 - URL query strings and fragments
 - raw prompt, response, completion, output, content, tool argument, tool result, and message payloads from traces unless a safe summary exists
+- raw hosted service inputs, outputs, prompts, completions, attachments, and tool arguments from `service-export` outputs by default
 
 Redaction is best-effort pattern-based protection. It cannot guarantee removal of every private value, regulated identifier, or domain-specific secret. Users must still review artifacts before publication.
 
@@ -134,6 +140,9 @@ This protects against path traversal, symlink escape, and accidental deletion of
 | Collector exits without a final status marker | Signal-driven and checked shutdown paths write `stopping`, stop the managed loop, close the server, and write final `stopped` runtime state. |
 | Service template generation changes host startup state | `collector service-template` writes files only; operators must review and install them explicitly. |
 | Service lifecycle generation changes host startup state | `collector service-lifecycle` writes install/start/stop/restart/status/uninstall scripts only; operators must review and execute lifecycle actions explicitly. |
+| Hosted service export leaks credentials | `service-export` requires explicit credentials, uses them only in request headers, rejects credential-bearing URLs, and omits keys from reports and files. |
+| Hosted service export pulls too much data | `service-export` requires bounded `--page-size` and `--max-runs`; reports mark truncated pagination when more data remains. |
+| Hosted service export writes raw prompts or outputs | Default selected fields exclude raw payload fields; unexpected raw payload fields are dropped from the sanitized export. |
 | Desktop monitor leaks to a remote service | Monitor state is local JSON/HTML; remote exposure only occurs if the user or host publishes it. |
 
 ## Safe Usage Modes
@@ -155,6 +164,7 @@ python -m hulun_guard collector alert-rules --output .hulun/collector-alerts --f
 python -m hulun_guard collector service-template --output .hulun/collector-service --force --json
 python -m hulun_guard collector service-lifecycle --output .hulun/collector-service-lifecycle --force --json
 python -m hulun_guard batch flush --scan
+python -m hulun_guard service-export langsmith --project-id "<project-id>" --api-key-env LANGSMITH_API_KEY --output .\langsmith-runs.json --max-runs 100 --json
 ```
 
 Use sensitive mode only in a trusted local working copy:
@@ -204,6 +214,7 @@ Every release must keep these checks green:
 - `python -m hulun_guard collector service-template --output .hulun/collector-service --force --json`
 - `python -m hulun_guard collector service-lifecycle --output .hulun/collector-service-lifecycle --force --json`
 - `'{"type":"tool_result","phase":"verify","summary":"pytest passed","result":"pass"}' | python -m hulun_guard batch ingest-stdin --format generic --json`
+- installed-wheel service export smoke with a loopback mock LangSmith server
 - `python -m hulun_guard trace-doctor --file trace-doctor-sample.jsonl --format generic --json`
 - `python -m hulun_guard schema-check --json`
 - `python -m hulun_guard cleanup --json`

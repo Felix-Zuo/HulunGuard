@@ -5,6 +5,7 @@ import functools
 import http.server
 import ipaddress
 import json
+import os
 import socketserver
 import sys
 import tempfile
@@ -101,6 +102,16 @@ from .schemas import (
 )
 from .sdk import HulunGuardError, append_observation_to_state, append_project_event
 from .security import run_threat_model_check, threat_model_check_json
+from .service_exports import (
+    LANGSMITH_DEFAULT_ENDPOINT,
+    LANGSMITH_DEFAULT_MAX_RUNS,
+    LANGSMITH_DEFAULT_PAGE_SIZE,
+    LANGSMITH_DEFAULT_TIMEOUT_SECONDS,
+    LangSmithServiceConfig,
+    ServiceExportError,
+    export_langsmith_runs,
+    service_export_json,
+)
 from .storage import (
     criteria,
     find_item,
@@ -863,6 +874,56 @@ def cmd_trace_doctor(args: argparse.Namespace) -> int:
             for failure in gate["failures"]:
                 print(f"- {failure['code']}: {failure['detail']}")
         print(f"Next: {result['next_command']}")
+    return 0 if result["gate"]["passed"] else 2
+
+
+def _langsmith_api_key_from_args(args: argparse.Namespace) -> str:
+    if args.api_key and args.api_key_env:
+        raise SystemExit("Use either --api-key or --api-key-env, not both.")
+    if args.api_key:
+        return args.api_key
+    if args.api_key_env:
+        value = os.environ.get(args.api_key_env)
+        if not value:
+            raise SystemExit(f"Environment variable is empty or missing: {args.api_key_env}")
+        return value
+    raise SystemExit("LangSmith export requires explicit credentials: pass --api-key or --api-key-env.")
+
+
+def cmd_service_export_langsmith(args: argparse.Namespace) -> int:
+    root = project_root(args.root)
+    output = Path(args.output)
+    if not output.is_absolute():
+        output = root / output
+    config = LangSmithServiceConfig(
+        endpoint=args.endpoint,
+        api_key=_langsmith_api_key_from_args(args),
+        project_id=args.project_id,
+        output=output,
+        page_size=args.page_size,
+        max_runs=args.max_runs,
+        min_start_time=args.min_start_time,
+        max_start_time=args.max_start_time,
+        filter=args.filter,
+        run_type=args.run_type,
+        include_sensitive=args.include_sensitive,
+        retention_days=args.retention_days,
+        timeout_seconds=args.timeout_seconds,
+        overwrite=args.force,
+    )
+    try:
+        result = export_langsmith_runs(config)
+    except ServiceExportError as exc:
+        raise SystemExit(str(exc)) from None
+
+    if args.json:
+        print(service_export_json(result), end="")
+    else:
+        gate = result["gate"]
+        print(f"LangSmith service export: {'pass' if gate['passed'] else 'fail'}")
+        print(f"Runs: {result['exported']['run_count']}")
+        print(f"Output: {result['output']}")
+        print(f"Next: {result['exported']['trace_doctor_command']}")
     return 0 if result["gate"]["passed"] else 2
 
 
@@ -2345,6 +2406,27 @@ def build_parser() -> argparse.ArgumentParser:
     add_privacy_controls(trace_doctor)
     trace_doctor.add_argument("--json", action="store_true")
     trace_doctor.set_defaults(func=cmd_trace_doctor)
+
+    service_export = sub.add_parser("service-export", parents=[root_parent], help="Export traces from explicitly configured hosted services.")
+    service_export_sub = service_export.add_subparsers(dest="service_export_command", required=True)
+
+    service_export_langsmith = service_export_sub.add_parser("langsmith", parents=[root_parent], help="Export LangSmith runs through the service API.")
+    service_export_langsmith.add_argument("--endpoint", default=LANGSMITH_DEFAULT_ENDPOINT, help=f"LangSmith API endpoint. Defaults to {LANGSMITH_DEFAULT_ENDPOINT}.")
+    service_export_langsmith.add_argument("--project-id", required=True, help="LangSmith project id to query.")
+    service_export_langsmith.add_argument("--api-key", help="LangSmith API key. Prefer --api-key-env for shell history hygiene.")
+    service_export_langsmith.add_argument("--api-key-env", help="Environment variable that contains the LangSmith API key.")
+    service_export_langsmith.add_argument("--output", required=True, help="Write the sanitized LangSmith export to this JSON file.")
+    service_export_langsmith.add_argument("--page-size", type=int, default=LANGSMITH_DEFAULT_PAGE_SIZE)
+    service_export_langsmith.add_argument("--max-runs", type=int, default=LANGSMITH_DEFAULT_MAX_RUNS)
+    service_export_langsmith.add_argument("--min-start-time", help="Optional LangSmith min_start_time query value.")
+    service_export_langsmith.add_argument("--max-start-time", help="Optional LangSmith max_start_time query value.")
+    service_export_langsmith.add_argument("--filter", help="Optional LangSmith trace query filter.")
+    service_export_langsmith.add_argument("--run-type", help="Optional LangSmith run_type filter.")
+    service_export_langsmith.add_argument("--timeout-seconds", type=float, default=LANGSMITH_DEFAULT_TIMEOUT_SECONDS)
+    service_export_langsmith.add_argument("--force", action="store_true", help="Overwrite an existing output file.")
+    add_privacy_controls(service_export_langsmith)
+    service_export_langsmith.add_argument("--json", action="store_true")
+    service_export_langsmith.set_defaults(func=cmd_service_export_langsmith)
 
     export_otel = sub.add_parser("export-otel", parents=[root_parent])
     export_otel.add_argument("--output", required=True, help="Write OpenTelemetry OTLP JSON to this file.")

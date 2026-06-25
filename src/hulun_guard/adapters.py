@@ -356,7 +356,7 @@ def _read_items(path: Path) -> list[dict[str, Any]]:
     if isinstance(payload, list):
         return [item for item in payload if isinstance(item, dict)]
     if isinstance(payload, dict):
-        for key in ["events", "steps", "trajectory", "messages", "observations"]:
+        for key in ["events", "steps", "trajectory", "messages", "observations", "runs", "items"]:
             value = payload.get(key)
             if isinstance(value, list):
                 return [item for item in value if isinstance(item, dict)]
@@ -368,7 +368,7 @@ def _read_items_from_payload(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, list):
         return [item for item in payload if isinstance(item, dict)]
     if isinstance(payload, dict):
-        for key in ["events", "steps", "trajectory", "messages", "observations"]:
+        for key in ["events", "steps", "trajectory", "messages", "observations", "runs", "items"]:
             value = payload.get(key)
             if isinstance(value, list):
                 return [item for item in value if isinstance(item, dict)]
